@@ -514,6 +514,30 @@ lemma "sat \<sigma> V v i (Trigger \<phi> I \<psi>) = sat \<sigma> V v i (Neg (S
 
 (* I'm really sorry for the long proofs.. *)
 
+fun once :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "once I \<phi> = Since TT I \<phi>"
+
+lemma sat_once[simp] : "sat \<sigma> V v i (once I \<phi>) = (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>)"
+  by auto
+
+fun historically :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "historically I \<phi> = (Neg (once I (Neg \<phi>)))"
+
+lemma historically_sat[simp] : "sat \<sigma> V v i (historically I \<phi>) = (\<forall>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> sat \<sigma> V v j \<phi>)"
+  by auto
+
+fun sometimes :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "sometimes I \<phi> = Until TT I \<phi>"
+
+lemma sometimes_sat[simp] : "sat \<sigma> V v i (sometimes I \<phi>) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j \<phi>)"
+  by auto
+
+fun always :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "always I \<phi> = (Neg (sometimes I (Neg \<phi>)))"
+
+lemma always_sat[simp] : "sat \<sigma> V v i (always I \<phi>) = (\<forall>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v j \<phi>)"
+  by auto
+
 lemma interval_geq:
   fixes i j :: nat
   assumes 0: "memL I a"
@@ -528,7 +552,21 @@ proof -
   thus ?thesis by auto
 qed
 
-lemma sat_trigger:
+lemma interval_leq:
+  fixes i j :: nat
+  assumes 0: "memL I a"
+  assumes 1: "mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+  assumes 2: "k \<le> j"
+  assumes 3: "a \<le> (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+  shows "mem I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+proof -
+  from 2 3 have "\<tau> \<sigma> j \<ge> \<tau> \<sigma> k" by auto
+  then have "(\<tau> \<sigma> j - \<tau> \<sigma> i) \<ge> (\<tau> \<sigma> k - \<tau> \<sigma> i)" by linarith
+  from this 0 1 3 have "memR I (\<tau> \<sigma> k - \<tau> \<sigma> i) \<and> memL I (\<tau> \<sigma> k - \<tau> \<sigma> i)" by auto
+  thus ?thesis by auto
+qed
+
+lemma sat_trigger_rewrite_0_induct:
   fixes i j :: nat
   assumes 0: "mem I 0"
   assumes 1: "sat \<sigma> V v i (Trigger \<phi> I \<psi>)"
@@ -558,11 +596,8 @@ next
       then have 3: "j < i" by auto
       from this IH have IH: "mem I (\<tau> \<sigma> i - \<tau> \<sigma> (i - j)) \<longrightarrow> sat \<sigma> V v (i - j) \<psi> \<or> (\<exists>k\<in>{i - j<..i}. sat \<sigma> V v k (And \<phi> \<psi>))" by simp
       from 2 have "mem I (\<tau> \<sigma> i - \<tau> \<sigma> (i - j - 1))" by simp
-      from this 0 have "mem I (\<tau> \<sigma> i - \<tau> \<sigma> (i - j))"
+      from this 0 have 4: "mem I (\<tau> \<sigma> i - \<tau> \<sigma> (i - j))"
         using interval_geq[of I 0 \<sigma> i "(i-j-1)" "i-j"]
-        by auto
-      from this 3 have 4: "mem I (\<tau> \<sigma> i - \<tau> \<sigma> (i - j))"
-        using Nat.Suc_diff_1[of "i-j"]
         by auto
       from 1 2 have "sat \<sigma> V v (i - Suc j) \<psi> \<or> (\<exists>k\<in>{i - (Suc j)<..i}. sat \<sigma> V v k \<phi>)"
         by auto
@@ -589,7 +624,6 @@ next
         {
           assume 9: "\<not>(\<exists>k\<in>{i - j<..i}. sat \<sigma> V v k (And \<phi> \<psi>))"
           from this IH have 10: "sat \<sigma> V v (i - j) \<psi>" by auto
-          from 9 have "\<forall>k\<in>{i - j<..i}. sat \<sigma> V v k \<phi> \<longrightarrow> \<not>sat \<sigma> V v k \<psi>" by auto
           moreover
           {
             assume "k = i - j"
@@ -631,56 +665,27 @@ next
   ultimately show ?case by blast
 qed
 
-lemma sat_trigger_2:
+lemma sat_trigger_rewrite_0_2:
   fixes i j :: nat
   assumes 0: "mem I 0"
   assumes 1: "sat \<sigma> V v i (Trigger \<phi> I \<psi>)"
-  shows "j \<le> i \<longrightarrow> mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. sat \<sigma> V v k (And \<phi> \<psi>))"
+  assumes 2: "j \<le> i"
+  assumes 3: "mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)"
+  shows "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. sat \<sigma> V v k (And \<phi> \<psi>))"
 proof -
-  have "j \<ge> 0" by auto
-  then have 2: "i - j \<le> i" by linarith
-  moreover {
-    assume "\<not> j \<le> i"
-    then have ?thesis by auto
-  }
-  moreover {
-    assume 3: "j \<le> i"
-    moreover {
-      assume "\<not>mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)"
-      then have ?thesis by auto
-    }
-    moreover {
-      assume "mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)"
-      from this 0 1 2 have ?thesis
-        using sat_trigger[of I \<sigma> V v i \<phi> \<psi> "i-j"]
-        by auto
-    }
-    ultimately have ?thesis by blast
-  }
-  ultimately show ?thesis by blast
+  from 0 1 2 3 show ?thesis
+    using sat_trigger_rewrite_0_induct[of I \<sigma> V v i \<phi> \<psi> "i-j"]
+    by auto
 qed
 
-fun once :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "once I \<phi> = Since TT I \<phi>"
-
-lemma sat_once[simp] : "sat \<sigma> V v i (once I \<phi>) = (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>)"
-  by auto
-
-fun historically :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "historically I \<phi> = (Neg (once I (Neg \<phi>)))"
-
-lemma historically_sat[simp] : "sat \<sigma> V v i (historically I \<phi>) = (\<forall>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> sat \<sigma> V v j \<phi>)"
-  by auto
-
-
-lemma sat_trigger_exist:
+lemma sat_trigger_rewrite_0_exist:
   assumes 0: "mem I 0"
   assumes 1: "sat \<sigma> V v i (Trigger \<phi> I \<psi>)"
   assumes 2: "j\<le>i \<and> mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> \<not>sat \<sigma> V v j \<psi>"
 shows "\<exists>k \<in> {j<..i}. mem I (\<tau> \<sigma> i - \<tau> \<sigma> k) \<and> sat \<sigma> V v k (And \<phi> \<psi>)"
 proof -
   from 0 1 2 have "\<exists>k\<in>{j<..i}. sat \<sigma> V v k (And \<phi> \<psi>)"
-    using sat_trigger_2[of I \<sigma> V v i \<phi> \<psi> j]
+    using sat_trigger_rewrite_0_2[of I \<sigma> V v i \<phi> \<psi> j]
     by auto
   then obtain k where 3: "k \<in> {j<..i} \<and> sat \<sigma> V v k (And \<phi> \<psi>)" by blast
   from this 0 2 have "mem I (\<tau> \<sigma> i - \<tau> \<sigma> k)"
@@ -689,7 +694,7 @@ proof -
   from this 3 show ?thesis by auto
 qed
 
-lemma trigger_sat_rewrite_0_equiv_1:
+lemma sat_trigger_rewrite_0_equiv_1:
   assumes 0: "mem I 0"
   assumes 1: "sat \<sigma> V v i (Trigger \<phi> I \<psi>)"
 shows "sat \<sigma> V v i (Or (Since \<psi> I (And \<phi> \<psi>)) (historically I \<psi>))"
@@ -703,7 +708,7 @@ proof -
     assume "\<not>(\<forall>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> sat \<sigma> V v j \<psi>)"
     then obtain j' where "j' \<le> i \<and> mem I (\<tau> \<sigma> i - \<tau> \<sigma> j') \<and> \<not>sat \<sigma> V v j' \<psi>" by blast
     from this 0 1 have "\<exists>k \<in> {j'<..i}. mem I (\<tau> \<sigma> i - \<tau> \<sigma> k) \<and> sat \<sigma> V v k (And \<phi> \<psi>)"
-      using sat_trigger_exist[of I \<sigma> V v i \<phi> \<psi> j']
+      using sat_trigger_rewrite_0_exist[of I \<sigma> V v i \<phi> \<psi> j']
       by auto
     then have 2: "{j. j\<le> i \<and> mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j (And \<phi> \<psi>)} \<noteq> {}" by auto
     then obtain j where 3: "j = Max {j. j\<le> i \<and> mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j (And \<phi> \<psi>)}" by blast
@@ -721,7 +726,7 @@ proof -
         using interval_geq[of I 0 \<sigma> i j k]
         by auto
       from this 0 1 6 have "\<exists>x \<in> {k<..i}. mem I (\<tau> \<sigma> i - \<tau> \<sigma> x) \<and> sat \<sigma> V v x (And \<phi> \<psi>)"
-        using sat_trigger_exist[of I \<sigma> V v i \<phi> \<psi> k]
+        using sat_trigger_rewrite_0_exist[of I \<sigma> V v i \<phi> \<psi> k]
         by auto
       then obtain x where 7: "x \<in> {k<..i} \<and> mem I (\<tau> \<sigma> i - \<tau> \<sigma> x) \<and> sat \<sigma> V v x (And \<phi> \<psi>)" by blast
       then have "x \<in> {j. j\<le> i \<and> mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j (And \<phi> \<psi>)}" by auto
@@ -734,24 +739,17 @@ proof -
   ultimately show ?thesis by blast
 qed
 
-lemma trigger_sat_rewrite_0_equiv_2:
+lemma sat_trigger_rewrite_0_equiv_2:
   assumes 0: "mem I 0"
   assumes 1: "sat \<sigma> V v i (Or (Since \<psi> I (And \<phi> \<psi>)) (historically I \<psi>))"
   assumes 2: "j\<le>i"
-shows "(mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)) \<longrightarrow> (sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>))"
+  assumes 3: "mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)"
+shows "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>)"
 proof -
   from 1 have "sat \<sigma> V v i (historically I \<psi>) \<or> sat \<sigma> V v i (Since \<psi> I (And \<phi> \<psi>))" by auto
   moreover {
-    assume 3: "sat \<sigma> V v i (historically I \<psi>)"
-    moreover {
-      assume "\<not>mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)"
-      then have ?thesis by auto
-    }
-    moreover {
-      assume "mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)"
-      from this 2 3 have ?thesis by auto
-    }
-    ultimately have ?thesis by blast
+    assume "sat \<sigma> V v i (historically I \<psi>)"
+    from this 2 3 have ?thesis by auto
   }
   moreover {
     assume "sat \<sigma> V v i (Since \<psi> I (And \<phi> \<psi>))"
@@ -783,7 +781,7 @@ proof -
   ultimately show ?thesis by blast
 qed
 
-lemma trigger_sat_rewrite_0:
+lemma sat_trigger_rewrite_0:
   assumes 0: "mem I 0"
   shows "sat \<sigma> V v i (Trigger \<phi> I \<psi>) = sat \<sigma> V v i (Or (Since \<psi> I (And \<phi> \<psi>)) (historically I \<psi>))"
 proof -
@@ -791,7 +789,7 @@ proof -
   moreover {
     assume "sat \<sigma> V v i (Trigger \<phi> I \<psi>)"
     from this 0 have ?thesis
-      using trigger_sat_rewrite_0_equiv_1[of I \<sigma> V v i \<phi> \<psi>]
+      using sat_trigger_rewrite_0_equiv_1[of I \<sigma> V v i \<phi> \<psi>]
       by auto
   }
   moreover {
@@ -799,8 +797,8 @@ proof -
     moreover {
       assume "sat \<sigma> V v i (Or (Since \<psi> I (And \<phi> \<psi>)) (historically I \<psi>))"
       then have "sat \<sigma> V v i (Trigger \<phi> I \<psi>)"
-        using trigger_sat_rewrite_0_equiv_2[of I \<sigma> V v i \<phi> \<psi>]
-        by fastforce
+        using sat_trigger_rewrite_0_equiv_2[of I \<sigma> V v i \<phi> \<psi>]
+        by fastforce (* FIXME: slow *)
       from this 1 have "False" by auto
     }
     moreover {
@@ -812,6 +810,240 @@ proof -
   ultimately show ?thesis by blast
 qed
 
+lemma sat_release_rewrite_0_induct:
+  fixes i j :: nat
+  assumes 0: "mem I 0"
+  assumes 1: "sat \<sigma> V v i (Release \<phi> I \<psi>)"
+shows "j \<ge> 0 \<longrightarrow> mem I (\<tau> \<sigma> (i+j) - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v (i+j) \<psi> \<or> (\<exists>k \<in> {i..<(i+j)}. sat \<sigma> V v k (And \<phi> \<psi>))"
+proof (induction j)
+case 0
+  from 0 1 show ?case by auto
+next
+  case (Suc j)
+  then have "j \<ge> 0 \<longrightarrow> mem I (\<tau> \<sigma> (i+j) - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v (i+j) \<psi> \<or> (\<exists>k \<in> {i..<(i+j)}. sat \<sigma> V v k (And \<phi> \<psi>))" by simp
+  then have IH: "mem I (\<tau> \<sigma> (i+j) - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v (i+j) \<psi> \<or> (\<exists>k \<in> {i..<(i+j)}. sat \<sigma> V v k (And \<phi> \<psi>))" by simp
+  moreover
+  {
+    assume "\<not> (mem I (\<tau> \<sigma> (i + Suc j) - \<tau> \<sigma> i))"
+    then have ?case by auto
+  }
+  moreover
+  {
+    assume 2: "mem I (\<tau> \<sigma> (i + Suc j) - \<tau> \<sigma> i)"
+    then have "mem I (\<tau> \<sigma> (i + j + 1) - \<tau> \<sigma> i)" by simp
+    from this 0 have 3: "mem I (\<tau> \<sigma> (i + j) - \<tau> \<sigma> i)"
+      using interval_leq[of I 0 \<sigma> "i+j+1" i "i+j"]
+      by auto
+    from 1 2 have "sat \<sigma> V v (i + Suc j) \<psi> \<or> (\<exists>k \<in> {i ..< i + Suc j}. sat \<sigma> V v k \<phi>)"
+      by auto
+    moreover
+    {
+      assume "sat \<sigma> V v (i + Suc j) \<psi>"
+      then have ?case by auto
+    }
+    moreover
+    {
+      assume "\<exists>k \<in> {i ..< i + Suc j}. sat \<sigma> V v k \<phi>"
+      then have 6: "{x \<in> {i ..< i + Suc j}. sat \<sigma> V v x \<phi>} \<noteq> {}" by auto
+      then obtain k where 7: "k = Min {x \<in> {i ..< i + Suc j}. sat \<sigma> V v x \<phi>}" by blast
+      from this 6 have 8: "k \<in> {x \<in> {i ..< i + Suc j}. sat \<sigma> V v x \<phi>}"
+        using Min_in[of "{x \<in> {i ..< i + Suc j}. sat \<sigma> V v x \<phi>}"]
+        by auto
+      from 3 IH have IH: "sat \<sigma> V v (i+j) \<psi> \<or> (\<exists>k \<in> {i..<(i+j)}. sat \<sigma> V v k (And \<phi> \<psi>))" by auto
+      moreover
+      {
+        assume "\<exists>k \<in> {i..<(i+j)}. sat \<sigma> V v k (And \<phi> \<psi>)"
+        then have ?case by auto
+      }
+      moreover
+      {
+        assume 9: "\<not>(\<exists>k \<in> {i..<(i+j)}. sat \<sigma> V v k (And \<phi> \<psi>))"
+        from this IH have 10: "sat \<sigma> V v (i+j) \<psi>" by auto
+        from 9 have 11: "\<forall>k\<in>{i..<(i+j)}. sat \<sigma> V v k \<phi> \<longrightarrow> \<not>sat \<sigma> V v k \<psi>" by auto
+        moreover
+        {
+          assume "k = i+j"
+          from this 8 10 have ?case by auto
+        }
+        moreover
+        {
+          assume "k \<noteq> i + j"
+          from this 8 have 9: "k \<in> {i ..< i + j}" by auto
+          from this 0 2 have "mem I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+            using interval_leq[of I 0 \<sigma> "i + Suc j" i k]
+            by auto
+          from this 1 9 have "sat \<sigma> V v k \<psi> \<or> (\<exists>k'\<in>{i..<k}. sat \<sigma> V v k' \<phi>)" by auto
+          moreover
+          {
+            assume "sat \<sigma> V v k \<psi>"
+            from this 8 have ?case by auto
+          }
+          moreover
+          {
+            assume "\<exists>k'\<in>{i..<k}. sat \<sigma> V v k' \<phi>"
+            then obtain k' where "k' \<in> {i..<k} \<and> sat \<sigma> V v k' \<phi>" by blast
+            from this 9 have "k' < k \<and> k' \<in> {x \<in> {i ..< i + Suc j}. sat \<sigma> V v x \<phi>}" by auto
+            from this 7 have "k' < k \<and> k' \<ge> k"
+              using Min_le
+              by auto
+            then have "False" by auto
+          }
+          ultimately have ?case by blast
+        }
+        ultimately have ?case by blast
+      }
+      ultimately have ?case by blast
+    }
+    ultimately have ?case by blast
+  }
+  ultimately show ?case by blast
+qed
+
+lemma sat_release_rewrite_0_2:
+  fixes i j :: nat
+  assumes 0: "mem I 0"
+  assumes 1: "sat \<sigma> V v i (Release \<phi> I \<psi>)"
+  assumes 2: "j \<ge> i"
+  assumes 3: "mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+  shows "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. sat \<sigma> V v k (And \<phi> \<psi>))"
+proof -
+  from 0 1 2 3 show ?thesis
+  using sat_release_rewrite_0_induct[of I \<sigma> V v i \<phi> \<psi> "j-i"]
+  by auto
+qed
+
+lemma sat_release_rewrite_0_exist:
+  assumes 0: "mem I 0"
+  assumes 1: "sat \<sigma> V v i (Release \<phi> I \<psi>)"
+  assumes 2: "j\<ge>i \<and> mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> \<not>sat \<sigma> V v j \<psi>"
+shows "\<exists>k \<in> {i..<j}. mem I (\<tau> \<sigma> k - \<tau> \<sigma> i) \<and> sat \<sigma> V v k (And \<phi> \<psi>)"
+proof -
+  from 0 1 2 have "\<exists>k\<in>{i..<j}. sat \<sigma> V v k (And \<phi> \<psi>)"
+    using sat_release_rewrite_0_2[of I \<sigma> V v i \<phi> \<psi> j]
+    by auto
+  then obtain k where 3: "k \<in> {i..<j} \<and> sat \<sigma> V v k (And \<phi> \<psi>)" by blast
+  from this 0 2 have "mem I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+    using interval_leq[of I 0 \<sigma> j i k]
+    by auto
+  from this 3 show ?thesis by auto
+qed
+
+lemma sat_release_rewrite_0_equiv_1:
+  assumes 0: "mem I 0"
+  assumes 1: "sat \<sigma> V v i (Release \<phi> I \<psi>)"
+shows "sat \<sigma> V v i (Or (Until \<psi> I (And \<phi> \<psi>)) (always I \<psi>))"
+proof -
+  have "True" by auto
+  moreover {
+    assume "\<forall>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v j \<psi>"
+    then have ?thesis by auto
+  }
+  moreover {
+    assume "\<not>(\<forall>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v j \<psi>)"
+    then obtain j' where "j' \<ge> i \<and> mem I (\<tau> \<sigma> j' - \<tau> \<sigma> i) \<and> \<not>sat \<sigma> V v j' \<psi>" by blast
+    from this 0 1 have "\<exists>k \<in> {i..<j'}. mem I (\<tau> \<sigma> k - \<tau> \<sigma> i) \<and> sat \<sigma> V v k (And \<phi> \<psi>)"
+      using sat_release_rewrite_0_exist[of I \<sigma> V v i \<phi> \<psi> j']
+      by auto
+    then have 2: "{j. j\<in>{i..<j'} \<and> mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j (And \<phi> \<psi>)} \<noteq> {}" by auto
+    then obtain j where 3: "j = Min {j. j\<in>{i..<j'} \<and> mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j (And \<phi> \<psi>)}" by blast
+    from this 2 have 4: "j \<in> {j. j\<in>{i..<j'} \<and> mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j (And \<phi> \<psi>)}"
+      using Min_in[of "{j. j\<in>{i..<j'} \<and> mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j (And \<phi> \<psi>)}"]
+      by auto
+    moreover {
+      assume "\<forall>k \<in> {i..<j}. sat \<sigma> V v k \<psi>"
+      from this 4 have ?thesis by auto
+    }
+    moreover {
+      assume 5: "\<not>(\<forall>k \<in> {i..<j}. sat \<sigma> V v k \<psi>)"
+      then obtain k where 6: "k \<in> {i..<j} \<and> \<not> sat \<sigma> V v k \<psi>" by blast
+      from this 0 2 4 have "mem I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+        using interval_leq[of I 0 \<sigma> j i k]
+        by auto
+      from this 0 1 6 have "\<exists>x \<in> {i..<k}. mem I (\<tau> \<sigma> x - \<tau> \<sigma> i) \<and> sat \<sigma> V v x (And \<phi> \<psi>)"
+        using sat_release_rewrite_0_exist[of I \<sigma> V v i \<phi> \<psi> k]
+        by auto
+      then obtain x where 7: "x \<in> {i..<k} \<and> mem I (\<tau> \<sigma> x - \<tau> \<sigma> i) \<and> sat \<sigma> V v x (And \<phi> \<psi>)" by blast
+      from this 4 6 have "x \<in> {i..<j'} \<and> mem I (\<tau> \<sigma> x - \<tau> \<sigma> i) \<and> sat \<sigma> V v x (And \<phi> \<psi>)" by auto
+      then have "x \<in> {j. j\<in>{i..<j'} \<and> mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j (And \<phi> \<psi>)}" by auto
+      then have "x \<ge> Min {j. j\<in>{i..<j'} \<and> mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j (And \<phi> \<psi>)}" by auto
+      from this 3 6 7 have "x \<ge> j \<and> x < k \<and> k < j" by auto
+      then have "False" by auto
+    }
+    ultimately have ?thesis by blast
+  }
+  ultimately show ?thesis by blast
+qed
+
+lemma sat_release_rewrite_0_equiv_2:
+  assumes 0: "mem I 0"
+  assumes 1: "sat \<sigma> V v i (Or (Until \<psi> I (And \<phi> \<psi>)) (always I \<psi>))"
+  assumes 2: "j\<ge>i"
+  assumes 3: "mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+shows "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. sat \<sigma> V v k \<phi>)"
+proof -
+  from 1 have "sat \<sigma> V v i (always I \<psi>) \<or> sat \<sigma> V v i (Until \<psi> I (And \<phi> \<psi>))" by auto
+  moreover {
+    assume "sat \<sigma> V v i (always I \<psi>)"
+    from this 2 3 have ?thesis by auto
+  }
+  moreover {
+    assume "sat \<sigma> V v i (Until \<psi> I (And \<phi> \<psi>))"
+    then have "\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j (And \<phi> \<psi>) \<and> (\<forall>k \<in> {i ..< j}. sat \<sigma> V v k \<psi>)" by auto
+    then obtain "j'" where 3: "j'\<ge>i \<and> mem I (\<tau> \<sigma> j' - \<tau> \<sigma> i) \<and> sat \<sigma> V v j' (And \<phi> \<psi>) \<and> (\<forall>k \<in> {i ..< j'}. sat \<sigma> V v k \<psi>)" by blast
+    moreover {
+      assume 4: "j < j'"
+      from this 3 have "\<forall>k \<in> {i ..< j'}. sat \<sigma> V v k \<psi>" by auto
+      from this 2 4 have "sat \<sigma> V v j \<psi>" by auto
+      then have ?thesis by auto
+    }
+    moreover {
+      assume 4: "\<not> j < j'"
+      moreover {
+        assume "j = j'"
+        from this 3 have "sat \<sigma> V v j \<psi>" by auto
+        then have ?thesis by auto
+      }
+      moreover {
+        assume 5: "j \<noteq> j'"
+        from 4 5 have "j' < j" by auto
+        from this 3 have "\<exists>k \<in> {i ..< j}. sat \<sigma> V v k \<phi>" by auto
+        then have ?thesis by auto
+      }
+      ultimately have ?thesis by blast
+    }
+    ultimately have ?thesis by blast
+  }
+  ultimately show ?thesis by blast
+qed
+
+lemma sat_release_rewrite_0:
+  assumes 0: "mem I 0"
+  shows "sat \<sigma> V v i (Release \<phi> I \<psi>) = sat \<sigma> V v i (Or (Until \<psi> I (And \<phi> \<psi>)) (always I \<psi>))"
+proof -
+  have "True" by simp
+  moreover {
+    assume "sat \<sigma> V v i (Release \<phi> I \<psi>)"
+    from this 0 have ?thesis
+      using sat_release_rewrite_0_equiv_1[of I \<sigma> V v i \<phi> \<psi>]
+      by auto
+  }
+  moreover {
+    assume 1: "\<not>sat \<sigma> V v i (Release \<phi> I \<psi>)"
+    moreover {
+      assume "sat \<sigma> V v i (Or (Until \<psi> I (And \<phi> \<psi>)) (always I \<psi>))"
+      then have "sat \<sigma> V v i (Release \<phi> I \<psi>)"
+        using sat_release_rewrite_0_equiv_2[of I \<sigma> V v i \<phi> \<psi>]
+        by fastforce (* FIXME: slow *)
+      from this 1 have "False" by auto
+    }
+    moreover {
+      assume "\<not>sat \<sigma> V v i (Or (Until \<psi> I (And \<phi> \<psi>)) (always I \<psi>))"
+      from this 1 have ?thesis by blast
+    }
+    ultimately have ?thesis by blast
+  }
+  ultimately show ?thesis by blast
+qed
 
 subsection \<open>Past-only formulas\<close>
 
