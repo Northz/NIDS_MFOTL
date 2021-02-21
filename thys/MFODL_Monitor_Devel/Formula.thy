@@ -516,14 +516,15 @@ lemma "sat \<sigma> V v i (Trigger \<phi> I \<psi>) = sat \<sigma> V v i (Neg (S
 
 lemma interval_geq:
   fixes i j :: nat
-  assumes 0: "mem I 0"
+  assumes 0: "memL I a"
   assumes 1: "mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)"
   assumes 2: "j \<le> k"
+  assumes 3: "a \<le> (\<tau> \<sigma> i - \<tau> \<sigma> k)"
   shows "mem I (\<tau> \<sigma> i - \<tau> \<sigma> k)"
 proof -
-  from 2 have "\<tau> \<sigma> j \<le> \<tau> \<sigma> k" by auto
+  from 2 3 have "\<tau> \<sigma> j \<le> \<tau> \<sigma> k" by auto
   then have "(\<tau> \<sigma> i - \<tau> \<sigma> j) \<ge> (\<tau> \<sigma> i - \<tau> \<sigma> k)" by linarith
-  from this 0 1 have "memR I (\<tau> \<sigma> i - \<tau> \<sigma> k) \<and> memL I (\<tau> \<sigma> i - \<tau> \<sigma> k)" by auto
+  from this 0 1 3 have "memR I (\<tau> \<sigma> i - \<tau> \<sigma> k) \<and> memL I (\<tau> \<sigma> i - \<tau> \<sigma> k)" by auto
   thus ?thesis by auto
 qed
 
@@ -558,7 +559,7 @@ next
       from this IH have IH: "mem I (\<tau> \<sigma> i - \<tau> \<sigma> (i - j)) \<longrightarrow> sat \<sigma> V v (i - j) \<psi> \<or> (\<exists>k\<in>{i - j<..i}. sat \<sigma> V v k (And \<phi> \<psi>))" by simp
       from 2 have "mem I (\<tau> \<sigma> i - \<tau> \<sigma> (i - j - 1))" by simp
       from this 0 have "mem I (\<tau> \<sigma> i - \<tau> \<sigma> (i - j))"
-        using interval_geq[of I \<sigma> i "(i-j-1)" "i-j"]
+        using interval_geq[of I 0 \<sigma> i "(i-j-1)" "i-j"]
         by auto
       from this 3 have 4: "mem I (\<tau> \<sigma> i - \<tau> \<sigma> (i - j))"
         using Nat.Suc_diff_1[of "i-j"]
@@ -599,7 +600,7 @@ next
             assume "k \<noteq> i - j"
             from this 8 have 9: "k \<in> {i - j<..i}" by auto
             from this 0 2 have "mem I (\<tau> \<sigma> i - \<tau> \<sigma> k)"
-              using interval_geq[of I \<sigma> i "i - Suc j" k]
+              using interval_geq[of I 0 \<sigma> i "i - Suc j" k]
               by auto
             from this 1 9 have "sat \<sigma> V v k \<psi> \<or> (\<exists>k'\<in>{k<..i}. sat \<sigma> V v k' \<phi>)" by auto
             moreover
@@ -683,7 +684,7 @@ proof -
     by auto
   then obtain k where 3: "k \<in> {j<..i} \<and> sat \<sigma> V v k (And \<phi> \<psi>)" by blast
   from this 0 2 have "mem I (\<tau> \<sigma> i - \<tau> \<sigma> k)"
-    using interval_geq[of I \<sigma> i j k]
+    using interval_geq[of I 0 \<sigma> i j k]
     by auto
   from this 3 show ?thesis by auto
 qed
@@ -717,7 +718,7 @@ proof -
       assume 5: "\<not>(\<forall>k \<in> {j<..i}. sat \<sigma> V v k \<psi>)"
       then obtain k where 6: "k \<in> {j<..i} \<and> \<not> sat \<sigma> V v k \<psi>" by blast
       from this 0 2 4 have "mem I (\<tau> \<sigma> i - \<tau> \<sigma> k)"
-        using interval_geq[of I \<sigma> i j k]
+        using interval_geq[of I 0 \<sigma> i j k]
         by auto
       from this 0 1 6 have "\<exists>x \<in> {k<..i}. mem I (\<tau> \<sigma> i - \<tau> \<sigma> x) \<and> sat \<sigma> V v x (And \<phi> \<psi>)"
         using sat_trigger_exist[of I \<sigma> V v i \<phi> \<psi> k]
