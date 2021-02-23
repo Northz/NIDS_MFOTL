@@ -509,32 +509,6 @@ lemma eps_fv_cong:
 
 subsubsection \<open>Trigger / Release\<close>
 
-lemma "sat \<sigma> V v i (Trigger \<phi> I \<psi>) = sat \<sigma> V v i (Neg (Since (Neg \<phi>) I (Neg \<psi>)))"
-  by auto
-
-definition once :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "once I \<phi> = Since TT I \<phi>"
-
-lemma sat_once[simp] : "sat \<sigma> V v i (once I \<phi>) = (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>)"
-  by (auto simp: once_def)
-
-definition historically :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "historically I \<phi> = (Neg (once I (Neg \<phi>)))"
-
-lemma historically_sat[simp] : "sat \<sigma> V v i (historically I \<phi>) = (\<forall>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> sat \<sigma> V v j \<phi>)"
-  by (auto simp: historically_def)
-
-definition sometimes :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "sometimes I \<phi> = Until TT I \<phi>"
-
-lemma sometimes_sat[simp] : "sat \<sigma> V v i (sometimes I \<phi>) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j \<phi>)"
-  by (auto simp: sometimes_def)
-
-definition always :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "always I \<phi> = (Neg (sometimes I (Neg \<phi>)))"
-
-lemma always_sat[simp] : "sat \<sigma> V v i (always I \<phi>) = (\<forall>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v j \<phi>)"
-  by (auto simp: always_def)
 
 lemma interval_geq:
   fixes i j :: nat
@@ -565,6 +539,141 @@ proof -
   with assms(1) assms(2) assms(4) have "memR I (\<tau> \<sigma> k - \<tau> \<sigma> i) \<and> memL I (\<tau> \<sigma> k - \<tau> \<sigma> i)" by auto
   thus ?thesis by auto
 qed
+
+lemma "sat \<sigma> V v i (Trigger \<phi> I \<psi>) = sat \<sigma> V v i (Neg (Since (Neg \<phi>) I (Neg \<psi>)))"
+  by auto
+
+definition once :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "once I \<phi> = Since TT I \<phi>"
+
+lemma sat_once[simp] : "sat \<sigma> V v i (once I \<phi>) = (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>)"
+  by (auto simp: once_def)
+
+definition historically :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "historically I \<phi> = (Neg (once I (Neg \<phi>)))"
+
+lemma historically_sat[simp] : "sat \<sigma> V v i (historically I \<phi>) = (\<forall>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> sat \<sigma> V v j \<phi>)"
+  by (auto simp: historically_def)
+
+lemma interval_all: "mem all i"
+proof -               
+  have "memL = fst o Rep_\<I>" using memL_def map_fun_def[of Rep_\<I> id fst] by auto
+  then have "memL all = fst (Rep_\<I> all)" using comp_apply[of fst Rep_\<I> all] by auto
+  then have memL: "memL all = (\<lambda>_. True)" using Interval.all.rep_eq by simp
+
+  have "memR = (fst o snd) o Rep_\<I>" using memR_def map_fun_def[of Rep_\<I> id "fst o snd"] by auto
+  then have "memR all = (fst o snd) (Rep_\<I> all)" using comp_apply[of "fst o snd" Rep_\<I> all] by auto
+  then have memR: "memR all = (\<lambda>_. True)" using Interval.all.rep_eq by simp
+
+  show ?thesis using memL memR by auto
+qed
+
+definition "first = Neg (Prev all TT)"
+
+lemma first_sat[simp] : "sat \<sigma> V v i first = (i=0)"
+  using interval_all by (auto simp: first_def split: nat.split)
+
+lemma interval_bounds:
+  fixes a:: nat
+  fixes b:: enat
+  assumes "a \<le> b"
+  assumes "I = interval a b"
+  shows "memL I = (\<lambda>i. a \<le> i) \<and> memR I = (\<lambda>i. enat i \<le> b) \<and> (bounded I = (b \<noteq> \<infinity>))"
+proof -
+  define l where "l = (\<lambda>i. a \<le> i)"
+  define r where "r = (\<lambda>i. enat i \<le> b)"
+  define bnd where "bnd = (b \<noteq> \<infinity>)"
+  define t where "t = (l, r, bnd)"
+  have up: "upclosed l" using l_def upclosed_def 
+    by auto
+  have down: "downclosed r" using r_def downclosed_def
+    by (simp add: order_subst2)
+  have nonempty: "(l a \<and> r a)" using assms l_def r_def
+    by auto
+  have "bnd = (\<exists>m. \<not> r m)" using bnd_def r_def
+    by (metis eSuc_enat_iff enat.exhaust enat_ord_code(4) iless_Suc_eq less_irrefl)
+  then have "t \<in> {(memL, memR, bounded).
+          (\<exists>m. memL m \<and> memR m) \<and> upclosed memL \<and> downclosed memR \<and> bounded = (\<exists>m. \<not> memR m)}"
+    using t_def up down nonempty
+    by auto
+  then have rep: "Rep_\<I> (Abs_\<I> t) = (\<lambda>i. a \<le> i, \<lambda>i. enat i \<le> b, b \<noteq> \<infinity>)"
+    using Abs_\<I>_inverse[of "t"] t_def l_def r_def bnd_def
+    by auto
+  have "I = Abs_\<I> (\<lambda>i. a \<le> i, \<lambda>i. enat i \<le> b, b \<noteq> \<infinity>)" using interval_def assms by auto
+  then have "I = Abs_\<I> t" using t_def l_def r_def bnd_def by auto
+  then show ?thesis
+    using rep Interval.memL.rep_eq[of I] Interval.memR.rep_eq[of I] Interval.bounded.rep_eq[of I]
+    by auto
+qed
+
+lemma x:
+  fixes a :: nat
+  fixes I1 I2 :: \<I>
+  assumes "memL I1 = (\<le>) a" "memR I1 = (\<lambda>i. enat i \<le> \<infinity>)"
+  assumes "memL I2 = (\<le>) 0" "memR I2 = (\<lambda>i. enat i \<le> a)"
+  shows "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>)) = sat \<sigma> V v i (Since (Or \<phi> (once (interval 0 a) (Since \<phi> all (And \<phi> first)))) I1 (And \<phi> first))"
+proof (rule iffI)
+  assume historically: "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))"
+  define A where "A = {j. j\<le>i \<and> mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>}"
+  define j where "j = Max A"
+  have "\<exists>j\<le>i. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>" using historically by auto
+  then have A_props: "finite A \<and> A \<noteq> {}" using A_def by auto
+  then have "j \<in> A" using j_def by auto
+  then have j_props: "j\<le>i \<and> mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>" using A_def by auto
+  {
+    fix k
+    assume k_props: "k\<le>j"
+    then have "\<tau> \<sigma> j \<ge> \<tau> \<sigma> k" by auto
+    then have int_ineq: "\<tau> \<sigma> i - \<tau> \<sigma> j \<le> \<tau> \<sigma> i - \<tau> \<sigma> k" by linarith
+    moreover have "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)" using j_props assms(1-2) int_ineq by auto
+    ultimately have first_sat: "sat \<sigma> V v k \<phi>" 
+      using j_props k_props historically assms(1-2) 
+      by auto
+  }
+  then have leq_j: "\<forall>k\<le>j. sat \<sigma> V v j \<phi>" by auto
+  {
+    fix k
+    assume k_props: "k \<in> {j<..i}"
+    {
+      assume "k \<in> A"
+      then have "False"
+        using A_props k_props j_def
+        by auto
+    }
+    moreover {
+      assume k_notin_A: "k \<notin> A"
+      then have "\<not>mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k) \<or> \<not>sat \<sigma> V v k \<phi>" using k_props A_def by auto
+      moreover {
+        assume k_mem: "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)"
+        then have "sat \<sigma> V v k \<phi>" using k_props historically by auto
+        then have "k\<in>A" using k_props k_mem A_def by auto
+        then have "False" using k_notin_A by auto
+      }
+      moreover {
+        assume "\<not>mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)"
+        then have "a > \<tau> \<sigma> i - \<tau> \<sigma> k" using assms by auto
+        then have "sat \<sigma> V v k (once (interval 0 a) (Since \<phi> all (And \<phi> first)))" by auto
+      }
+      ultimately have "sat \<sigma> V v k (once (interval 0 a) (Since \<phi> all (And \<phi> first)))" by blast
+    }
+    ultimately have "sat \<sigma> V v k (once (interval 0 a) (Since \<phi> all (And \<phi> first)))" by blast
+  }
+  then have geq_j: "\<forall>k \<in> {j<..i}. sat \<sigma> V v k (once (interval 0 a) (Since \<phi> all (And \<phi> first)))" by auto
+  then have "(\<exists>j\<le>i. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>)" using first_sat by auto
+  then show "sat \<sigma> V v i (Since (Or \<phi> (once (interval 0 a) (Since \<phi> all (And \<phi> first)))) I1 (And \<phi> first))" by auto
+qed
+
+definition sometimes :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "sometimes I \<phi> = Until TT I \<phi>"
+
+lemma sometimes_sat[simp] : "sat \<sigma> V v i (sometimes I \<phi>) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j \<phi>)"
+  by (auto simp: sometimes_def)
+
+definition always :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "always I \<phi> = (Neg (sometimes I (Neg \<phi>)))"
+
+lemma always_sat[simp] : "sat \<sigma> V v i (always I \<phi>) = (\<forall>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v j \<phi>)"
+  by (auto simp: always_def)
 
 lemma sat_trigger_rewrite_0_mem:
   fixes i j :: nat
