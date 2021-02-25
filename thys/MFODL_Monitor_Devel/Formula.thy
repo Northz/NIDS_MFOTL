@@ -580,38 +580,37 @@ lemma interval_bounds:
   assumes "I = interval a b"
   shows "memL I = (\<lambda>i. a \<le> i) \<and> memR I = (\<lambda>i. enat i \<le> b) \<and> (bounded I = (b \<noteq> \<infinity>))"
 proof -
-  define l where "l = (\<lambda>i. a \<le> i)"
-  define r where "r = (\<lambda>i. enat i \<le> b)"
-  define bnd where "bnd = (b \<noteq> \<infinity>)"
-  define t where "t = (l, r, bnd)"
-  have up: "upclosed l" using l_def upclosed_def 
+  define t where "t = ((\<lambda>i. a \<le> i), (\<lambda>i. enat i \<le> b), (b \<noteq> \<infinity>))"
+  have up: "upclosed (\<lambda>i. a \<le> i)" using upclosed_def 
     by auto
-  have down: "downclosed r" using r_def downclosed_def
+  have down: "downclosed (\<lambda>i. enat i \<le> b)" using downclosed_def
     by (simp add: order_subst2)
-  have nonempty: "(l a \<and> r a)" using assms l_def r_def
+  have nonempty: "(\<lambda>i. a \<le> i) a"  "(\<lambda>i. enat i \<le> b) a" using assms
     by auto
-  have "bnd = (\<exists>m. \<not> r m)" using bnd_def r_def
+  have "(b \<noteq> \<infinity>) = (\<exists>m. \<not> (\<lambda>i. enat i \<le> b) m)"
     by (metis eSuc_enat_iff enat.exhaust enat_ord_code(4) iless_Suc_eq less_irrefl)
   then have "t \<in> {(memL, memR, bounded).
           (\<exists>m. memL m \<and> memR m) \<and> upclosed memL \<and> downclosed memR \<and> bounded = (\<exists>m. \<not> memR m)}"
     using t_def up down nonempty
     by auto
   then have rep: "Rep_\<I> (Abs_\<I> t) = (\<lambda>i. a \<le> i, \<lambda>i. enat i \<le> b, b \<noteq> \<infinity>)"
-    using Abs_\<I>_inverse[of "t"] t_def l_def r_def bnd_def
+    using Abs_\<I>_inverse[of "t"] t_def
     by auto
   have "I = Abs_\<I> (\<lambda>i. a \<le> i, \<lambda>i. enat i \<le> b, b \<noteq> \<infinity>)" using interval_def assms by auto
-  then have "I = Abs_\<I> t" using t_def l_def r_def bnd_def by auto
+  then have "I = Abs_\<I> t" using t_def by auto
   then show ?thesis
     using rep Interval.memL.rep_eq[of I] Interval.memR.rep_eq[of I] Interval.bounded.rep_eq[of I]
     by auto
 qed
 
-lemma x:
+lemma historically_rewrite_unbounded:
   fixes a :: nat
   fixes I1 I2 :: \<I>
   assumes "memL I1 = (\<le>) a" "memR I1 = (\<lambda>i. enat i \<le> \<infinity>)"
   assumes "memL I2 = (\<le>) 0" "memR I2 = (\<lambda>i. enat i \<le> a)"
-  shows "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>)) = sat \<sigma> V v i (Since (Or \<phi> (once (interval 0 a) (Since \<phi> all (And \<phi> first)))) I1 (And \<phi> first))"
+  assumes "memL I3 = (\<le>) 0" "memR I3 = (\<lambda>i. enat i \<le> (a-1))"
+  assumes "a > 0"
+  shows "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>)) = sat \<sigma> V v i (Or (Since \<phi> I1 (And \<phi> first)) (And (once I3 (Prev all (Since \<phi> all (And \<phi> first)))) (once I1 \<phi>)))"
 proof (rule iffI)
   assume historically: "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))"
   define A where "A = {j. j\<le>i \<and> mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>}"
@@ -624,43 +623,173 @@ proof (rule iffI)
     fix k
     assume k_props: "k\<le>j"
     then have "\<tau> \<sigma> j \<ge> \<tau> \<sigma> k" by auto
-    then have int_ineq: "\<tau> \<sigma> i - \<tau> \<sigma> j \<le> \<tau> \<sigma> i - \<tau> \<sigma> k" by linarith
-    moreover have "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)" using j_props assms(1-2) int_ineq by auto
-    ultimately have first_sat: "sat \<sigma> V v k \<phi>" 
+    then have "\<tau> \<sigma> i - \<tau> \<sigma> j \<le> \<tau> \<sigma> i - \<tau> \<sigma> k" by linarith
+    then have "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)" using j_props assms(1-2) by auto
+    then have first_sat: "sat \<sigma> V v k \<phi>" 
       using j_props k_props historically assms(1-2) 
       by auto
   }
-  then have leq_j: "\<forall>k\<le>j. sat \<sigma> V v j \<phi>" by auto
-  {
-    fix k
-    assume k_props: "k \<in> {j<..i}"
+  then have leq_j: "\<forall>k\<le>j. sat \<sigma> V v k \<phi>" by auto
+  moreover {
+    define B where "B = {k. k\<le>i \<and> mem I3 (\<tau> \<sigma> i - \<tau> \<sigma> k) \<and> \<not>sat \<sigma> V v k \<phi>}"
+    define k where "k = Min B"
+    assume "\<exists>j\<le>i. mem I3 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> \<not>sat \<sigma> V v j \<phi>"
+    then have "B \<noteq> {}" using B_def by auto
+    moreover have "finite B" using B_def by auto
+    ultimately have B_props: "B \<noteq> {} \<and> finite B" by auto
+    then have k_in_B: "k \<in> B" using k_def by auto
+    then have k_props: "k\<le>i \<and> mem I3 (\<tau> \<sigma> i - \<tau> \<sigma> k) \<and> \<not>sat \<sigma> V v k \<phi>" using B_def by auto
     {
-      assume "k \<in> A"
-      then have "False"
-        using A_props k_props j_def
-        by auto
+      fix x
+      assume x_props: "x<k" "mem I3 (\<tau> \<sigma> i - \<tau> \<sigma> x)"
+      moreover {
+        assume "x \<in> B"
+        then have "False" using x_props k_def B_props by auto
+      }
+      moreover {
+        assume "x \<notin> B"
+        then have "sat \<sigma> V v x \<phi>" using B_def x_props k_props by auto
+      }
+      ultimately have "sat \<sigma> V v x \<phi>" by blast
+    }
+    then have less_k: "\<forall>x<k. mem I3 (\<tau> \<sigma> i - \<tau> \<sigma> x) \<longrightarrow> sat \<sigma> V v x \<phi>" by blast
+    {
+      fix x
+      assume x_props: "x<k" "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> x)" "\<not>mem I3 (\<tau> \<sigma> i - \<tau> \<sigma> x)"
+      then have "\<tau> \<sigma> i - \<tau> \<sigma> x = a" using assms(3-6) by auto
+      then have "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> x)" using assms(1-2) by auto
+      then have "sat \<sigma> V v x \<phi>" using historically x_props k_props by auto
+    }
+    then have less_k: "\<forall>x<k. mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> x) \<longrightarrow> sat \<sigma> V v x \<phi>" using less_k by blast
+    moreover {
+      assume k_pre_props: "k > 0 \<and> mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> (k-1))"
+      {
+        fix x
+        assume x_props: "x\<le>(k-1)"
+        {
+          assume "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> x)"
+          then have "sat \<sigma> V v x \<phi>" using x_props less_k k_pre_props by auto
+        }
+        moreover {
+          assume "\<not>mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> x)"
+          then have "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> x)" using assms by auto
+          then have "sat \<sigma> V v x \<phi>" using x_props k_props historically by auto
+        }
+        ultimately have "sat \<sigma> V v x \<phi>" by auto
+      }
+      then have "\<forall>x\<le>(k-1). sat \<sigma> V v x \<phi>" by auto
+      then have "sat \<sigma> V v i (once I3 (Prev all (Since \<phi> all (And \<phi> first))))"
+        using interval_all less_k k_pre_props k_props
+        by (auto split: nat.split)
     }
     moreover {
-      assume k_notin_A: "k \<notin> A"
-      then have "\<not>mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k) \<or> \<not>sat \<sigma> V v k \<phi>" using k_props A_def by auto
+      assume "\<not>(k > 0 \<and> mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> (k-1)))"
+      then have k_or: "k \<le> 0 \<or> \<not>mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> (k-1))" by auto
       moreover {
-        assume k_mem: "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)"
-        then have "sat \<sigma> V v k \<phi>" using k_props historically by auto
-        then have "k\<in>A" using k_props k_mem A_def by auto
-        then have "False" using k_notin_A by auto
+        assume "k\<le>0"
+        then have "False" using k_props assms leq_j j_props by blast
       }
       moreover {
-        assume "\<not>mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)"
-        then have "a > \<tau> \<sigma> i - \<tau> \<sigma> k" using assms by auto
-        then have "sat \<sigma> V v k (once (interval 0 a) (Since \<phi> all (And \<phi> first)))" by auto
+        assume k_pos: "k>0"
+        then have "\<not>mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> (k-1))" using k_or by auto
+        then have k_pre: "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> (k-1))" using assms by auto
+        then have "sat \<sigma> V v (k-1) \<phi>" using historically k_props by auto
+        then have "(k-1) \<in> A" using A_def k_pre k_props by auto
+        then have "(k-1) \<le> j" using j_def A_props by auto
+        then have "sat \<sigma> V v i (once I3 (Prev all (Since \<phi> all (And \<phi> first))))"
+          using interval_all k_pos leq_j k_props
+          by (auto split: nat.split)
       }
-      ultimately have "sat \<sigma> V v k (once (interval 0 a) (Since \<phi> all (And \<phi> first)))" by blast
+      ultimately have "sat \<sigma> V v i (once I3 (Prev all (Since \<phi> all (And \<phi> first))))" by blast
     }
-    ultimately have "sat \<sigma> V v k (once (interval 0 a) (Since \<phi> all (And \<phi> first)))" by blast
+    ultimately have "sat \<sigma> V v i (once I3 (Prev all (Since \<phi> all (And \<phi> first))))" by blast
+    then have "sat \<sigma> V v i (once I3 (Prev all (Since \<phi> all (And \<phi> first)))) \<and> sat \<sigma> V v i (once I1 \<phi>)"
+      using historically
+      by auto
+    then have "sat \<sigma> V v i (And (once I3 (Prev all (Since \<phi> all (And \<phi> first)))) (once I1 \<phi>))" by auto
   }
-  then have geq_j: "\<forall>k \<in> {j<..i}. sat \<sigma> V v k (once (interval 0 a) (Since \<phi> all (And \<phi> first)))" by auto
-  then have "(\<exists>j\<le>i. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>)" using first_sat by auto
-  then show "sat \<sigma> V v i (Since (Or \<phi> (once (interval 0 a) (Since \<phi> all (And \<phi> first)))) I1 (And \<phi> first))" by auto
+  moreover {
+    assume interval_2_sat: "\<forall>j\<le>i. mem I3 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> sat \<sigma> V v j \<phi>"
+    {
+      fix k
+      assume k_props: "k \<in> {j<..i}"
+      {
+        assume "mem I3 (\<tau> \<sigma> i - \<tau> \<sigma> k)"
+        then have "sat \<sigma> V v k \<phi>" using interval_2_sat k_props by auto
+      }
+      moreover {
+        assume k_not_in_int2: "\<not> mem I3 (\<tau> \<sigma> i - \<tau> \<sigma> k)"
+        then have "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)" using assms by auto
+        then have k_sat: "sat \<sigma> V v k \<phi>" using historically k_props by auto
+        (*have "k \<notin> A" using k_props j_def A_props by auto
+        then have "\<not>mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k) \<or> \<not>sat \<sigma> V v k \<phi>" using k_props A_def by auto
+        then have "\<not>sat \<sigma> V v k \<phi>" using k_not_in_int2 assms by auto
+        then have "False" using k_sat by auto*)
+      }
+      ultimately have "sat \<sigma> V v k \<phi>" by blast
+    }
+    then have geq_j: "\<forall>k \<in> {j<..i}. sat \<sigma> V v k \<phi>" by auto
+    have "\<tau> \<sigma> 0 \<le> \<tau> \<sigma> j" by auto
+    then have "(\<tau> \<sigma> i - \<tau> \<sigma> 0) \<ge> (\<tau> \<sigma> i - \<tau> \<sigma> j)" by linarith
+    then have "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> 0)" using assms j_props by auto
+    then have "sat \<sigma> V v i (Since \<phi> I1 (And \<phi> first))" using leq_j geq_j interval_all by auto
+  }
+  ultimately have "sat \<sigma> V v i (Since \<phi> I1 (And \<phi> first)) \<or> sat \<sigma> V v i (And (once I3 (Prev all (Since \<phi> all (And \<phi> first)))) (once I1 \<phi>))" by blast
+  then show "sat \<sigma> V v i (Or (Since \<phi> I1 (And \<phi> first)) (And (once I3 (Prev all (Since \<phi> all (And \<phi> first)))) (once I1 \<phi>)))" by auto
+next
+  define A where "A = {j. j\<le>i \<and> mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)}"
+  assume rewrite: "sat \<sigma> V v i (Or (Since \<phi> I1 (And \<phi> first)) (And (once I3 (Prev all (Since \<phi> all (And \<phi> first)))) (once I1 \<phi>)))"
+  then have "sat \<sigma> V v i (Since \<phi> I1 (And \<phi> first)) \<or> sat \<sigma> V v i (And (once I3 (Prev all (Since \<phi> all (And \<phi> first)))) (once I1 \<phi>))" by auto
+  moreover {
+    assume "sat \<sigma> V v i (Since \<phi> I1 (And \<phi> first))"
+    then have "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))"
+      using interval_all
+      by auto
+  }
+  moreover {
+    assume once: "sat \<sigma> V v i (And (once I3 (Prev all (Since \<phi> all (And \<phi> first)))) (once I1 \<phi>))"
+    then have "sat \<sigma> V v i (once I3 (Prev all (Since \<phi> all (And \<phi> first))))" by auto
+    then have "\<exists>j\<le>i. mem I3 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j (Prev all (Since \<phi> all (And \<phi> first)))"
+      by auto
+    then obtain j where j_props: "j\<le>i \<and> mem I3 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j (Prev all (Since \<phi> all (And \<phi> first)))" by blast
+    {
+      assume "j = 0"
+      then have "\<not>sat \<sigma> V v j (Prev all (Since \<phi> all (And \<phi> first)))" by auto
+      then have "False" using j_props by auto
+    }
+    then have j_pos: "j \<noteq> 0" by auto
+    then have "(case j of 0 \<Rightarrow> False | Suc x \<Rightarrow> mem all (\<tau> \<sigma> j - \<tau> \<sigma> x) \<and> sat \<sigma> V v x (Since \<phi> all (And \<phi> first)))"
+      using j_props
+      by auto
+    then have j_pred_sat: "sat \<sigma> V v (j-1) (Since \<phi> all (And \<phi> first))"
+      using j_pos
+      by (simp add: Nitpick.case_nat_unfold)
+    {
+      fix x
+      assume x_props: "x>j-1"
+      then have "\<tau> \<sigma> x \<ge> \<tau> \<sigma> j" using x_props by auto
+      then have "mem I3 (\<tau> \<sigma> i - \<tau> \<sigma> x)" using j_props assms(4-6) by auto
+      then have "\<not>mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> x)" using assms by auto
+    }
+    then have x_greater: "\<forall>x>(j-1). \<not>mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> x)" by blast
+    {
+      fix x
+      assume x_props: "x\<le>i" "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> x)"
+      {
+        assume "x>(j-1)"
+        then have "False" using x_props x_greater by auto
+      }
+      then have "\<not>(x>j-1)" by blast
+      then have "x\<le>(j-1)" by auto
+    }
+    then have "\<forall>x\<le>i. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> x) \<longrightarrow> x\<le>j-1" by blast
+    then have "\<forall>x\<le>i. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> x) \<longrightarrow> sat \<sigma> V v x \<phi>" using j_pred_sat by auto
+    then have "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))"
+      using interval_all once
+      by auto
+  }
+  ultimately have "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))" by blast
+  then show "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))" by auto
 qed
 
 definition sometimes :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
