@@ -603,6 +603,80 @@ proof -
     by auto
 qed
 
+lemma historically_rewrite_0:
+  fixes b :: nat
+  fixes I1 I2 :: \<I>
+  assumes "memL I1 = (\<le>) 0" "memR I1 = (\<lambda>i. enat i \<le> b)"
+  assumes "memL I2 = (\<le>) (b+1)" "memR I2 = (\<lambda>i. enat i \<le> \<infinity>)"
+  shows "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>)) = sat \<sigma> V v i (Or (And (once I1 \<phi>) (Since \<phi> I2 TT)) (Since \<phi> I1 (And first \<phi>)))"
+proof (rule iffI)
+  assume hist: "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))"
+  {
+    define A where "A = {j. j\<le>i \<and> mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j)}"
+    define j where "j = Max A"
+    assume "\<exists>j\<le>i. mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j)"
+    then have A_props: "A \<noteq> {} \<and> finite A" using A_def by auto
+    then have "j \<in> A" using j_def by auto
+    then have j_props: "j\<le>i \<and> mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j)" using A_def by auto
+    {
+      fix k
+      assume k_props: "j<k" "k\<le>i" 
+      {
+        assume "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> k)"
+        then have "False" using A_props k_props j_def A_def by auto
+      }
+      then have "\<not>mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> k)" by blast
+      then have "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)" using assms by auto
+    }
+    then have "\<forall>k\<in>{j<..i}. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)" by auto
+    then have "\<forall>k\<in>{j<..i}. sat \<sigma> V v k \<phi>" using hist by auto
+    then have "sat \<sigma> V v i (Since \<phi> I2 TT)" using j_props by auto
+    then have "sat \<sigma> V v i (And (once I1 \<phi>) (Since \<phi> I2 TT))" using hist by simp
+    then have "sat \<sigma> V v i (Or (And (once I1 \<phi>) (Since \<phi> I2 TT)) (Since \<phi> I1 (And first \<phi>)))"
+      by simp
+  }
+  moreover {
+    assume "\<forall>j\<le>i. \<not>mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j)"
+    then have mem_leq_j: "\<forall>j\<le>i. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)" using assms by auto
+    then have sat_leq_j: "\<forall>j\<le>i. sat \<sigma> V v j \<phi>" using hist by auto
+    then have "sat \<sigma> V v i (Since \<phi> I1 (And first \<phi>))"
+      using mem_leq_j
+      by auto
+    then have "sat \<sigma> V v i (Or (And (once I1 \<phi>) (Since \<phi> I2 TT)) (Since \<phi> I1 (And first \<phi>)))"
+      by simp
+  }
+  ultimately show "sat \<sigma> V v i (Or (And (once I1 \<phi>) (Since \<phi> I2 TT)) (Since \<phi> I1 (And first \<phi>)))"
+    by blast
+next
+  assume "sat \<sigma> V v i (Or (And (once I1 \<phi>) (Since \<phi> I2 TT)) (Since \<phi> I1 (And first \<phi>)))"
+  then have "sat \<sigma> V v i (And (once I1 \<phi>) (Since \<phi> I2 TT)) \<or> sat \<sigma> V v i (Since \<phi> I1 (And first \<phi>))" by simp
+  moreover {
+    assume since: "sat \<sigma> V v i (And (once I1 \<phi>) (Since \<phi> I2 TT))"
+    then have "(\<exists>j\<le>i. mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> (\<forall>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>))" by simp
+    then obtain j where j_props: "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> (\<forall>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>)" by blast
+    {
+      fix k
+      assume k_props: "k\<le>i" "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)"
+      {
+        assume "k\<le>j"
+        then have "\<tau> \<sigma> k \<le> \<tau> \<sigma> j" by simp
+        then have "\<tau> \<sigma> i - \<tau> \<sigma> k \<ge> \<tau> \<sigma> i - \<tau> \<sigma> j" by auto
+        then have "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> k)" using j_props assms by auto
+        then have "False" using assms k_props by auto
+      }
+      then have "\<not>(k\<le>j)" by blast
+      then have "sat \<sigma> V v k \<phi>" using k_props j_props by auto
+    }
+    then have "sat \<sigma> V v i (historically I1 \<phi>)" by auto
+    then have "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))" using since by auto
+  }
+  moreover {
+    assume "sat \<sigma> V v i (Since \<phi> I1 (And first \<phi>))"
+    then have "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))" by auto
+  }
+  ultimately show "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))" by blast
+qed
+
 lemma historically_rewrite_unbounded:
   fixes a :: nat
   fixes I1 I2 I3 :: \<I>
