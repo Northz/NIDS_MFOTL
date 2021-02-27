@@ -930,6 +930,7 @@ next
   ultimately show "sat \<sigma> V v i (Trigger \<phi> I \<psi>)" by auto
 qed
 
+
 lemma sat_trigger_rewrite_unbounded:
   fixes a :: nat
   fixes I1 I2 I3 :: \<I>
@@ -937,7 +938,7 @@ lemma sat_trigger_rewrite_unbounded:
   assumes "memL I2 = (\<le>) 0" "memR I2 = (\<lambda>i. enat i \<le> a)"
   assumes "memL I3 = (\<le>) 0" "memR I3 = (\<lambda>i. enat i \<le> (a-1))"
   assumes "a>0"
-shows "sat \<sigma> V v i (Trigger \<phi> I1 \<psi>) = sat \<sigma> V v i (Or (Or (Or \<phi> (historically I1 \<psi>)) (once I3 \<phi>)) (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))"
+shows "sat \<sigma> V v i (Trigger \<phi> I1 \<psi>) = sat \<sigma> V v i (Or (Or (historically I1 \<psi>) (once I3 \<phi>)) (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))"
 proof (rule iffI)
   assume trigger: "sat \<sigma> V v i (Trigger \<phi> I1 \<psi>)"
   {
@@ -955,7 +956,7 @@ proof (rule iffI)
     then have k_props: "k \<in>{j <.. i} \<and> sat \<sigma> V v k \<phi>" using A_def by auto
     {
       assume "mem I3 (\<tau> \<sigma> i - \<tau> \<sigma> k)"
-      then have "sat \<sigma> V v i (Or (Or (Or \<phi> (historically I1 \<psi>)) (once I3 \<phi>)) (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))"
+      then have "sat \<sigma> V v i (Or (Or (historically I1 \<psi>) (once I3 \<phi>)) (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))"
         using k_props
         by auto
     }
@@ -974,8 +975,8 @@ proof (rule iffI)
       then have k_since: "sat \<sigma> V v k (Since \<psi> all (And \<phi> \<psi>))" using interval_all by auto
       {
         assume "k=i"
-        then have "sat \<sigma> V v i (Or (Or (Or \<phi> (historically I1 \<psi>)) (once I3 \<phi>)) (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))"
-          using k_sat by auto
+        then have "sat \<sigma> V v i (Or (Or (historically I1 \<psi>) (once I3 \<phi>)) (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))"
+          using k_sat sat_once[of \<sigma> V v i I3 \<phi>] using assms by auto
       }
       moreover {
         assume "\<not>(k=i)"
@@ -1073,36 +1074,19 @@ proof (rule iffI)
       }
         ultimately have "sat \<sigma> V v i (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>))))"
           by blast
-        then have "sat \<sigma> V v i (Or (Or (Or \<phi> (historically I1 \<psi>)) (once I3 \<phi>)) (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))"
+        then have "sat \<sigma> V v i (Or (Or (historically I1 \<psi>) (once I3 \<phi>)) (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))"
           by simp
       }
-      ultimately have "sat \<sigma> V v i (Or (Or (Or \<phi> (historically I1 \<psi>)) (once I3 \<phi>)) (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))"
+      ultimately have "sat \<sigma> V v i (Or (Or (historically I1 \<psi>) (once I3 \<phi>)) (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))"
           by blast
     }
-    ultimately have "sat \<sigma> V v i (Or (Or (Or \<phi> (historically I1 \<psi>)) (once I3 \<phi>)) (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))" by blast
+    ultimately have "sat \<sigma> V v i (Or (Or (historically I1 \<psi>) (once I3 \<phi>)) (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))" by blast
   }
-  ultimately show "sat \<sigma> V v i (Or (Or (Or \<phi> (historically I1 \<psi>)) (once I3 \<phi>)) (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))" by auto
+  ultimately show "sat \<sigma> V v i (Or (Or (historically I1 \<psi>) (once I3 \<phi>)) (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))" by auto
 next
-  assume "sat \<sigma> V v i (Or (Or (Or \<phi> (historically I1 \<psi>)) (once I3 \<phi>)) (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))"
-  then have "sat \<sigma> V v i \<phi> \<or> sat \<sigma> V v i (historically I1 \<psi>) \<or> sat \<sigma> V v i (once I3 \<phi>) \<or> sat \<sigma> V v i (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>))))" by auto
-  moreover {
-    assume i_sat: "sat \<sigma> V v i \<phi>"
-    {
-      fix j
-      assume j_props: "j\<le>i" "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)"
-      {
-        assume "j=i"
-        then have "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> i)" using j_props by auto
-        then have "False" using assms by auto
-      }
-      then have "j \<noteq> i" by blast
-      then have "j<i" using j_props by auto
-      then have "i \<in> {j <.. i} \<and> sat \<sigma> V v i \<phi>" using i_sat by auto
-      then have "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>)" by auto
-    }
-    then have "\<forall>j\<le>i. (mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)) \<longrightarrow> (sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>))" by auto
-    then have "sat \<sigma> V v i (Trigger \<phi> I1 \<psi>)" by auto
-  }
+  assume "sat \<sigma> V v i (Or (Or (historically I1 \<psi>) (once I3 \<phi>)) (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))"
+  then have "sat \<sigma> V v i (historically I1 \<psi>) \<or> sat \<sigma> V v i (once I3 \<phi>) \<or> sat \<sigma> V v i (once I3 (Prev all (Since \<psi> all (And \<phi> \<psi>))))"
+    by auto
   moreover {
     assume "sat \<sigma> V v i (historically I1 \<psi>)"
     then have "sat \<sigma> V v i (Trigger \<phi> I1 \<psi>)" by auto
