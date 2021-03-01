@@ -555,6 +555,18 @@ definition historically :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" wh
 lemma sat_historically[simp] : "sat \<sigma> V v i (historically I \<phi>) = (\<forall>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> sat \<sigma> V v j \<phi>)"
   by (auto simp: historically_def)
 
+definition sometimes :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "sometimes I \<phi> = Until TT I \<phi>"
+
+lemma sat_sometimes[simp] : "sat \<sigma> V v i (sometimes I \<phi>) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j \<phi>)"
+  by (auto simp: sometimes_def)
+
+definition always :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "always I \<phi> = (Neg (sometimes I (Neg \<phi>)))"
+
+lemma sat_always[simp] : "sat \<sigma> V v i (always I \<phi>) = (\<forall>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v j \<phi>)"
+  by (auto simp: always_def)
+
 lemma interval_all: "mem all i"
 proof -               
   have "memL = fst o Rep_\<I>" using memL_def map_fun_def[of Rep_\<I> id fst] by auto
@@ -576,6 +588,7 @@ lemma first_sat[simp] : "sat \<sigma> V v i first = (i=0)"
 lemma interval_bounds:
   fixes a:: nat
   fixes b:: enat
+  fixes I::\<I>
   assumes "a \<le> b"
   assumes "I = interval a b"
   shows "memL I = (\<lambda>i. a \<le> i) \<and> memR I = (\<lambda>i. enat i \<le> b) \<and> (bounded I = (b \<noteq> \<infinity>))"
@@ -606,7 +619,7 @@ qed
 lemma historically_rewrite_0:
   fixes b :: nat
   fixes I1 I2 :: \<I>
-  assumes "memL I1 = (\<le>) 0" "memR I1 = (\<lambda>i. enat i \<le> b)"
+  assumes "memL I1 = (\<le>) 0" "mem I1 = (\<lambda>i. enat i \<le> b)"
   assumes "memL I2 = (\<le>) (b+1)" "memR I2 = (\<lambda>i. enat i \<le> \<infinity>)"
   shows "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>)) = sat \<sigma> V v i (Or (And (once I1 \<phi>) (Since \<phi> I2 TT)) (Since \<phi> I1 (And first \<phi>)))"
 proof (rule iffI)
@@ -795,10 +808,6 @@ proof (rule iffI)
         assume k_not_in_int2: "\<not> mem I3 (\<tau> \<sigma> i - \<tau> \<sigma> k)"
         then have "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)" using assms by auto
         then have k_sat: "sat \<sigma> V v k \<phi>" using historically k_props by auto
-        (*have "k \<notin> A" using k_props j_def A_props by auto
-        then have "\<not>mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k) \<or> \<not>sat \<sigma> V v k \<phi>" using k_props A_def by auto
-        then have "\<not>sat \<sigma> V v k \<phi>" using k_not_in_int2 assms by auto
-        then have "False" using k_sat by auto*)
       }
       ultimately have "sat \<sigma> V v k \<phi>" by blast
     }
@@ -866,17 +875,59 @@ next
   then show "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))" by auto
 qed
 
-definition sometimes :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "sometimes I \<phi> = Until TT I \<phi>"
+lemma historically_rewrite_bounded:
+  fixes a :: nat
+  fixes I1 I2 :: \<I>
+  assumes "memL I1 = (\<le>) a" "memR I1 = (\<lambda>i. enat i \<le> b)"
+  assumes "memL I2 = (\<le>) 0" "memR I2 = (\<lambda>i. enat i \<le> (b-a))"
+  assumes "a>0" "a\<le>b"
+  shows "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>)) = sat \<sigma> V v i (And (once I1 \<phi>) (Neg (once I1 (And (Or (once I2 \<phi>) (sometimes I2 \<phi>)) (Neg \<phi>)))))"
+proof (rule iffI)
+  assume "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))"
+  then show "sat \<sigma> V v i (And (once I1 \<phi>) (Neg (once I1 (And (Or (once I2 \<phi>) (sometimes I2 \<phi>)) (Neg \<phi>)))))"
+    by auto
+next
+  assume rewrite: "sat \<sigma> V v i (And (once I1 \<phi>) (Neg (once I1 (And (Or (once I2 \<phi>) (sometimes I2 \<phi>)) (Neg \<phi>)))))"
+  then obtain j where j_props: "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>" by auto
+  have j_leq_i_sat: "\<forall>j\<le>i. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> (sat \<sigma> V v j (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v j (Neg (sometimes I2 \<phi>))) \<or> sat \<sigma> V v j \<phi>"
+    using rewrite
+    by auto
+  {
+    fix k
+    assume k_props: "k\<le>i" "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)"
+    then have "(sat \<sigma> V v k (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v k (Neg (sometimes I2 \<phi>))) \<or> sat \<sigma> V v k \<phi>"
+      using j_leq_i_sat by auto
+    moreover {
+      assume assm: "(sat \<sigma> V v k (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v k (Neg (sometimes I2 \<phi>)))"
+      then have leq_k_sat: "\<forall>j\<le>k. mem I2 (\<tau> \<sigma> k - \<tau> \<sigma> j) \<longrightarrow> \<not>sat \<sigma> V v j \<phi>" by auto
+      have geq_k_sat: "\<forall>j\<ge>k. mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> k) \<longrightarrow> \<not>sat \<sigma> V v j \<phi>" using assm by auto
+      have j_int: "\<tau> \<sigma> i - \<tau> \<sigma> j \<ge> a" "\<tau> \<sigma> i - \<tau> \<sigma> j \<le> b"
+          using j_props assms(1-2)
+          by auto
+      have k_int: "\<tau> \<sigma> i - \<tau> \<sigma> k \<ge> a" "\<tau> \<sigma> i - \<tau> \<sigma> k \<le> b"
+          using k_props assms(1-2)
+          by auto
+      {
+        assume k_geq_j: "k\<ge>j"
+        then have "\<tau> \<sigma> k - \<tau> \<sigma> j \<le> b-a" using j_int k_int assms(5) by linarith
+        then have "mem I2 (\<tau> \<sigma> k - \<tau> \<sigma> j)" using assms(3-4) by auto
+        then have "False" using assms(3-4) leq_k_sat j_props k_geq_j by auto
+      }
+      moreover {
+        assume k_less_j: "\<not>(k\<ge>j)"
+        then have "\<tau> \<sigma> j - \<tau> \<sigma> k \<le> b-a" using j_int k_int assms(5) by linarith
+        then have "mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> k)" using assms(3-4) by auto
+        then have "False" using assms(3-4) geq_k_sat j_props k_less_j by auto
+      }
+      ultimately have "False" by blast
+    }
+    ultimately have "sat \<sigma> V v k \<phi>" by auto
+  }
+  then have "\<forall>j\<le>i. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> sat \<sigma> V v j \<phi>" by auto
+  then show "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))" using rewrite by auto
+qed
 
-lemma sat_sometimes[simp] : "sat \<sigma> V v i (sometimes I \<phi>) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j \<phi>)"
-  by (auto simp: sometimes_def)
 
-definition always :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "always I \<phi> = (Neg (sometimes I (Neg \<phi>)))"
-
-lemma sat_always[simp] : "sat \<sigma> V v i (always I \<phi>) = (\<forall>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v j \<phi>)"
-  by (auto simp: always_def)
 
 lemma sat_trigger_rewrite_0_mem:
   fixes i j :: nat
