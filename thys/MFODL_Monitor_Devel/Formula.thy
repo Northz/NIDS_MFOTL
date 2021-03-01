@@ -621,9 +621,9 @@ lemma historically_rewrite_0:
   fixes I1 I2 :: \<I>
   assumes "memL I1 = (\<le>) 0" "mem I1 = (\<lambda>i. enat i \<le> b)"
   assumes "memL I2 = (\<le>) (b+1)" "memR I2 = (\<lambda>i. enat i \<le> \<infinity>)"
-  shows "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>)) = sat \<sigma> V v i (Or (And (once I1 \<phi>) (Since \<phi> I2 TT)) (Since \<phi> I1 (And first \<phi>)))"
+  shows "sat \<sigma> V v i (historically I1 \<phi>) = sat \<sigma> V v i (Or (Since \<phi> I2 TT) (Since \<phi> I1 (And first \<phi>)))"
 proof (rule iffI)
-  assume hist: "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))"
+  assume hist: "sat \<sigma> V v i (historically I1 \<phi>)"
   {
     define A where "A = {j. j\<le>i \<and> mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j)}"
     define j where "j = Max A"
@@ -644,8 +644,7 @@ proof (rule iffI)
     then have "\<forall>k\<in>{j<..i}. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)" by auto
     then have "\<forall>k\<in>{j<..i}. sat \<sigma> V v k \<phi>" using hist by auto
     then have "sat \<sigma> V v i (Since \<phi> I2 TT)" using j_props by auto
-    then have "sat \<sigma> V v i (And (once I1 \<phi>) (Since \<phi> I2 TT))" using hist by simp
-    then have "sat \<sigma> V v i (Or (And (once I1 \<phi>) (Since \<phi> I2 TT)) (Since \<phi> I1 (And first \<phi>)))"
+    then have "sat \<sigma> V v i (Or (Since \<phi> I2 TT) (Since \<phi> I1 (And first \<phi>)))"
       by simp
   }
   moreover {
@@ -655,16 +654,16 @@ proof (rule iffI)
     then have "sat \<sigma> V v i (Since \<phi> I1 (And first \<phi>))"
       using mem_leq_j
       by auto
-    then have "sat \<sigma> V v i (Or (And (once I1 \<phi>) (Since \<phi> I2 TT)) (Since \<phi> I1 (And first \<phi>)))"
+    then have "sat \<sigma> V v i (Or (Since \<phi> I2 TT) (Since \<phi> I1 (And first \<phi>)))"
       by simp
   }
-  ultimately show "sat \<sigma> V v i (Or (And (once I1 \<phi>) (Since \<phi> I2 TT)) (Since \<phi> I1 (And first \<phi>)))"
+  ultimately show "sat \<sigma> V v i (Or (Since \<phi> I2 TT) (Since \<phi> I1 (And first \<phi>)))"
     by blast
 next
-  assume "sat \<sigma> V v i (Or (And (once I1 \<phi>) (Since \<phi> I2 TT)) (Since \<phi> I1 (And first \<phi>)))"
-  then have "sat \<sigma> V v i (And (once I1 \<phi>) (Since \<phi> I2 TT)) \<or> sat \<sigma> V v i (Since \<phi> I1 (And first \<phi>))" by simp
+  assume "sat \<sigma> V v i (Or (Since \<phi> I2 TT) (Since \<phi> I1 (And first \<phi>)))"
+  then have "sat \<sigma> V v i (Since \<phi> I2 TT) \<or> sat \<sigma> V v i (Since \<phi> I1 (And first \<phi>))" by simp
   moreover {
-    assume since: "sat \<sigma> V v i (And (once I1 \<phi>) (Since \<phi> I2 TT))"
+    assume since: "sat \<sigma> V v i (Since \<phi> I2 TT)"
     then have "(\<exists>j\<le>i. mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> (\<forall>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>))" by simp
     then obtain j where j_props: "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> (\<forall>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>)" by blast
     {
@@ -681,13 +680,12 @@ next
       then have "sat \<sigma> V v k \<phi>" using k_props j_props by auto
     }
     then have "sat \<sigma> V v i (historically I1 \<phi>)" by auto
-    then have "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))" using since by auto
   }
   moreover {
     assume "sat \<sigma> V v i (Since \<phi> I1 (And first \<phi>))"
-    then have "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))" by auto
+    then have "sat \<sigma> V v i (historically I1 \<phi>)" by auto
   }
-  ultimately show "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))" by blast
+  ultimately show "sat \<sigma> V v i (historically I1 \<phi>)" by blast
 qed
 
 lemma historically_rewrite_unbounded:
