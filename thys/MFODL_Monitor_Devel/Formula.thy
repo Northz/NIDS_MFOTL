@@ -592,36 +592,18 @@ lemma interval_bounds:
   assumes "a \<le> b"
   assumes "I = interval a b"
   shows "memL I = (\<lambda>i. a \<le> i) \<and> memR I = (\<lambda>i. enat i \<le> b) \<and> (bounded I = (b \<noteq> \<infinity>))"
-proof -
-  define t where "t = ((\<lambda>i. a \<le> i), (\<lambda>i. enat i \<le> b), (b \<noteq> \<infinity>))"
-  have up: "upclosed (\<lambda>i. a \<le> i)" using upclosed_def 
-    by auto
-  have down: "downclosed (\<lambda>i. enat i \<le> b)" using downclosed_def
-    by (simp add: order_subst2)
-  have nonempty: "(\<lambda>i. a \<le> i) a"  "(\<lambda>i. enat i \<le> b) a" using assms
-    by auto
-  have "(b \<noteq> \<infinity>) = (\<exists>m. \<not> (\<lambda>i. enat i \<le> b) m)"
-    by (metis eSuc_enat_iff enat.exhaust enat_ord_code(4) iless_Suc_eq less_irrefl)
-  then have "t \<in> {(memL, memR, bounded).
-          (\<exists>m. memL m \<and> memR m) \<and> upclosed memL \<and> downclosed memR \<and> bounded = (\<exists>m. \<not> memR m)}"
-    using t_def up down nonempty
-    by auto
-  then have rep: "Rep_\<I> (Abs_\<I> t) = (\<lambda>i. a \<le> i, \<lambda>i. enat i \<le> b, b \<noteq> \<infinity>)"
-    using Abs_\<I>_inverse[of "t"] t_def
-    by auto
-  have "I = Abs_\<I> (\<lambda>i. a \<le> i, \<lambda>i. enat i \<le> b, b \<noteq> \<infinity>)" using interval_def assms by auto
-  then have "I = Abs_\<I> t" using t_def by auto
-  then show ?thesis
-    using rep Interval.memL.rep_eq[of I] Interval.memR.rep_eq[of I] Interval.bounded.rep_eq[of I]
-    by auto
-qed
+  using assms
+  by transfer auto
+
+lift_definition flip_int :: "\<I> \<Rightarrow> \<I>" is
+  "\<lambda>I. if bounded I then ((\<lambda>i. \<not>memR I i), (\<lambda>i. True), False) else ((\<lambda>i. True), (\<lambda>i. True), False)"
+  by transfer (auto simp: upclosed_def downclosed_def)
 
 lemma historically_rewrite_0:
-  fixes b :: nat
   fixes I1 I2 :: \<I>
-  assumes "memL I1 = (\<le>) 0" "mem I1 = (\<lambda>i. enat i \<le> b)"
-  assumes "memL I2 = (\<le>) (b+1)" "memR I2 = (\<lambda>i. enat i \<le> \<infinity>)"
-  shows "sat \<sigma> V v i (historically I1 \<phi>) = sat \<sigma> V v i (Or (Since \<phi> I2 TT) (Since \<phi> I1 (And first \<phi>)))"
+  assumes "mem I1 0" "bounded I1"
+  assumes "I2 = flip_int I1"
+  shows "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>)) = sat \<sigma> V v i (Or (Since \<phi> I2 TT) (Since \<phi> I1 (And first \<phi>)))"
 proof (rule iffI)
   assume hist: "sat \<sigma> V v i (historically I1 \<phi>)"
   {
@@ -639,7 +621,8 @@ proof (rule iffI)
         then have "False" using A_props k_props j_def A_def by auto
       }
       then have "\<not>mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> k)" by blast
-      then have "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)" using assms by auto
+      then have "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)" using assms
+        by (transfer' fixing: \<sigma>) (auto split: if_splits)
     }
     then have "\<forall>k\<in>{j<..i}. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)" by auto
     then have "\<forall>k\<in>{j<..i}. sat \<sigma> V v k \<phi>" using hist by auto
@@ -649,7 +632,8 @@ proof (rule iffI)
   }
   moreover {
     assume "\<forall>j\<le>i. \<not>mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j)"
-    then have mem_leq_j: "\<forall>j\<le>i. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)" using assms by auto
+    then have mem_leq_j: "\<forall>j\<le>i. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)" using assms
+      by (transfer' fixing: \<sigma>) (auto split: if_splits)
     then have sat_leq_j: "\<forall>j\<le>i. sat \<sigma> V v j \<phi>" using hist by auto
     then have "sat \<sigma> V v i (Since \<phi> I1 (And first \<phi>))"
       using mem_leq_j
@@ -673,8 +657,10 @@ next
         assume "k\<le>j"
         then have "\<tau> \<sigma> k \<le> \<tau> \<sigma> j" by simp
         then have "\<tau> \<sigma> i - \<tau> \<sigma> k \<ge> \<tau> \<sigma> i - \<tau> \<sigma> j" by auto
-        then have "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> k)" using j_props assms by auto
-        then have "False" using assms k_props by auto
+        then have "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> k)" using j_props assms
+          by (transfer' fixing: \<sigma>) (auto split: if_splits dest: memR_antimono)
+        then have "False" using assms k_props
+          by (transfer' fixing: \<sigma>) (auto split: if_splits)
       }
       then have "\<not>(k\<le>j)" by blast
       then have "sat \<sigma> V v k \<phi>" using k_props j_props by auto
