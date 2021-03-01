@@ -599,19 +599,27 @@ lift_definition flip_int :: "\<I> \<Rightarrow> \<I>" is
   "\<lambda>I. if bounded I then ((\<lambda>i. \<not>memR I i), (\<lambda>i. True), False) else ((\<lambda>i. True), (\<lambda>i. True), False)"
   by transfer (auto simp: upclosed_def downclosed_def)
 
-lemma interval_flip_leq:
+lift_definition flip_unbounded :: "\<I> \<Rightarrow> \<I>" is
+  "\<lambda>I. if \<not>bounded I \<and> \<not>memL I 0 then ((\<lambda>i. True), (\<lambda>i. \<not>memL I i), True) else ((\<lambda>i. True), (\<lambda>i. True), False)"
+  by transfer (auto simp: upclosed_def downclosed_def)
+
+lemma flip_unbounded_props:
+  assumes "\<not>bounded I" "\<not>memL I 0"
+  assumes "I' = flip_unbounded I"
+  shows "mem I' 0 \<and> bounded I'"
+  using assms by (transfer') (auto split: if_splits)
+
+lemma interval_unbounded_leq:
   assumes "j \<le> i" "k \<le> j"
-  assumes "I = flip_int I'" (* [a, \<infinity>] *)
+  assumes "\<not> bounded I" (* [a, \<infinity>] *)
   assumes "mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)"
   shows "mem I (\<tau> \<sigma> i - \<tau> \<sigma> k)"
 proof -
   have "\<tau> \<sigma> j \<ge> \<tau> \<sigma> k" using assms by auto
   then have ineq: "\<tau> \<sigma> i - \<tau> \<sigma> j \<le> \<tau> \<sigma> i - \<tau> \<sigma> k" by linarith
-  then have "memR I (\<tau> \<sigma> i - \<tau> \<sigma> k)" using assms
+  have "memL I (\<tau> \<sigma> i - \<tau> \<sigma> k)" using ineq assms
     by (transfer' fixing: \<sigma>) (auto split: if_splits)
-  moreover have "memL I (\<tau> \<sigma> i - \<tau> \<sigma> k)" using ineq assms
-    by (transfer' fixing: \<sigma>) (auto split: if_splits)
-  ultimately show ?thesis by auto
+  then show ?thesis using bounded_memR assms by auto
 qed
 
 lemma interval_0_bounded_geq:
@@ -635,6 +643,11 @@ lemma int_flip_mem:
   using assms memL_mono
   by (transfer') (auto split: if_splits)
 
+lemma int_flip_unbounded_mem:
+  assumes "\<not>bounded I" "\<not>mem I x"
+  shows "mem (flip_unbounded I) x"
+  using assms
+  by (transfer') (simp add: bounded_memR)
 
 lemma historically_rewrite_0:
   fixes I1 I2 :: \<I>
@@ -712,8 +725,8 @@ next
 qed
 
 lemma historically_rewrite_unbounded:
-  assumes "mem I2 0" "bounded I2" (* [0, a-1] *)
-  assumes "I1 = flip_int I2" (* [a, \<infinity>] *)
+  assumes "\<not> mem I1 0" "\<not> bounded I1" (* [a, \<infinity>] *)
+  assumes "I2 = flip_unbounded I1" (* [0, a-1] *)
   shows "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>)) = sat \<sigma> V v i (And (once I2 (Prev all (Since \<phi> all (And \<phi> first)))) (once I1 \<phi>))"
 proof (rule iffI)
   assume historically: "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))"
@@ -727,7 +740,7 @@ proof (rule iffI)
     fix k
     assume k_props: "k\<le>j"
     then have "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)"
-      using assms(3) j_props(1-2) interval_flip_leq[of j i k I1 I2 \<sigma>]
+      using assms(2) j_props(1-2) interval_unbounded_leq[of j i k I1 \<sigma>]
       by auto
     then have first_sat: "sat \<sigma> V v k \<phi>" 
       using j_props k_props historically assms(1-2) 
@@ -736,13 +749,16 @@ proof (rule iffI)
   then have leq_j: "\<forall>k\<le>j. sat \<sigma> V v k \<phi>" by auto
   define B where "B = {k. k\<le>i \<and> mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> k)}"
   define k where "k = Min B"
-  have B_props: "B \<noteq> {} \<and> finite B" using B_def assms(1) by auto
+  have "mem I2 0"
+    using assms
+    by (transfer') (auto split: if_splits)
+  then have B_props: "B \<noteq> {} \<and> finite B" using B_def by auto
   then have k_in_B: "k \<in> B" using k_def by auto
   then have k_props: "k\<le>i \<and> mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> k)" using B_def by auto
   {
     assume "k=0"
     then have "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j)"
-      using k_props assms(1-2) interval_0_bounded_geq[of k i j I2 \<sigma>]
+      using k_props assms flip_unbounded_props[of I1 I2] interval_0_bounded_geq[of k i j I2 \<sigma>]
       by auto
     then have "False"
       using assms j_props
@@ -757,7 +773,7 @@ proof (rule iffI)
   }
   then have "\<not>mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> (k-1))" by blast
   then have k_pre: "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> (k-1))"
-    using assms int_flip_mem by auto
+    using assms int_flip_unbounded_mem by auto
   then have "sat \<sigma> V v (k-1) \<phi>" using historically k_props by auto
   then have "(k-1) \<in> A" using A_def k_pre k_props by auto
   then have "(k-1) \<le> j" using j_def A_props by auto
@@ -792,7 +808,9 @@ next
     fix x
     assume x_props: "x>j-1"
     then have "\<tau> \<sigma> x \<ge> \<tau> \<sigma> j" using x_props by auto
-    then have "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> x)" using j_props assms(1-2) by auto
+    then have "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> x)"
+      using j_props assms flip_unbounded_props[of I1 I2] interval_0_bounded_geq[of j i x I2]
+      by auto
     then have "\<not>mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> x)"
       using assms
       by (transfer') (auto split: if_splits)
@@ -864,8 +882,6 @@ next
   then have "\<forall>j\<le>i. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> sat \<sigma> V v j \<phi>" by auto
   then show "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))" using rewrite by auto
 qed
-
-
 
 lemma sat_trigger_rewrite_0_mem:
   fixes i j :: nat
