@@ -599,13 +599,13 @@ lift_definition flip_int :: "\<I> \<Rightarrow> \<I>" is
   "\<lambda>I. if bounded I then ((\<lambda>i. \<not>memR I i), (\<lambda>i. True), False) else ((\<lambda>i. True), (\<lambda>i. True), False)"
   by transfer (auto simp: upclosed_def downclosed_def)
 
-lift_definition flip_unbounded_int :: "\<I> \<Rightarrow> \<I>" is
-  "\<lambda>I. if \<not>bounded I \<and> \<not>memL I 0 then ((\<lambda>i. True), (\<lambda>i. \<not>memL I i), True) else ((\<lambda>i. True), (\<lambda>i. True), False)"
+lift_definition flip_int_less_lower :: "\<I> \<Rightarrow> \<I>" is
+  "\<lambda>I. if \<not>memL I 0 then ((\<lambda>i. True), (\<lambda>i. \<not>memL I i), True) else ((\<lambda>i. True), (\<lambda>i. True), False)"
   by transfer (auto simp: upclosed_def downclosed_def)
 
-lemma flip_unbounded_props:
-  assumes "\<not>bounded I" "\<not>memL I 0"
-  assumes "I' = flip_unbounded_int I"
+lemma flip_int_less_lower_props:
+  assumes "\<not>memL I 0"
+  assumes "I' = flip_int_less_lower I"
   shows "mem I' 0 \<and> bounded I'"
   using assms by (transfer') (auto split: if_splits)
 
@@ -645,7 +645,7 @@ lemma int_flip_mem:
 
 lemma int_flip_unbounded_mem:
   assumes "\<not>bounded I" "\<not>mem I x"
-  shows "mem (flip_unbounded_int I) x"
+  shows "mem (flip_int_less_lower I) x"
   using assms
   by (transfer') (simp add: bounded_memR)
 
@@ -726,7 +726,7 @@ qed
 
 lemma historically_rewrite_unbounded:
   assumes "\<not> mem I1 0" "\<not> bounded I1" (* [a, \<infinity>] *)
-  assumes "I2 = flip_unbounded_int I1" (* [0, a-1] *)
+  assumes "I2 = flip_int_less_lower I1" (* [0, a-1] *)
   shows "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>)) = sat \<sigma> V v i (And (once I2 (Prev all (Since \<phi> all (And \<phi> first)))) (once I1 \<phi>))"
 proof (rule iffI)
   assume historically: "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))"
@@ -758,7 +758,7 @@ proof (rule iffI)
   {
     assume "k=0"
     then have "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j)"
-      using k_props assms flip_unbounded_props[of I1 I2] interval_0_bounded_geq[of k i j I2 \<sigma>]
+      using k_props assms flip_int_less_lower_props[of I1 I2] interval_0_bounded_geq[of k i j I2 \<sigma>]
       by auto
     then have "False"
       using assms j_props
@@ -809,7 +809,7 @@ next
     assume x_props: "x>j-1"
     then have "\<tau> \<sigma> x \<ge> \<tau> \<sigma> j" using x_props by auto
     then have "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> x)"
-      using j_props assms flip_unbounded_props[of I1 I2] interval_0_bounded_geq[of j i x I2]
+      using j_props assms flip_int_less_lower_props[of I1 I2] interval_0_bounded_geq[of j i x I2]
       by auto
     then have "\<not>mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> x)"
       using assms
@@ -1012,9 +1012,8 @@ qed
 lemma sat_trigger_rewrite:
   fixes a :: nat
   fixes I1 I2 :: \<I>
-  assumes "memL I1 = (\<le>) a" "memR I1 = (\<lambda>i. enat i \<le> b)"
-  assumes "memL I2 = (\<le>) 0" "memR I2 = (\<lambda>i. enat i \<le> (a-1))"
-  assumes "a>0"
+  assumes "bounded I1" "\<not>mem I1 0" (* [a, b] *)
+  assumes "I2 = flip_int_less_lower I1" (* [0, a-1] *)
 shows "sat \<sigma> V v i (Trigger \<phi> I1 \<psi>) = sat \<sigma> V v i (Or (Or (historically I1 \<psi>) (once I2 \<phi>)) (once I2 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))"
 proof (rule iffI)
   assume trigger: "sat \<sigma> V v i (Trigger \<phi> I1 \<psi>)"
@@ -1039,9 +1038,11 @@ proof (rule iffI)
         assume k_not_mem_1: "\<not>mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> x)"
         have "\<tau> \<sigma> x \<ge> \<tau> \<sigma> j" using x_props by auto
         then have "\<tau> \<sigma> i - \<tau> \<sigma> x \<le> \<tau> \<sigma> i - \<tau> \<sigma> j" by auto
-        moreover have "\<tau> \<sigma> i - \<tau> \<sigma> j \<le> b" using assms j_props by auto 
-        ultimately have "(\<tau> \<sigma> i - \<tau> \<sigma> x) \<le> b" using enat_ord_simps(1) order_trans by blast
-        moreover have "(\<tau> \<sigma> i - \<tau> \<sigma> x) \<ge> a" using k_not_mem_1 x_props assms by auto
+        moreover have "memR I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)" using assms j_props by auto 
+        ultimately have "memR I1 (\<tau> \<sigma> i - \<tau> \<sigma> x)" using memR_antimono by blast
+        moreover have "memL I1 (\<tau> \<sigma> i - \<tau> \<sigma> x)"
+          using x_props assms
+          by (metis flip_int_less_lower.rep_eq memL.rep_eq memR.rep_eq prod.sel(1) prod.sel(2))
         ultimately have "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> x)" using assms by auto
         then have "False" using k_not_mem_1 by auto
       }
@@ -1070,7 +1071,7 @@ proof (rule iffI)
       {
         assume "k=i"
         then have "sat \<sigma> V v i (Or (Or (historically I1 \<psi>) (once I2 \<phi>)) (once I2 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))"
-          using k_sat sat_once[of \<sigma> V v i I2 \<phi>] using assms by auto
+          using k_sat sat_once[of \<sigma> V v i I2 \<phi>] using assms k_mem by auto
       }
       moreover {
         assume "\<not>(k=i)"
@@ -1125,9 +1126,8 @@ proof (rule iffI)
             then have lower: "(\<tau> \<sigma> i - \<tau> \<sigma> x) \<ge> (\<tau> \<sigma> i - \<tau> \<sigma> c)" by auto
             have "\<tau> \<sigma> x \<ge> \<tau> \<sigma> k"  using x_props by auto
             then have upper: "(\<tau> \<sigma> i - \<tau> \<sigma> x) \<le> (\<tau> \<sigma> i - \<tau> \<sigma> k)" by auto
-            then have "(\<tau> \<sigma> i - \<tau> \<sigma> x) \<le> b"
-              using enat_ord_simps(1) order_trans assms k_mem
-              by metis
+            then have "memR I1 (\<tau> \<sigma> i - \<tau> \<sigma> x)"
+              using k_mem memR_antimono by blast
             then have "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> x)" using assms c_props lower by auto
             then have "sat \<sigma> V v x \<psi>" using k_greater_sat x_props c_props by auto
           }
@@ -1160,12 +1160,16 @@ proof (rule iffI)
             moreover {
               assume c_suc_not_mem_1: "\<not>mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> (c+1))"
               {
-                assume "\<not>mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> (c+1))"
-                then have upper: "(\<tau> \<sigma> i - \<tau> \<sigma> (c+1)) > b" using c_suc_not_mem_1 assms by auto
+                assume not_mem2: "\<not>mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> (c+1))"
+                then have upper: "\<not>memR I1 (\<tau> \<sigma> i - \<tau> \<sigma> (c+1))"
+                  using c_suc_not_mem_1 assms geq_j_mem k_cond k_props
+                  by auto
                 have "\<tau> \<sigma> c \<le> \<tau> \<sigma> (c+1)" by auto
                 then have "\<tau> \<sigma> i - \<tau> \<sigma> c \<ge> \<tau> \<sigma> i - \<tau> \<sigma> (c+1)" using diff_le_mono2 by blast
-                moreover have "(\<tau> \<sigma> i - \<tau> \<sigma> c) \<le> b" using c_props assms by auto
-                ultimately have "\<tau> \<sigma> i - \<tau> \<sigma> (c+1) \<le> b" using enat_ord_simps(1) order_trans by blast
+                moreover have "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> c)" using c_props assms by auto
+                ultimately have "memR I1 (\<tau> \<sigma> i - \<tau> \<sigma> (c+1))"
+                  using not_mem2 assms(3) memR_antimono
+                  by blast
                 then have "False" using upper by auto
               }
               then have "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> (c+1))" by blast
@@ -1207,10 +1211,14 @@ next
       fix x
       assume x_props: "x\<le>i" "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> x)"
       {
-        assume "x\<ge>j"
+        assume j_leq_x: "x\<ge>j"
         then have "\<tau> \<sigma> x \<ge> \<tau> \<sigma> j" by auto
-        then have "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> x)" using j_props assms by auto
-        then have "False" using x_props assms by auto
+        then have "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> x)" using j_leq_x j_props assms
+          using flip_int_less_lower_props interval_0_bounded_geq memR_zero
+          by blast
+        then have "False"
+          using x_props assms flip_int_less_lower.rep_eq memR.rep_eq memR_zero
+          by auto
       }
       then have "\<not>(x\<ge>j)" by blast
       then have "x<j" by auto
@@ -1255,10 +1263,14 @@ next
           then have l_geq: "l\<ge>(j-1)" by auto
           have j_pred_psi: "sat \<sigma> V v (j-1) \<psi>" using j_pred_sat by auto
           {
-            assume "l>(j-1)"
+            assume l_greater: "l>(j-1)"
             then have "\<tau> \<sigma> l \<ge> \<tau> \<sigma> j" by auto
-            then have "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> l)" using assms j_props by auto
-            then have "\<not>mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> l)" using assms by auto
+            then have "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> l)"
+              using assms j_props j_pos l_greater flip_int_less_lower_props interval_0_bounded_geq
+              by (metis One_nat_def Suc_pred le_simps(3) memR_zero)
+            then have "\<not>mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> l)"
+              using assms flip_int_less_lower.rep_eq memR.rep_eq memR_zero
+              by auto
             then have "False" using l_assms by auto
           }
           then have "l=(j-1)" using l_geq le_eq_less_or_eq by blast
