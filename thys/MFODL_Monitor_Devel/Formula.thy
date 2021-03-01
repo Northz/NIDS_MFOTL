@@ -599,13 +599,13 @@ lift_definition flip_int :: "\<I> \<Rightarrow> \<I>" is
   "\<lambda>I. if bounded I then ((\<lambda>i. \<not>memR I i), (\<lambda>i. True), False) else ((\<lambda>i. True), (\<lambda>i. True), False)"
   by transfer (auto simp: upclosed_def downclosed_def)
 
-lift_definition flip_unbounded :: "\<I> \<Rightarrow> \<I>" is
+lift_definition flip_unbounded_int :: "\<I> \<Rightarrow> \<I>" is
   "\<lambda>I. if \<not>bounded I \<and> \<not>memL I 0 then ((\<lambda>i. True), (\<lambda>i. \<not>memL I i), True) else ((\<lambda>i. True), (\<lambda>i. True), False)"
   by transfer (auto simp: upclosed_def downclosed_def)
 
 lemma flip_unbounded_props:
   assumes "\<not>bounded I" "\<not>memL I 0"
-  assumes "I' = flip_unbounded I"
+  assumes "I' = flip_unbounded_int I"
   shows "mem I' 0 \<and> bounded I'"
   using assms by (transfer') (auto split: if_splits)
 
@@ -645,7 +645,7 @@ lemma int_flip_mem:
 
 lemma int_flip_unbounded_mem:
   assumes "\<not>bounded I" "\<not>mem I x"
-  shows "mem (flip_unbounded I) x"
+  shows "mem (flip_unbounded_int I) x"
   using assms
   by (transfer') (simp add: bounded_memR)
 
@@ -726,7 +726,7 @@ qed
 
 lemma historically_rewrite_unbounded:
   assumes "\<not> mem I1 0" "\<not> bounded I1" (* [a, \<infinity>] *)
-  assumes "I2 = flip_unbounded I1" (* [0, a-1] *)
+  assumes "I2 = flip_unbounded_int I1" (* [0, a-1] *)
   shows "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>)) = sat \<sigma> V v i (And (once I2 (Prev all (Since \<phi> all (And \<phi> first)))) (once I1 \<phi>))"
 proof (rule iffI)
   assume historically: "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))"
