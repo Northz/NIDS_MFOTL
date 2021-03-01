@@ -603,6 +603,10 @@ lift_definition flip_int_less_lower :: "\<I> \<Rightarrow> \<I>" is
   "\<lambda>I. if \<not>memL I 0 then ((\<lambda>i. True), (\<lambda>i. \<not>memL I i), True) else ((\<lambda>i. True), (\<lambda>i. True), False)"
   by transfer (auto simp: upclosed_def downclosed_def)
 
+lift_definition int_remove_lower_bound :: "\<I> \<Rightarrow> \<I>" is
+  "\<lambda>I. ((\<lambda>i. True), (\<lambda>i. memR I i), bounded I)"
+  by transfer (auto simp: upclosed_def downclosed_def)
+
 lemma flip_int_less_lower_props:
   assumes "\<not>memL I 0"
   assumes "I' = flip_int_less_lower I"
@@ -832,11 +836,14 @@ next
 qed
 
 lemma historically_rewrite_bounded:
-  fixes a :: nat
   fixes I1 I2 :: \<I>
-  assumes "memL I1 = (\<le>) a" "memR I1 = (\<lambda>i. enat i \<le> b)"
-  assumes "memL I2 = (\<le>) 0" "memR I2 = (\<lambda>i. enat i \<le> (b-a))"
-  assumes "a>0" "a\<le>b"
+  assumes "\<not>mem I1 0" "bounded I1" (* [a, b], a>0 *)
+  assumes "I2 = int_remove_lower_bound I1" (* [0, b] *) 
+  (*
+    [0, b-a] would be more efficient but this interval can
+    (probably) not be constructed using the current
+    implementation of intervals.
+  *)
   shows "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>)) = sat \<sigma> V v i (And (once I1 \<phi>) (Neg (once I1 (And (Or (once I2 \<phi>) (sometimes I2 \<phi>)) (Neg \<phi>)))))"
 proof (rule iffI)
   assume "sat \<sigma> V v i (And (once I1 \<phi>) (historically I1 \<phi>))"
@@ -857,23 +864,30 @@ next
       assume assm: "(sat \<sigma> V v k (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v k (Neg (sometimes I2 \<phi>)))"
       then have leq_k_sat: "\<forall>j\<le>k. mem I2 (\<tau> \<sigma> k - \<tau> \<sigma> j) \<longrightarrow> \<not>sat \<sigma> V v j \<phi>" by auto
       have geq_k_sat: "\<forall>j\<ge>k. mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> k) \<longrightarrow> \<not>sat \<sigma> V v j \<phi>" using assm by auto
-      have j_int: "\<tau> \<sigma> i - \<tau> \<sigma> j \<ge> a" "\<tau> \<sigma> i - \<tau> \<sigma> j \<le> b"
+      have j_int: "memL I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)" "memR I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)"
           using j_props assms(1-2)
           by auto
-      have k_int: "\<tau> \<sigma> i - \<tau> \<sigma> k \<ge> a" "\<tau> \<sigma> i - \<tau> \<sigma> k \<le> b"
+      have k_int: "memL I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)" "memR I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)"
           using k_props assms(1-2)
           by auto
       {
         assume k_geq_j: "k\<ge>j"
-        then have "\<tau> \<sigma> k - \<tau> \<sigma> j \<le> b-a" using j_int k_int assms(5) by linarith
-        then have "mem I2 (\<tau> \<sigma> k - \<tau> \<sigma> j)" using assms(3-4) by auto
-        then have "False" using assms(3-4) leq_k_sat j_props k_geq_j by auto
+        then have "memR I2 (\<tau> \<sigma> k - \<tau> \<sigma> j)"
+          using j_int k_int assms
+          by (metis diff_le_mono int_remove_lower_bound.rep_eq le_eq_less_or_eq memR.rep_eq memR_antimono neq0_conv prod.sel(1) prod.sel(2) zero_less_diff)
+        then have "mem I2 (\<tau> \<sigma> k - \<tau> \<sigma> j)"
+          using j_int k_int assms
+          by (simp add: int_remove_lower_bound.rep_eq memL.rep_eq)
+        then have "False" using assms leq_k_sat j_props k_geq_j by auto
       }
       moreover {
         assume k_less_j: "\<not>(k\<ge>j)"
-        then have "\<tau> \<sigma> j - \<tau> \<sigma> k \<le> b-a" using j_int k_int assms(5) by linarith
-        then have "mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> k)" using assms(3-4) by auto
-        then have "False" using assms(3-4) geq_k_sat j_props k_less_j by auto
+        then have "memR I2 (\<tau> \<sigma> j - \<tau> \<sigma> k)"
+          using j_int k_int assms
+          by (metis diff_le_mono int_remove_lower_bound.rep_eq le_eq_less_or_eq memR.rep_eq memR_antimono neq0_conv prod.sel(1) prod.sel(2) zero_less_diff)
+        then have "mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> k)" using assms
+          by (simp add: int_remove_lower_bound.rep_eq memL.rep_eq)
+        then have "False" using assms geq_k_sat j_props k_less_j by auto
       }
       ultimately have "False" by blast
     }
