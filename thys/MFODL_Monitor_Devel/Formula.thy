@@ -607,29 +607,36 @@ lift_definition int_remove_lower_bound :: "\<I> \<Rightarrow> \<I>" is
   "\<lambda>I. ((\<lambda>i. True), (\<lambda>i. memR I i), bounded I)"
   by transfer (auto simp: upclosed_def downclosed_def)
 
-lemma flip_int_less_lower_props:
-  assumes "\<not>memL I 0"
-  assumes "I' = flip_int_less_lower I"
-  shows "mem I' 0 \<and> bounded I'"
-  using assms by (transfer') (auto split: if_splits)
-
 lemma interval_unbounded_leq:
   assumes "j \<le> i" "k \<le> j"
   assumes "\<not> bounded I" (* [a, \<infinity>] *)
-  assumes "mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)"
+  assumes "mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)" (* if j\<le>i is part of the interval, then so is k\<le>j\<le>i *)
   shows "mem I (\<tau> \<sigma> i - \<tau> \<sigma> k)"
 proof -
   have "\<tau> \<sigma> j \<ge> \<tau> \<sigma> k" using assms by auto
-  then have ineq: "\<tau> \<sigma> i - \<tau> \<sigma> j \<le> \<tau> \<sigma> i - \<tau> \<sigma> k" by linarith
-  have "memL I (\<tau> \<sigma> i - \<tau> \<sigma> k)" using ineq assms
-    by (transfer' fixing: \<sigma>) (auto split: if_splits)
+  then have "\<tau> \<sigma> i - \<tau> \<sigma> j \<le> \<tau> \<sigma> i - \<tau> \<sigma> k" by linarith
+  then have "memL I (\<tau> \<sigma> i - \<tau> \<sigma> k)" using assms
+    by auto
+  then show ?thesis using bounded_memR assms by auto
+qed
+
+lemma interval_unbounded_geq:
+  assumes "i \<le> j" "j \<le> k"
+  assumes "\<not> bounded I" (* [a, \<infinity>] *)
+  assumes "mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)" (* if j\<le>i is part of the interval, then so is k\<le>j\<le>i *)
+  shows "mem I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+proof -
+  have "\<tau> \<sigma> j \<le> \<tau> \<sigma> k" using assms by auto
+  then have "\<tau> \<sigma> j - \<tau> \<sigma> i \<le> \<tau> \<sigma> k - \<tau> \<sigma> i" by linarith
+  then have "memL I (\<tau> \<sigma> k - \<tau> \<sigma> i)" using assms
+    by auto
   then show ?thesis using bounded_memR assms by auto
 qed
 
 lemma interval_0_bounded_geq:
   assumes "j \<le> i" "j \<le> k"
   assumes "mem I 0" "bounded I" (* [0, a] *)
-  assumes "mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)"
+  assumes "mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)" (* if j\<le>i is part of the interval, then so is j\<le>k\<le>i *)
   shows "mem I (\<tau> \<sigma> i - \<tau> \<sigma> k)"
 proof -
   have "\<tau> \<sigma> j \<le> \<tau> \<sigma> k" using assms by auto
@@ -641,17 +648,28 @@ proof -
   ultimately show ?thesis by auto
 qed
 
-lemma int_flip_mem:
-  assumes "bounded I" "mem I 0" "\<not>mem I x"
-  shows "mem (flip_int I) x"
-  using assms memL_mono
-  by (transfer') (auto split: if_splits)
+lemma flip_int_props:
+  assumes "I' = flip_int I"
+  shows "\<not>bounded I'"
+  using assms by (transfer') (auto split: if_splits)
 
-lemma int_flip_unbounded_mem:
-  assumes "\<not>bounded I" "\<not>mem I x"
-  shows "mem (flip_int_less_lower I) x"
+lemma flip_int_less_lower_props:
+  assumes "\<not>memL I 0" (* [a, b] *)
+  assumes "I' = flip_int_less_lower I" (* [0, a] *)
+  shows "mem I' 0 \<and> bounded I'"
+  using assms by (transfer') (auto split: if_splits)
+
+lemma flip_int_less_lower_mem:
+  assumes "\<not>bounded I" "\<not>mem I x" (* [a, \<infinity>], x < a *)
+  shows "mem (flip_int_less_lower I) x" (* x \<in> [0, a] *)
   using assms
   by (transfer') (simp add: bounded_memR)
+
+lemma int_flip_mem:
+  assumes "bounded I" "mem I 0" "\<not>mem I x" (* [0, a], a<x *)
+  shows "mem (flip_int I) x" (* [a, \<infinity>] *)
+  using assms memL_mono
+  by (transfer') (auto split: if_splits)
 
 lemma historically_rewrite_0:
   fixes I1 I2 :: \<I>
@@ -777,7 +795,7 @@ proof (rule iffI)
   }
   then have "\<not>mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> (k-1))" by blast
   then have k_pre: "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> (k-1))"
-    using assms int_flip_unbounded_mem by auto
+    using assms flip_int_less_lower_mem by auto
   then have "sat \<sigma> V v (k-1) \<phi>" using historically k_props by auto
   then have "(k-1) \<in> A" using A_def k_pre k_props by auto
   then have "(k-1) \<le> j" using j_def A_props by auto
@@ -851,7 +869,7 @@ proof (rule iffI)
     by auto
 next
   assume rewrite: "sat \<sigma> V v i (And (once I1 \<phi>) (Neg (once I1 (And (Or (once I2 \<phi>) (sometimes I2 \<phi>)) (Neg \<phi>)))))"
-  then obtain j where j_props: "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>" by auto
+  then obtain j where j_props: "j\<le>i" "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)" "sat \<sigma> V v j \<phi>" by auto
   have j_leq_i_sat: "\<forall>j\<le>i. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> (sat \<sigma> V v j (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v j (Neg (sometimes I2 \<phi>))) \<or> sat \<sigma> V v j \<phi>"
     using rewrite
     by auto
@@ -1284,6 +1302,120 @@ next
     then have "sat \<sigma> V v i (Trigger \<phi> I1 \<psi>)" by auto
   }
   ultimately show "sat \<sigma> V v i (Trigger \<phi> I1 \<psi>)" by blast
+qed
+
+lemma always_rewrite_0:
+  fixes I1 I2 :: \<I>
+  assumes "mem I1 0" "bounded I1"
+  assumes "I2 = flip_int I1"
+  shows "sat \<sigma> V v i (always I1 \<phi>) = sat \<sigma> V v i (Until \<phi> I2 TT)"
+proof (rule iffI)
+  define A where "A = {j. j\<ge>i \<and> mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> i)}"
+  define j where "j = Inf A"
+  assume assm: "sat \<sigma> V v i (always I1 \<phi>)"
+  have "\<exists>j\<ge>i. mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> i)" by sorry
+  then have A_props: "A \<noteq> {}" using A_def by auto
+  then have "j \<in> A" using j_def Inf_nat_def1 by auto
+  then have j_props: "j\<ge>i" "mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> i)" using A_def by auto
+  {
+    fix x
+    assume x_props: "x\<in>{i..<j}"
+    {
+      assume "mem I2 (\<tau> \<sigma> x - \<tau> \<sigma> i)"
+      then have "x \<in> A" using A_def x_props by auto
+      then have "x \<ge> j" using A_props j_def by (simp add: cInf_lower)
+      then have "False" using x_props by auto
+    }
+    then have "mem I1 (\<tau> \<sigma> x - \<tau> \<sigma> i)"
+      using assms
+      by (transfer') (auto split: if_splits)
+  }
+  then have "\<forall>x\<in>{i..<j}. mem I1 (\<tau> \<sigma> x - \<tau> \<sigma> i)" by auto
+  then have "\<forall>x\<in>{i..<j}. sat \<sigma> V v x \<phi>" using assm by auto
+  then show "sat \<sigma> V v i (Until \<phi> I2 TT)"
+    using j_props
+    by auto
+next
+  assume "sat \<sigma> V v i (Until \<phi> I2 TT)"
+  then obtain j where j_props: "j\<ge>i" "mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> i)" "\<forall>k\<in>{i..<j}. sat \<sigma> V v k \<phi>" by auto
+  {
+    fix k
+    assume k_props: "k\<ge>i" "mem I1 (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+    {
+      assume "k\<ge>j"
+      then have "mem I2 (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+        using j_props assms flip_int_props interval_unbounded_geq[of i j k I2 \<sigma>]
+        by auto
+      then have "False"
+        using k_props assms
+        by (transfer) (auto)
+    }
+    then have "\<not>k\<ge>j" by blast
+    then have "k<j" by auto
+    then have "sat \<sigma> V v k \<phi>" using k_props(1) j_props(3) by auto
+  }
+  then have "\<forall>k\<ge>i. mem I1 (\<tau> \<sigma> k - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v k \<phi>" by auto
+  then show "sat \<sigma> V v i (always I1 \<phi>)"
+    by auto
+qed
+
+lemma always_rewrite_bounded:
+  fixes I1 I2 :: \<I>
+  assumes "\<not>mem I1 0" "bounded I1" (* [a, b], a>0 *)
+  assumes "I2 = int_remove_lower_bound I1" (* [0, b] *) 
+  shows "sat \<sigma> V v i (And (sometimes I1 \<phi>) (always I1 \<phi>)) = sat \<sigma> V v i (And (sometimes I1 \<phi>) (Neg (sometimes I1 (And (Or (once I2 \<phi>) (sometimes I2 \<phi>)) (Neg \<phi>)))))"
+proof (rule iffI)
+  assume "sat \<sigma> V v i (And (sometimes I1 \<phi>) (always I1 \<phi>))"
+  then show "sat \<sigma> V v i (And (sometimes I1 \<phi>) (Neg (sometimes I1 (And (Or (once I2 \<phi>) (sometimes I2 \<phi>)) (Neg \<phi>)))))"
+    by auto
+next
+  assume rewrite: "sat \<sigma> V v i (And (sometimes I1 \<phi>) (Neg (sometimes I1 (And (Or (once I2 \<phi>) (sometimes I2 \<phi>)) (Neg \<phi>)))))"
+  then obtain j where j_props: "j\<ge>i" "mem I1 (\<tau> \<sigma> j - \<tau> \<sigma> i)" "sat \<sigma> V v j \<phi>" by auto
+  have j_geq_i_sat: "\<forall>j\<ge>i. mem I1 (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> (sat \<sigma> V v j (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v j (Neg (sometimes I2 \<phi>))) \<or> sat \<sigma> V v j \<phi>"
+    using rewrite
+    by auto
+  {
+    fix k
+    assume k_props: "k\<ge>i" "mem I1 (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+    then have "(sat \<sigma> V v k (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v k (Neg (sometimes I2 \<phi>))) \<or> sat \<sigma> V v k \<phi>"
+      using j_geq_i_sat by auto
+    moreover {
+      assume assm: "(sat \<sigma> V v k (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v k (Neg (sometimes I2 \<phi>)))"
+      then have leq_k_sat: "\<forall>j\<le>k. mem I2 (\<tau> \<sigma> k - \<tau> \<sigma> j) \<longrightarrow> \<not>sat \<sigma> V v j \<phi>" by auto
+      have geq_k_sat: "\<forall>j\<ge>k. mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> k) \<longrightarrow> \<not>sat \<sigma> V v j \<phi>" using assm by auto
+      have j_int: "memL I1 (\<tau> \<sigma> j - \<tau> \<sigma> i)" "memR I1 (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+          using j_props assms(1-2)
+          by auto
+      have k_int: "memL I1 (\<tau> \<sigma> k - \<tau> \<sigma> i)" "memR I1 (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+          using k_props assms(1-2)
+          by auto
+      {
+        assume k_geq_j: "k\<ge>j"
+        then have "memR I2 (\<tau> \<sigma> k - \<tau> \<sigma> j)"
+          using j_int k_int assms interval_geq j_props(1)
+          by (metis forall_finite(1) int_remove_lower_bound.rep_eq memL.rep_eq memR.rep_eq not_le_imp_less prod.sel(1-2))
+        then have "mem I2 (\<tau> \<sigma> k - \<tau> \<sigma> j)"
+          using j_int k_int assms
+          by (simp add: int_remove_lower_bound.rep_eq memL.rep_eq)
+        then have "False" using assms leq_k_sat j_props k_geq_j by auto
+      }
+      moreover {
+        assume k_less_j: "\<not>(k\<ge>j)"
+        then have "memR I2 (\<tau> \<sigma> j - \<tau> \<sigma> k)"
+          using j_int k_int assms j_props(1) k_props(1) interval_geq
+          by (metis forall_finite(1) int_remove_lower_bound.rep_eq memL.rep_eq memR.rep_eq not_le_imp_less prod.sel(1-2))
+        then have "mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> k)" using assms
+          by (simp add: int_remove_lower_bound.rep_eq memL.rep_eq)
+        then have "False" using assms geq_k_sat j_props k_less_j by auto
+      }
+      ultimately have "False" by blast
+    }
+    ultimately have "sat \<sigma> V v k \<phi>" by auto
+  }
+  then have "\<forall>j\<ge>i. mem I1 (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v j \<phi>" by auto
+  then show "sat \<sigma> V v i (And (sometimes I1 \<phi>) (always I1 \<phi>))"
+    using rewrite
+    by auto
 qed
 
 lemma sat_release_rewrite_0_mem:
