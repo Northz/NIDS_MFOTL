@@ -666,7 +666,7 @@ proof (rule iffI)
     assume "\<exists>j\<le>i. mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j)"
     then have A_props: "A \<noteq> {} \<and> finite A" using A_def by auto
     then have "j \<in> A" using j_def by auto
-    then have j_props: "j\<le>i \<and> mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j)" using A_def by auto
+    then have j_props: "j\<le>i" "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j)" using A_def by auto
     {
       fix k
       assume k_props: "j<k" "k\<le>i" 
@@ -737,7 +737,7 @@ proof (rule iffI)
   define A where "A = {j. j\<le>i \<and> mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>}"
   define j where "j = Max A"
   have "\<exists>j\<le>i. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>" using historically by auto
-  then have A_props: "finite A \<and> A \<noteq> {}" using A_def by auto
+  then have A_props: "finite A" "A \<noteq> {}" using A_def by auto
   then have "j \<in> A" using j_def by auto
   then have j_props: "j\<le>i" "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)" "sat \<sigma> V v j \<phi>" using A_def by auto
   {
@@ -756,9 +756,9 @@ proof (rule iffI)
   have "mem I2 0"
     using assms
     by (transfer') (auto split: if_splits)
-  then have B_props: "B \<noteq> {} \<and> finite B" using B_def by auto
+  then have B_props: "B \<noteq> {}" "finite B" using B_def by auto
   then have k_in_B: "k \<in> B" using k_def by auto
-  then have k_props: "k\<le>i \<and> mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> k)" using B_def by auto
+  then have k_props: "k\<le>i" "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> k)" using B_def by auto
   {
     assume "k=0"
     then have "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j)"
@@ -791,22 +791,22 @@ proof (rule iffI)
 next
   define A where "A = {j. j\<le>i \<and> mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)}"
   assume rewrite: "sat \<sigma> V v i (And (once I2 (Prev all (Since \<phi> all (And \<phi> first)))) (once I1 \<phi>))"
-  then have "sat \<sigma> V v i (And (once I2 (Prev all (Since \<phi> all (And \<phi> first)))) (once I1 \<phi>))" by auto
+  then have "sat \<sigma> V v i (And (once I2 (Prev all (Since \<phi> all (And \<phi> first)))) (once I1 \<phi>))"
+    by auto
   then have "sat \<sigma> V v i (once I2 (Prev all (Since \<phi> all (And \<phi> first))))" by auto
   then have "\<exists>j\<le>i. mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j (Prev all (Since \<phi> all (And \<phi> first)))"
     by auto
-  then obtain j where j_props: "j\<le>i \<and> mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j (Prev all (Since \<phi> all (And \<phi> first)))" by blast
+  then obtain j where j_props:
+    "j\<le>i" "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j)" "sat \<sigma> V v j (Prev all (Since \<phi> all (And \<phi> first)))"
+    by blast
   {
     assume "j = 0"
     then have "\<not>sat \<sigma> V v j (Prev all (Since \<phi> all (And \<phi> first)))" by auto
     then have "False" using j_props by auto
   }
   then have j_pos: "j \<noteq> 0" by auto
-  then have "(case j of 0 \<Rightarrow> False | Suc x \<Rightarrow> mem all (\<tau> \<sigma> j - \<tau> \<sigma> x) \<and> sat \<sigma> V v x (Since \<phi> all (And \<phi> first)))"
-    using j_props
-    by auto
   then have j_pred_sat: "sat \<sigma> V v (j-1) (Since \<phi> all (And \<phi> first))"
-    using j_pos
+    using j_pos j_props
     by (simp add: Nitpick.case_nat_unfold)
   {
     fix x
@@ -903,42 +903,27 @@ lemma sat_trigger_rewrite_0_mem:
   assumes trigger: "sat \<sigma> V v i (Trigger \<phi> I \<psi>)"
   assumes leq: "j\<le>i"
   assumes mem_j: "mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)"
-  shows "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. sat \<sigma> V v k (And \<phi> \<psi>))"
+  shows "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. mem I (\<tau> \<sigma> i - \<tau> \<sigma> k) \<and> sat \<sigma> V v k (And \<phi> \<psi>))"
 proof (cases "\<exists>k \<in> {j<..i}. sat \<sigma> V v k \<phi>")
   case True
   define A where "A = {x \<in> {j<..i}. sat \<sigma> V v x \<phi>}"
   define k where "k = Max A"
-  from True A_def have A_nonempty: "A \<noteq> {}" by auto
-  from A_def have A_fin: "finite A" by auto
-  from k_def A_nonempty A_fin have k_in_A: "k \<in> A" by auto
+  have A_props: "A \<noteq> {}" "finite A" using True A_def by auto
+  then have k_in_A: "k \<in> A" using k_def by auto
   then have k_props: "k \<in> {j<..i}" "sat \<sigma> V v k \<phi>" by (auto simp: A_def)
-  have "(\<forall>l>k. l \<notin> A)"
-    using Max_ge[OF A_fin]
+  have "\<forall>l>k. l \<notin> A"
+    using Max_ge[OF A_props(2)]
     by (fastforce simp: k_def)
-  moreover have "mem I (\<tau> \<sigma> i - \<tau> \<sigma> k)" using mem mem_j k_props interval_geq[of I 0 \<sigma> i j k] by auto
+  moreover have "mem I (\<tau> \<sigma> i - \<tau> \<sigma> k)"
+    using mem mem_j k_props interval_geq[of I 0 \<sigma> i j k]
+    by auto
   ultimately show ?thesis using k_props mem trigger by (auto simp: A_def)
 next
   case False
   then show ?thesis using assms by auto
 qed
 
-lemma sat_trigger_rewrite_0_exist:
-  assumes mem: "mem I 0"
-  assumes trigger: "sat \<sigma> V v i (Trigger \<phi> I \<psi>)"
-  assumes j_props: "j\<le>i \<and> mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> \<not>sat \<sigma> V v j \<psi>"
-shows "\<exists>k \<in> {j<..i}. mem I (\<tau> \<sigma> i - \<tau> \<sigma> k) \<and> sat \<sigma> V v k (And \<phi> \<psi>)"
-proof -
-  from assms have "\<exists>k\<in>{j<..i}. sat \<sigma> V v k (And \<phi> \<psi>)"
-    using sat_trigger_rewrite_0_mem[of I \<sigma> V v i \<phi> \<psi> j]
-    by auto
-  then obtain k where k_props: "k \<in> {j<..i} \<and> sat \<sigma> V v k (And \<phi> \<psi>)" by blast
-  from this mem j_props have "mem I (\<tau> \<sigma> i - \<tau> \<sigma> k)"
-    using interval_geq[of I 0 \<sigma> i j k]
-    by auto
-  from this k_props show ?thesis by auto
-qed
-
-lemma sat_trigger_rewrite_0_equiv:
+lemma sat_trigger_rewrite_0:
   assumes mem: "mem I 0"
 shows "sat \<sigma> V v i (Trigger \<phi> I \<psi>) = sat \<sigma> V v i (Or (Since \<psi> I (And \<phi> \<psi>)) (historically I \<psi>))"
 proof (rule iffI)
@@ -951,70 +936,72 @@ proof (rule iffI)
     define A where "A = {j. j\<le> i \<and> mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j (And \<phi> \<psi>)}"
     define j where "j = Max A"
     assume "\<not>(\<forall>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> sat \<sigma> V v j \<psi>)"
-    then obtain j' where "j' \<le> i \<and> mem I (\<tau> \<sigma> i - \<tau> \<sigma> j') \<and> \<not>sat \<sigma> V v j' \<psi>" by blast
+    then obtain j' where "j' \<le> i" "mem I (\<tau> \<sigma> i - \<tau> \<sigma> j')" "\<not>sat \<sigma> V v j' \<psi>" by blast
     then have "\<exists>k \<in> {j'<..i}. mem I (\<tau> \<sigma> i - \<tau> \<sigma> k) \<and> sat \<sigma> V v k (And \<phi> \<psi>)"
-      using mem trigger sat_trigger_rewrite_0_exist[of I \<sigma> V v i \<phi> \<psi> j']
+      using mem trigger sat_trigger_rewrite_0_mem[of I \<sigma> V v i \<phi> \<psi> j']
       by auto
-    then have A_nonempty: "A \<noteq> {}" using A_def by auto
-    moreover have A_finite: "finite A" using A_def by auto
-    ultimately have j_in_A: "j \<in> A"
-      using j_def Max_in[of "A"]
-      by auto
+    then have A_props: "A \<noteq> {} \<and> finite A" using A_def by auto
+    then have "j \<in> A" using j_def by auto
     then have j_props: "j\<le> i \<and> mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j (And \<phi> \<psi>)"
       using A_def
       by auto
-    moreover {
-      assume "\<forall>k \<in> {j<..i}. sat \<sigma> V v k \<psi>"
-      then have "sat \<sigma> V v i (Or (Since \<psi> I (And \<phi> \<psi>)) (historically I \<psi>))"
-        using j_props
-        by auto
-    }
-    moreover {
+    {
       assume "\<not>(\<forall>k \<in> {j<..i}. sat \<sigma> V v k \<psi>)"
       then obtain k where k_props: "k \<in> {j<..i} \<and> \<not> sat \<sigma> V v k \<psi>" by blast
       then have "mem I (\<tau> \<sigma> i - \<tau> \<sigma> k)"
         using mem j_props interval_geq[of I 0 \<sigma> i j k]
         by auto
       then have "\<exists>x \<in> {k<..i}. mem I (\<tau> \<sigma> i - \<tau> \<sigma> x) \<and> sat \<sigma> V v x (And \<phi> \<psi>)"
-        using mem trigger k_props sat_trigger_rewrite_0_exist[of I \<sigma> V v i \<phi> \<psi> k]
+        using mem trigger k_props sat_trigger_rewrite_0_mem[of I \<sigma> V v i \<phi> \<psi> k]
         by auto
-      then obtain x where x_props: "x \<in> {k<..i} \<and> mem I (\<tau> \<sigma> i - \<tau> \<sigma> x) \<and> sat \<sigma> V v x (And \<phi> \<psi>)" by blast
-      then have "x \<in> A" using A_def by auto
-      then have "x \<le> Max A" using A_nonempty A_finite by auto
-      then have "x \<le> j \<and> x > k \<and> k > j" using j_def k_props x_props by auto
-      then have "False" by auto
+      then obtain x where x_props: "x \<in> {k<..i}" "mem I (\<tau> \<sigma> i - \<tau> \<sigma> x)" "sat \<sigma> V v x (And \<phi> \<psi>)"
+        by blast
+      then have "x \<le> Max A"
+        using A_def A_props
+        by auto
+      then have "False"
+        using j_def k_props x_props
+        by auto
     }
-    ultimately have "sat \<sigma> V v i (Or (Since \<psi> I (And \<phi> \<psi>)) (historically I \<psi>))" by blast
+    then have "\<forall>k \<in> {j<..i}. sat \<sigma> V v k \<psi>" by blast
+    then have "sat \<sigma> V v i (Or (Since \<psi> I (And \<phi> \<psi>)) (historically I \<psi>))"
+      using j_props
+      by auto
   }
   ultimately show "sat \<sigma> V v i (Or (Since \<psi> I (And \<phi> \<psi>)) (historically I \<psi>))" by blast
 next
   assume "sat \<sigma> V v i (Or (Since \<psi> I (And \<phi> \<psi>)) (historically I \<psi>))"
   moreover {
     assume "sat \<sigma> V v i (historically I \<psi>)"
-    then have "sat \<sigma> V v i (Trigger \<phi> I \<psi>)" by auto
+    then have "sat \<sigma> V v i (Trigger \<phi> I \<psi>)"
+      by auto
   }
   moreover {
     fix j
     assume since_and_j_props: "sat \<sigma> V v i (Since \<psi> I (And \<phi> \<psi>))" "j \<le> i" "mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)"
-    then obtain "j'" where j'_props: "j'\<le>i \<and> mem I (\<tau> \<sigma> i - \<tau> \<sigma> j') \<and> sat \<sigma> V v j' (And \<phi> \<psi>) \<and> (\<forall>k \<in> {j' <.. i}. sat \<sigma> V v k \<psi>)" by fastforce
+    then obtain "j'" where j'_props:
+      "j'\<le>i" "mem I (\<tau> \<sigma> i - \<tau> \<sigma> j')" "sat \<sigma> V v j' (And \<phi> \<psi>)"
+      "(\<forall>k \<in> {j' <.. i}. sat \<sigma> V v k \<psi>)"
+      by fastforce
     moreover {
       assume le: "j' < j"
-      then have "\<forall>k \<in> {j' <.. i}. sat \<sigma> V v k \<psi>" using j'_props by auto
-      then have "sat \<sigma> V v j \<psi>" using since_and_j_props le by auto
-      then have "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>)" by auto
+      then have "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>)"
+        using j'_props since_and_j_props le
+        by auto
     }
     moreover {
       assume geq: "\<not> j' < j"
       moreover {
         assume "j = j'"
-        from this j'_props have "sat \<sigma> V v j \<psi>" by auto
-        then have "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>)" by auto
+        then have "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>)"
+          using j'_props
+          by auto
       }
       moreover {
         assume neq: "j \<noteq> j'"
-        then have "j' > j" using geq by auto
-        then have "\<exists>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>" using j'_props by auto
-        then have "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>)" by auto
+        then have "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>)"
+          using geq j'_props
+          by auto
       }
       ultimately have "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>)" by blast
     }
@@ -1036,14 +1023,13 @@ proof (rule iffI)
   }
   moreover {
     assume "\<exists>j\<le>i. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> \<not>sat \<sigma> V v j \<psi>"
-    then obtain j where j_props: "j\<le>i \<and> mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> \<not>sat \<sigma> V v j \<psi>" by auto
+    then obtain j where j_props: "j\<le>i" "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)" "\<not>sat \<sigma> V v j \<psi>" by auto
     define A where "A = {k. k \<in>{j <.. i} \<and> sat \<sigma> V v k \<phi>}"
     define k where k_def: "k = Max A"
     have "(\<exists>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>)" using j_props trigger by auto
     then have A_props: "A \<noteq> {} \<and> finite A" using A_def by auto
     then have "k \<in> A" using k_def by auto
-    then have k_props: "k \<in>{j <.. i} \<and> sat \<sigma> V v k \<phi>" using A_def by auto
-    (* helper lemma *)
+    then have k_props: "k \<in>{j <.. i}" "sat \<sigma> V v k \<phi>" using A_def by auto
     {
       fix x
       assume x_props: "x\<ge>j" "\<not>mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> x)"
@@ -1074,7 +1060,7 @@ proof (rule iffI)
       then have "sat \<sigma> V v k \<psi> \<or> (\<exists>k \<in> {k <.. i}. sat \<sigma> V v k \<phi>)" using trigger k_props by auto
       moreover {
         assume "(\<exists>k \<in> {k <.. i}. sat \<sigma> V v k \<phi>)"
-        then obtain l where l_props: "l \<in> {k <.. i} \<and> sat \<sigma> V v l \<phi>" by blast
+        then obtain l where l_props: "l \<in> {k <.. i}" "sat \<sigma> V v l \<phi>" by blast
         then have "l \<in> A" using A_def k_props l_props by auto
         then have "False" using A_props l_props k_def by auto
       }
@@ -1084,7 +1070,8 @@ proof (rule iffI)
       {
         assume "k=i"
         then have "sat \<sigma> V v i (Or (Or (historically I1 \<psi>) (once I2 \<phi>)) (once I2 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))"
-          using k_sat sat_once[of \<sigma> V v i I2 \<phi>] using assms k_mem by auto
+          using k_sat sat_once[of \<sigma> V v i I2 \<phi>] assms k_mem
+          by auto
       }
       moreover {
         assume "\<not>(k=i)"
@@ -1095,7 +1082,7 @@ proof (rule iffI)
           then have "sat \<sigma> V v x \<psi> \<or> (\<exists>k \<in> {x <.. i}. sat \<sigma> V v k \<phi>)" using trigger by auto
           moreover {
             assume "\<exists>k \<in> {x <.. i}. sat \<sigma> V v k \<phi>"
-            then obtain l where l_props: "l \<in> {x <.. i} \<and> sat \<sigma> V v l \<phi>" by blast
+            then obtain l where l_props: "l \<in> {x <.. i}" "sat \<sigma> V v l \<phi>" by blast
             then have "l \<in> A" using A_def x_props k_props by auto
             then have "l \<le> k" using k_def A_props by auto
             then have "False" using l_props x_props by auto
@@ -1128,17 +1115,19 @@ proof (rule iffI)
             then have "False" using x_props by auto
           }
           ultimately have "sat \<sigma> V v (k+1) \<psi>" by auto
-          then have B_props: "B \<noteq> {} \<and> finite B" using B_def k_suc_leq_i k_suc_mem k_props by auto
+          then have B_props: "B \<noteq> {}" "finite B" using B_def k_suc_leq_i k_suc_mem k_props by auto
           then have "c \<in> B" using c_def by auto
-          then have c_props: "c\<in>{k<..i} \<and> mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> c) \<and> sat \<sigma> V v c \<psi>" using B_def by auto
-          then have k_cond: "k\<le>c \<and> sat \<sigma> V v k (And \<phi> \<psi>)" using k_sat by auto
+          then have c_props: "c\<in>{k<..i}" "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> c)" "sat \<sigma> V v c \<psi>"
+            using B_def
+            by auto
+          then have k_cond: "k\<le>c" "sat \<sigma> V v k (And \<phi> \<psi>)" using k_sat by auto
           {
             fix x
             assume x_props: "x\<in>{k<..c}"
             then have "\<tau> \<sigma> x \<le> \<tau> \<sigma> c" by auto
-            then have lower: "(\<tau> \<sigma> i - \<tau> \<sigma> x) \<ge> (\<tau> \<sigma> i - \<tau> \<sigma> c)" by auto
-            have "\<tau> \<sigma> x \<ge> \<tau> \<sigma> k"  using x_props by auto
-            then have upper: "(\<tau> \<sigma> i - \<tau> \<sigma> x) \<le> (\<tau> \<sigma> i - \<tau> \<sigma> k)" by auto
+            then have lower: "(\<tau> \<sigma> i - \<tau> \<sigma> x) \<ge> (\<tau> \<sigma> i - \<tau> \<sigma> c)" by linarith
+            have "\<tau> \<sigma> x \<ge> \<tau> \<sigma> k" using x_props by auto
+            then have upper: "(\<tau> \<sigma> i - \<tau> \<sigma> x) \<le> (\<tau> \<sigma> i - \<tau> \<sigma> k)" by linarith
             then have "memR I1 (\<tau> \<sigma> i - \<tau> \<sigma> x)"
               using k_mem memR_antimono by blast
             then have "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> x)" using assms c_props lower by auto
@@ -1186,7 +1175,7 @@ proof (rule iffI)
                 then have "False" using upper by auto
               }
               then have "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> (c+1))" by blast
-              then have "(c+1)\<le>i \<and> mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> (c+1)) \<and> sat \<sigma> V v (c+1) (Prev all (Since \<psi> all (And \<phi> \<psi>)))"
+              then have "(c+1)\<le>i" "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> (c+1))" "sat \<sigma> V v (c+1) (Prev all (Since \<psi> all (And \<phi> \<psi>)))"
                 using c_suc_leq_i c_sat interval_all
                 by auto
               then have "sat \<sigma> V v i (once I2 (Prev all (Since \<psi> all (And \<phi> \<psi>))))"
@@ -1196,7 +1185,7 @@ proof (rule iffI)
             ultimately have "sat \<sigma> V v i (once I2 (Prev all (Since \<psi> all (And \<phi> \<psi>))))" by auto
           }
           ultimately have "sat \<sigma> V v i (once I2 (Prev all (Since \<psi> all (And \<phi> \<psi>))))" by blast
-      }
+        }
         ultimately have "sat \<sigma> V v i (once I2 (Prev all (Since \<psi> all (And \<phi> \<psi>))))"
           by blast
         then have "sat \<sigma> V v i (Or (Or (historically I1 \<psi>) (once I2 \<phi>)) (once I2 (Prev all (Since \<psi> all (And \<phi> \<psi>)))))"
@@ -1249,14 +1238,12 @@ next
       then have "False" using j_props by auto
     }
     then have j_pos: "j>0" by auto
-    then have "(case j of 0 \<Rightarrow> False | Suc x \<Rightarrow> mem all (\<tau> \<sigma> j - \<tau> \<sigma> x) \<and> sat \<sigma> V v x (Since \<psi> all (And \<phi> \<psi>)))"
-      using j_props
-      by auto
     then have j_pred_sat: "sat \<sigma> V v (j-1) (Since \<psi> all (And \<phi> \<psi>))"
-      using j_pos
+      using j_pos j_props
       by (simp add: Nitpick.case_nat_unfold)
     then have "\<exists>x\<le>(j-1). sat \<sigma> V v x (And \<phi> \<psi>) \<and> (\<forall>k\<in>{x<..(j-1)}. sat \<sigma> V v k \<psi>)" by auto
-    then obtain x where x_props: "x\<le>(j-1)" "sat \<sigma> V v x (And \<phi> \<psi>)" "\<forall>k\<in>{x<..(j-1)}. sat \<sigma> V v k \<psi>" by blast
+    then obtain x where x_props: "x\<le>(j-1)" "sat \<sigma> V v x (And \<phi> \<psi>)" "\<forall>k\<in>{x<..(j-1)}. sat \<sigma> V v k \<psi>"
+      by blast
     {
       fix l
       assume l_props: "l\<le>i"
@@ -1305,39 +1292,22 @@ lemma sat_release_rewrite_0_mem:
   assumes trigger: "sat \<sigma> V v i (Release \<phi> I \<psi>)"
   assumes geq: "j\<ge>i"
   assumes mem_j: "mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
-  shows "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. sat \<sigma> V v k (And \<phi> \<psi>))"
+  shows "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. mem I (\<tau> \<sigma> k - \<tau> \<sigma> i) \<and> sat \<sigma> V v k (And \<phi> \<psi>))"
 proof (cases "\<exists>k \<in> {i..<j}. sat \<sigma> V v k \<phi>")
   case True
   define A where "A = {x \<in> {i..<j}. sat \<sigma> V v x \<phi>}"
   define k where "k = Min A"
-  from True A_def have A_nonempty: "A \<noteq> {}" by auto
-  from A_def have A_fin: "finite A" by auto
-  from k_def A_nonempty A_fin have k_in_A: "k \<in> A" by auto
+  have A_props: "A \<noteq> {}" "finite A" using True A_def by auto
+  then have k_in_A: "k \<in> A" using k_def by auto
   then have k_props: "k \<in> {i..<j}" "sat \<sigma> V v k \<phi>" by (auto simp: A_def)
   have "(\<forall>l<k. l \<notin> A)"
-    using Min_le[OF A_fin]
+    using Min_le[OF A_props(2)]
     by (fastforce simp: k_def)
   moreover have "mem I (\<tau> \<sigma> k - \<tau> \<sigma> i)" using mem mem_j k_props interval_leq[of I 0 \<sigma> j i k] by auto
   ultimately show ?thesis using k_props mem trigger by (auto simp: A_def)
 next
   case False
   then show ?thesis using assms by auto
-qed
-
-lemma sat_release_rewrite_0_exist:
-  assumes mem: "mem I 0"
-  assumes release: "sat \<sigma> V v i (Release \<phi> I \<psi>)"
-  assumes j_props: "j\<ge>i \<and> mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> \<not>sat \<sigma> V v j \<psi>"
-shows "\<exists>k \<in> {i..<j}. mem I (\<tau> \<sigma> k - \<tau> \<sigma> i) \<and> sat \<sigma> V v k (And \<phi> \<psi>)"
-proof -
-  from assms have "\<exists>k\<in>{i..<j}. sat \<sigma> V v k (And \<phi> \<psi>)"
-    using sat_release_rewrite_0_mem[of I \<sigma> V v i \<phi> \<psi> j]
-    by auto
-  then obtain k where k_props: "k \<in> {i..<j} \<and> sat \<sigma> V v k (And \<phi> \<psi>)" by blast
-  from this mem j_props have "mem I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
-    using interval_leq[of I 0 \<sigma> j i k]
-    by auto
-  from this k_props show ?thesis by auto
 qed
 
 lemma sat_release_rewrite_0_equiv:
@@ -1355,13 +1325,13 @@ proof (rule iffI)
     define A where "A = {j. j\<in>{i..<j'} \<and> mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j (And \<phi> \<psi>)}"
     define j where "j = Min A"
     have A_nonempty: "A\<noteq>{}"
-      using mem release j'_props A_def sat_release_rewrite_0_exist[of I \<sigma> V v i \<phi> \<psi> j']
+      using mem release j'_props A_def sat_release_rewrite_0_mem[of I \<sigma> V v i \<phi> \<psi> j']
       by auto
     moreover have A_finite: "finite A" using A_def by auto
     ultimately have j_in_A: "j \<in> A"
       using j_def Max_in[of "A"]
       by auto
-    then have j_props: "j\<in>{i..<j'} \<and> mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j (And \<phi> \<psi>)"
+    then have j_props: "j\<in>{i..<j'}" "mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)" "sat \<sigma> V v j (And \<phi> \<psi>)"
       using A_def
       by auto
     moreover {
@@ -1377,12 +1347,12 @@ proof (rule iffI)
         using mem j_props interval_leq[of I 0 \<sigma> j i k]
         by auto
       then have "\<exists>x \<in> {i..<k}. mem I (\<tau> \<sigma> x - \<tau> \<sigma> i) \<and> sat \<sigma> V v x (And \<phi> \<psi>)"
-        using mem release k_props sat_release_rewrite_0_exist[of I \<sigma> V v i \<phi> \<psi> k]
+        using mem release k_props sat_release_rewrite_0_mem[of I \<sigma> V v i \<phi> \<psi> k]
         by auto
-      then obtain x where x_props: "x \<in> {i..<k} \<and> mem I (\<tau> \<sigma> x - \<tau> \<sigma> i) \<and> sat \<sigma> V v x (And \<phi> \<psi>)" by blast
+      then obtain x where x_props: "x \<in> {i..<k}" "mem I (\<tau> \<sigma> x - \<tau> \<sigma> i)" "sat \<sigma> V v x (And \<phi> \<psi>)" by blast
       then have "x \<in> A" using A_def j_props k_props by auto
       then have "x \<ge> Min A" using A_nonempty A_finite by auto
-      then have "x \<ge> j \<and> x < k \<and> k < j" using j_def k_props x_props by auto
+      then have "x \<ge> j" "x < k" "k < j" using j_def k_props x_props by auto
       then have "False" by auto
     }
     ultimately have "sat \<sigma> V v i (Or (Until \<psi> I (And \<phi> \<psi>)) (always I \<psi>))" by blast
@@ -1397,7 +1367,8 @@ next
   moreover {
     fix j
     assume until_and_j_props: "sat \<sigma> V v i (Until \<psi> I (And \<phi> \<psi>))" "j \<ge> i" "mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
-    then obtain "j'" where j'_props: "j'\<ge>i \<and> mem I (\<tau> \<sigma> j' - \<tau> \<sigma> i) \<and> sat \<sigma> V v j' (And \<phi> \<psi>) \<and> (\<forall>k \<in> {i ..< j'}. sat \<sigma> V v k \<psi>)" by fastforce
+    then obtain "j'" where j'_props: "j'\<ge>i" "mem I (\<tau> \<sigma> j' - \<tau> \<sigma> i)" "sat \<sigma> V v j' (And \<phi> \<psi>)" "(\<forall>k \<in> {i ..< j'}. sat \<sigma> V v k \<psi>)"
+      by fastforce
     moreover {
       assume ge: "j' > j"
       then have "\<forall>k \<in> {i ..< j'}. sat \<sigma> V v k \<psi>" using j'_props by auto
@@ -1408,14 +1379,15 @@ next
       assume leq: "\<not> j' > j"
       moreover {
         assume "j = j'"
-        from this j'_props have "sat \<sigma> V v j \<psi>" by auto
-        then have "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. sat \<sigma> V v k \<phi>)" by auto
+        then have "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. sat \<sigma> V v k \<phi>)"
+          using j'_props
+          by auto
       }
       moreover {
         assume neq: "j \<noteq> j'"
-        then have "j' < j" using leq by auto
-        then have "\<exists>k \<in> {i ..< j}. sat \<sigma> V v k \<phi>" using j'_props by auto
-        then have "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. sat \<sigma> V v k \<phi>)" by auto
+        then have "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. sat \<sigma> V v k \<phi>)"
+          using leq j'_props
+          by auto
       }
       ultimately have "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. sat \<sigma> V v k \<phi>)" by blast
     }
@@ -1438,21 +1410,20 @@ proof (rule iffI)
   }
   moreover {
     assume "\<exists>j\<ge>i. mem I1 (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> \<not>sat \<sigma> V v j \<psi>"
-    then obtain j where j_props: "j\<ge>i \<and> mem I1 (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> \<not>sat \<sigma> V v j \<psi>" by auto
+    then obtain j where j_props: "j\<ge>i" "mem I1 (\<tau> \<sigma> j - \<tau> \<sigma> i)" "\<not>sat \<sigma> V v j \<psi>" by auto
     define A where "A = {k. k \<in>{i ..< j} \<and> sat \<sigma> V v k \<phi>}"
     define k where k_def: "k = Min A"
     have "(\<exists>k \<in> {i ..< j}. sat \<sigma> V v k \<phi>)" using j_props release by auto
-    then have A_props: "A \<noteq> {} \<and> finite A" using A_def by auto
+    then have A_props: "A \<noteq> {}" "finite A" using A_def by auto
     then have "k \<in> A" using k_def by auto
-    then have k_props: "k \<in>{i ..< j} \<and> sat \<sigma> V v k \<phi>" using A_def by auto
-    (* helper lemma *)
+    then have k_props: "k \<in>{i ..< j}" "sat \<sigma> V v k \<phi>" using A_def by auto
     {
       fix x
       assume x_props: "x\<le>j" "\<not>mem I2 (\<tau> \<sigma> x - \<tau> \<sigma> i)"
       {
         assume k_not_mem_1: "\<not>mem I1 (\<tau> \<sigma> x - \<tau> \<sigma> i)"
         have "\<tau> \<sigma> x \<le> \<tau> \<sigma> j" using x_props by auto
-        then have "\<tau> \<sigma> x - \<tau> \<sigma> i \<le> \<tau> \<sigma> j - \<tau> \<sigma> i" by auto
+        then have "\<tau> \<sigma> x - \<tau> \<sigma> i \<le> \<tau> \<sigma> j - \<tau> \<sigma> i" by linarith
         moreover have "memR I1 (\<tau> \<sigma> j - \<tau> \<sigma> i)" using assms j_props by auto 
         ultimately have "memR I1 (\<tau> \<sigma> x - \<tau> \<sigma> i)" using memR_antimono by blast
         moreover have "memL I1 (\<tau> \<sigma> x - \<tau> \<sigma> i)"
@@ -1476,7 +1447,7 @@ proof (rule iffI)
       then have "sat \<sigma> V v k \<psi> \<or> (\<exists>k \<in> {i ..< k}. sat \<sigma> V v k \<phi>)" using release k_props by auto
       moreover {
         assume "(\<exists>k \<in> {i ..< k}. sat \<sigma> V v k \<phi>)"
-        then obtain l where l_props: "l \<in> {i ..< k} \<and> sat \<sigma> V v l \<phi>" by blast
+        then obtain l where l_props: "l \<in> {i ..< k}" "sat \<sigma> V v l \<phi>" by blast
         then have "l \<in> A" using A_def k_props l_props by auto
         then have "False" using A_props l_props k_def by auto
       }
@@ -1497,7 +1468,7 @@ proof (rule iffI)
           then have "sat \<sigma> V v x \<psi> \<or> (\<exists>k \<in> {i ..< x}. sat \<sigma> V v k \<phi>)" using release by auto
           moreover {
             assume "\<exists>k \<in> {i ..< x}. sat \<sigma> V v k \<phi>"
-            then obtain l where l_props: "l \<in> {i ..< x} \<and> sat \<sigma> V v l \<phi>" by blast
+            then obtain l where l_props: "l \<in> {i ..< x}" "sat \<sigma> V v l \<phi>" by blast
             then have "l \<in> A" using A_def x_props k_props by auto
             then have "l \<ge> k" using k_def A_props by auto
             then have "False" using l_props x_props by auto
@@ -1536,8 +1507,8 @@ proof (rule iffI)
             using B_def k_pred_geq_i k_suc_mem k_props k_neq_i
             by auto
           then have "c \<in> B" using c_def by auto
-          then have c_props: "c\<in>{i..<k} \<and> mem I1 (\<tau> \<sigma> c - \<tau> \<sigma> i) \<and> sat \<sigma> V v c \<psi>" using B_def by auto
-          then have k_cond: "k\<ge>c \<and> sat \<sigma> V v k (And \<phi> \<psi>)" using k_sat by auto
+          then have c_props: "c\<in>{i..<k}" "mem I1 (\<tau> \<sigma> c - \<tau> \<sigma> i)" "sat \<sigma> V v c \<psi>" using B_def by auto
+          then have k_cond: "k\<ge>c" "sat \<sigma> V v k (And \<phi> \<psi>)" using k_sat by auto
           {
             assume "c=0"
             then have "False" using c_props assms by auto
