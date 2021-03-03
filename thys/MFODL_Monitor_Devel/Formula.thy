@@ -1955,6 +1955,96 @@ fun safe_formula :: "formula \<Rightarrow> bool" where
 | "safe_formula (MatchF I r) = Regex.safe_regex fv (\<lambda>g \<phi>. safe_formula \<phi> \<or>
      (g = Lax \<and> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))) Futu Strict r"
 
+
+(* verify that the derived rewrite formulas are safe *)
+
+lemma TT_safe[simp]: "safe_formula TT"
+  by (simp add: TT_def FF_def)
+
+lemma first_fv[simp]: "fv first = {}"
+  by (simp add: first_def)
+
+lemma first_safe[simp]: "safe_formula first"
+  by (simp add: first_def)
+
+lemma once_safe[simp]: "safe_formula \<phi> \<Longrightarrow> safe_formula (once I \<phi>)"
+  by (simp add: once_def)
+
+lemma sometimes_safe[simp]: "safe_formula \<phi> \<Longrightarrow> safe_formula (sometimes I \<phi>)"
+  by (simp add: sometimes_def)
+
+(* historically *)
+
+lemma historically_rewrite_0_safe:
+  assumes "mem I1 0" "bounded I1"
+  assumes "I2 = flip_int I1"
+shows "sat \<sigma> V v i (historically I1 \<phi>) = sat \<sigma> V v i (Or (Since \<phi> I2 (sometimes all \<phi>)) (Since \<phi> I1 (And first \<phi>)))"
+proof (rule iffI)
+  assume hist: "sat \<sigma> V v i (historically I1 \<phi>)"
+  then have "sat \<sigma> V v i (Or (Since \<phi> I2 TT) (Since \<phi> I1 (And first \<phi>)))"
+    using assms historically_rewrite_0
+    by auto
+  moreover {
+    assume "sat \<sigma> V v i (Since \<phi> I1 (And first \<phi>))"
+    then have "sat \<sigma> V v i (Or (Since \<phi> I2 (sometimes all \<phi>)) (Since \<phi> I1 (And first \<phi>)))" by auto
+  }
+  moreover{
+    assume since: "sat \<sigma> V v i (Since \<phi> I2 TT)"
+    have "sat \<sigma> V v i \<phi>" using hist assms(1) by auto
+    then have "sat \<sigma> V v i (Or (Since \<phi> I2 (sometimes all \<phi>)) (Since \<phi> I1 (And first \<phi>)))"
+      using since interval_all
+      by auto
+  }
+  ultimately show "sat \<sigma> V v i (Or (Since \<phi> I2 (sometimes all \<phi>)) (Since \<phi> I1 (And first \<phi>)))"
+    by auto
+next
+  assume "sat \<sigma> V v i (Or (Since \<phi> I2 (sometimes all \<phi>)) (Since \<phi> I1 (And first \<phi>)))"
+  then have "sat \<sigma> V v i (Or (Since \<phi> I2 TT) (Since \<phi> I1 (And first \<phi>)))" by auto
+  then show "sat \<sigma> V v i (historically I1 \<phi>)"
+    using assms historically_rewrite_0
+    by auto
+qed
+
+(* [0, b] *)
+lemma "safe_formula \<phi> \<Longrightarrow> safe_formula (Or (Since \<phi> I2 (sometimes all \<phi>)) (Since \<phi> I1 (And first \<phi>)))"
+  by (simp add: sometimes_def)
+
+(* [b, \<infinity>) *)
+lemma "safe_formula \<phi> \<Longrightarrow> safe_formula (And (once I2 (Prev all (Since \<phi> all (And \<phi> first)))) (once I1 \<phi>))"
+  by simp
+
+(* [a, b] *)
+lemma "safe_formula \<phi> \<Longrightarrow> safe_formula (And (once I1 \<phi>) (Neg (once I1 (And (Or (once I2 \<phi>) (sometimes I2 \<phi>)) (Neg \<phi>)))))"
+  by (simp add: sometimes_def once_def)
+
+(* always *)
+
+lemma always_rewrite_0_safe:
+  fixes I1 I2 :: \<I>
+  assumes "mem I1 0" "bounded I1"
+  assumes "I2 = flip_int I1"
+  shows "sat \<sigma> V v i (always I1 \<phi>) = sat \<sigma> V v i (Until \<phi> I2 (once all \<phi>))"
+proof (rule iffI)
+  assume all: "sat \<sigma> V v i (always I1 \<phi>)"
+  then have "sat \<sigma> V v i (Until \<phi> I2 TT)" using assms always_rewrite_0 by auto
+  moreover have  "sat \<sigma> V v i \<phi>" using all assms(1) by auto
+  ultimately show "sat \<sigma> V v i (Until \<phi> I2 (once all \<phi>))"
+    using interval_all
+    by auto
+next
+  assume "sat \<sigma> V v i (Until \<phi> I2 (once all \<phi>))"
+  then have "sat \<sigma> V v i (Until \<phi> I2 TT)" by auto
+  then show "sat \<sigma> V v i (always I1 \<phi>)" using assms always_rewrite_0 by auto
+qed
+
+(* [0, b] *)
+lemma "safe_formula \<phi> \<Longrightarrow> safe_formula (Until \<phi> I2 (once all \<phi>))"
+  by (simp add: once_def)
+
+(* [a, b] *)
+lemma "safe_formula \<phi> \<Longrightarrow> safe_formula (And (sometimes I1 \<phi>) (Neg (sometimes I1 (And (Or (once I2 \<phi>) (sometimes I2 \<phi>)) (Neg \<phi>)))))"
+  by (simp add: sometimes_def once_def)
+
 abbreviation "safe_regex \<equiv> Regex.safe_regex fv (\<lambda>g \<phi>. safe_formula \<phi> \<or>
   (g = Lax \<and> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False)))"
 
