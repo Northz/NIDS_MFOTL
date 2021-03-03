@@ -1313,7 +1313,20 @@ proof (rule iffI)
   define A where "A = {j. j\<ge>i \<and> mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> i)}"
   define j where "j = Inf A"
   assume assm: "sat \<sigma> V v i (always I1 \<phi>)"
-  have "\<exists>j\<ge>i. mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> i)" by sorry
+  have "\<forall>x. \<exists>j. x < \<tau> \<sigma> j" using Suc_le_lessD ex_le_\<tau> by blast
+  then have exists_db: "\<forall>x. \<exists>j. x < \<tau> \<sigma> j - \<tau> \<sigma> i" by (simp add: less_diff_conv)
+  obtain b where b_props: "\<not>memR I1 b" "b>0" using assms(1-2) using bounded_memR by blast
+  then obtain t where t_props: "b < \<tau> \<sigma> t - \<tau> \<sigma> i" using exists_db by auto
+  {
+    assume "t<i"
+    then have "\<tau> \<sigma> t - \<tau> \<sigma> i = 0" by auto
+    then have "False" using b_props t_props by auto
+  }
+  then have t_geq_i: "\<not>(t<i)" by blast
+  have "\<not>mem I1 (\<tau> \<sigma> t - \<tau> \<sigma> i)" using t_props b_props memR_antimono by auto
+  then have "mem I2 (\<tau> \<sigma> t - \<tau> \<sigma> i)" using assms by (simp add: int_flip_mem)
+  moreover have "t\<ge>i" using t_geq_i by auto
+  ultimately have "\<exists>j\<ge>i. mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> i)" by auto
   then have A_props: "A \<noteq> {}" using A_def by auto
   then have "j \<in> A" using j_def Inf_nat_def1 by auto
   then have j_props: "j\<ge>i" "mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> i)" using A_def by auto
