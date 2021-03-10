@@ -2598,7 +2598,7 @@ lemma
   assumes "safe_formula \<phi>"
   assumes "fv \<phi> = fv \<psi>"
   shows "safe_formula (release_safe_0 \<phi> I \<psi>)"
-  using assms by (auto simp add: release_safe_0_def always_safe_bounded_def once_def sometimes_def)
+  using assms by (auto simp add: release_safe_0_def always_safe_0_def once_def sometimes_def)
 
 lemma
   assumes "future_bounded \<psi>" "future_bounded \<phi>"
