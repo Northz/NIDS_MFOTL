@@ -722,6 +722,9 @@ lemma int_remove_lower_bound_mem: "mem I x \<Longrightarrow> mem (int_remove_low
 lemma "sat \<sigma> V v i (Trigger \<phi> I \<psi>) = sat \<sigma> V v i (Neg (Since (Neg \<phi>) I (Neg \<psi>)))"
   by auto
 
+lemma "sat \<sigma> V v i (Release \<phi> I \<psi>) = sat \<sigma> V v i (Neg (Until (Neg \<phi>) I (Neg \<psi>)))"
+  by auto
+
 definition once :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
   "once I \<phi> = Since TT I \<phi>"
 
