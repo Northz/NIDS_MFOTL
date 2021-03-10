@@ -760,7 +760,7 @@ definition historically_safe_bounded :: "\<I> \<Rightarrow> formula \<Rightarrow
   "historically_safe_bounded I \<phi> = (And (once I \<phi>) (Neg (once I (And (Or (once (int_remove_lower_bound I) \<phi>) (sometimes (int_remove_lower_bound I) \<phi>)) (Neg \<phi>)))))"
 
 definition always_safe_0 :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "always_safe_0 I \<phi> = (Or (Until \<phi> (flip_int_double_upper I) (once (int_remove_lower_bound (flip_int_double_upper I)) \<phi>)) (Until \<phi> I (And \<phi> (Next (flip_int I) TT))))"
+  "always_safe_0 I \<phi> = (Or (Until \<phi> (flip_int_double_upper I) (Prev all \<phi>)) (Until \<phi> I (And \<phi> (Next (flip_int I) TT))))"
 
 definition always_safe_bounded :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
   "always_safe_bounded I \<phi> = (And (sometimes I \<phi>) (Neg (sometimes I (And (Or (once (int_remove_lower_bound I) \<phi>) (sometimes (int_remove_lower_bound I) \<phi>)) (Neg \<phi>)))))"
@@ -1665,15 +1665,11 @@ proof (rule iffI)
       then have "sat \<sigma> V v k \<phi>" using k_props all by auto
     }
     then have until_j: "\<forall>k\<in>{i..<j}. sat \<sigma> V v k \<phi>" by blast
-    have "mem (int_remove_lower_bound (flip_int_double_upper I)) (\<tau> \<sigma> j - \<tau> \<sigma> i)"
-      using j_props int_remove_lower_bound_mem
-      by auto
-    moreover have "sat \<sigma> V v i \<phi>" using assms all by auto
-    ultimately have "sat \<sigma> V v j (once (int_remove_lower_bound (flip_int_double_upper I)) \<phi>)"
-      using j_props
-      by auto
-    then have "sat \<sigma> V v i (Until \<phi> (flip_int_double_upper I) (once (int_remove_lower_bound (flip_int_double_upper I)) \<phi>))"
-      using j_props until_j
+    have "\<not> mem (flip_int_double_upper I) 0"
+      using assms
+      by (simp add: flip_int_double_upper.rep_eq memL.rep_eq)
+    then have "sat \<sigma> V v i (Until \<phi> (flip_int_double_upper I) (Prev all \<phi>))"
+      using j_props until_j until_true[of "(flip_int_double_upper I)" \<sigma> V v i \<phi>]
       by auto
   }
   moreover {
@@ -1753,12 +1749,12 @@ proof (rule iffI)
     then have "sat \<sigma> V v i (Until \<phi> I (And \<phi> (Next (flip_int I) TT)))"
       by auto
   }
-  ultimately have "sat \<sigma> V v i (Or (Until \<phi> (flip_int_double_upper I) (once (int_remove_lower_bound (flip_int_double_upper I)) \<phi>)) (Until \<phi> I (And \<phi> (Next (flip_int I) TT))))"
+  ultimately have "sat \<sigma> V v i (Or (Until \<phi> (flip_int_double_upper I) (Prev all \<phi>)) (Until \<phi> I (And \<phi> (Next (flip_int I) TT))))"
     by auto
   then show "sat \<sigma> V v i (always_safe_0 I \<phi>)" using always_safe_0_def by auto
 next
   assume "sat \<sigma> V v i (always_safe_0 I \<phi>)"
-  then have "sat \<sigma> V v i (Or (Until \<phi> (flip_int_double_upper I) (once (int_remove_lower_bound (flip_int_double_upper I)) \<phi>)) (Until \<phi> I (And \<phi> (Next (flip_int I) TT))))"
+  then have "sat \<sigma> V v i (Or (Until \<phi> (flip_int_double_upper I) (Prev all \<phi>)) (Until \<phi> I (And \<phi> (Next (flip_int I) TT))))"
     using always_safe_0_def
     by auto
   then have "sat \<sigma> V v i (Until \<phi> (flip_int_double_upper I) TT) \<or> sat \<sigma> V v i (Until \<phi> I (And \<phi> (Next (flip_int I) TT)))" by auto
