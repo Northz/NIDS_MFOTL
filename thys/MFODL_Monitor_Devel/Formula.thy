@@ -749,7 +749,7 @@ definition always :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
 lemma sat_always[simp] : "sat \<sigma> V v i (always I \<phi>) = (\<forall>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v j \<phi>)"
   by (auto simp: always_def)
 
-(* case distrinction since intervals aren't allowed to be empty *)
+(* case distrinction since intervals aren't allowed to be empty and flip_int [0, \<infinity>] would be *)
 definition historically_safe_0 :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
   "historically_safe_0 I \<phi> = (if (bounded I) then (Or (Since \<phi> (flip_int I) (Next all \<phi>)) (Since \<phi> I (And first \<phi>))) else (Since \<phi> I (And first \<phi>)))"
 
