@@ -575,13 +575,64 @@ lift_definition flip_int :: "\<I> \<Rightarrow> \<I>" is
   "\<lambda>I. if bounded I then ((\<lambda>i. \<not>memR I i), (\<lambda>i. True), False) else ((\<lambda>i. True), (\<lambda>i. True), False)"
   by transfer (auto simp: upclosed_def downclosed_def)
 
+(* [a, b] \<Rightarrow> [b+1, 2b]. nonempty if b+1\<le>2b \<Leftrightarrow> 1\<le>b *)
+lift_definition flip_int_double_upper :: "\<I> \<Rightarrow> \<I>" is
+  "\<lambda>I. if (bounded I) then ((\<lambda>i. \<not>memR I i), (\<lambda>i. memR I ((div) i 2)), True) else ((\<lambda>i. True), (\<lambda>i. True), False)"
+proof -
+  define A where "A = {(memL, memR, bounded). (\<exists>m. memL m \<and> memR m) \<and> upclosed memL \<and> downclosed memR \<and> bounded = (\<exists>m. \<not> memR m)}"
+  {
+    fix I :: \<I>
+    assume I_props: "bounded I"
+    define B where "B = {x. \<not> memR I x}"
+    define b where "b = Inf B"
+    define x where "x = 2 * b"
+    have up: "upclosed (\<lambda>i. \<not> memR I i)"
+      using memR_antimono upclosed_def
+      by blast
+    {
+      fix r m
+      assume assumptions: "(\<lambda>i. memR I ((div) i 2)) r" "m\<le>r"
+      then have "(\<lambda>i. memR I ((div) i 2)) m" by auto
+    }
+    then have "\<forall>m r. (\<lambda>i. memR I ((div) i 2)) r \<longrightarrow> m \<le> r \<longrightarrow> (\<lambda>i. memR I ((div) i 2)) m" by auto
+    then have down: "downclosed (\<lambda>i. memR I ((div) i 2))" using downclosed_def by auto
+    have "\<exists>b. \<not>memR I b" using I_props bounded_memR by auto
+    then have B_props: "B \<noteq> {}" using B_def by auto
+    then have "b \<in> B" using b_def by (simp add: Inf_nat_def1)
+    then have b_props: "\<not> memR I b" using B_def by auto
+    then have "0 < b" using memR_nonzeroD by blast
+    then have b_half_props: "(b div 2) < b" by auto
+    {
+      assume "\<not> memR I (b div 2)"
+      then have "(b div 2) \<in> B" using B_def by blast
+      then have "(b div 2) \<ge> b" using cInf_lower b_def by auto
+      then have "False" using b_half_props by auto
+    }
+    then have "memR I (b div 2)" by blast
+    moreover have "\<not>memR I (x div 2)" using x_def b_props by auto
+    ultimately have "(\<lambda>i. \<not> memR I i, \<lambda>i. memR I (i div 2), True) \<in> A"
+      using b_props A_def up down
+      by auto
+  }
+  then have "\<forall>I. bounded I \<longrightarrow> (\<lambda>i. \<not> memR I i, \<lambda>i. memR I (i div 2), True) \<in> A" by auto
+  moreover have "\<forall>I. \<not>bounded I \<longrightarrow> (\<lambda>i. True, \<lambda>i. True, False) \<in> A"
+    using A_def
+    by (metis Interval.all.rep_eq Rep_\<I>)
+  ultimately have "\<forall>I. (if bounded I then (\<lambda>i. \<not> memR I i, \<lambda>i. memR I (i div 2), True) else (\<lambda>i. True, \<lambda>i. True, False)) \<in> A"
+    by (auto split: if_splits)
+  then show "\<And>\<I>. (if bounded \<I> then (\<lambda>i. \<not> memR \<I> i, \<lambda>i. memR \<I> (i div 2), True) else (\<lambda>i. True, \<lambda>i. True, False))
+         \<in> {(memL, memR, bounded). (\<exists>m. memL m \<and> memR m) \<and> upclosed memL \<and> downclosed memR \<and> bounded = (\<exists>m. \<not> memR m)}"
+    using A_def
+    by auto
+qed
+
 (* [a, b] \<Rightarrow> [0, a-1] *)
 lift_definition flip_int_less_lower :: "\<I> \<Rightarrow> \<I>" is
   "\<lambda>I. if \<not>memL I 0 then ((\<lambda>i. True), (\<lambda>i. \<not>memL I i), True) else ((\<lambda>i. True), (\<lambda>i. True), False)"
   by transfer (auto simp: upclosed_def downclosed_def)
 
 (* [a, b] \<Rightarrow> [0, b] *)
-lift_definition int_remove_lower_bound :: "\<I> \<Rightarrow> \<I>" is
+lift_definition int_remove_lower_bound :: "\<I> \<Rightarrow> \<I>" is
   "\<lambda>I. ((\<lambda>i. True), (\<lambda>i. memR I i), bounded I)"
   by transfer (auto simp: upclosed_def downclosed_def)
 
@@ -650,7 +701,22 @@ lemma int_flip_mem:
   using assms memL_mono
   by (transfer') (auto split: if_splits)
 
+lemma flip_int_double_upper_leq:
+  assumes "mem (flip_int_double_upper I) x" (* x \<in> [b+1, 2b] *)
+  assumes "\<not> mem (flip_int_double_upper I) y" "y\<le>x" (* y \<notin> [b+1, 2b] and y \<le> x *)
+  assumes "mem I 0"
+  shows "mem I y"
+proof -
+  from assms(2) have "\<not>memL (flip_int_double_upper I) y \<or> \<not>memR (flip_int_double_upper I) y" by auto
+  moreover have "\<forall>m. m \<le> x \<longrightarrow> memR (flip_int_double_upper I) m" using assms(1) by auto
+  ultimately have "\<not>memL (flip_int_double_upper I) y" using assms(3) by auto
+  then show "mem I y" using assms(4) by (transfer') (auto split: if_splits)
+qed
+
 lemma int_remove_lower_bound_bounded: "bounded I \<Longrightarrow> bounded (int_remove_lower_bound I)"
+  by (transfer') (auto)
+
+lemma int_remove_lower_bound_mem: "mem I x \<Longrightarrow> mem (int_remove_lower_bound I) x"
   by (transfer') (auto)
 
 lemma "sat \<sigma> V v i (Trigger \<phi> I \<psi>) = sat \<sigma> V v i (Neg (Since (Neg \<phi>) I (Neg \<psi>)))"
@@ -690,6 +756,9 @@ definition historically_safe_unbounded :: "\<I> \<Rightarrow> formula \<Rightarr
 definition historically_safe_bounded :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
   "historically_safe_bounded I \<phi> = (And (once I \<phi>) (Neg (once I (And (Or (once (int_remove_lower_bound I) \<phi>) (sometimes (int_remove_lower_bound I) \<phi>)) (Neg \<phi>)))))"
 
+definition always_safe_0 :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "always_safe_0 I \<phi> = (Or (Until \<phi> (flip_int_double_upper I) (once (int_remove_lower_bound (flip_int_double_upper I)) \<phi>)) (Until \<phi> I (And \<phi> (Next (flip_int I) TT))))"
+
 definition always_safe_bounded :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
   "always_safe_bounded I \<phi> = (And (sometimes I \<phi>) (Neg (sometimes I (And (Or (once (int_remove_lower_bound I) \<phi>) (sometimes (int_remove_lower_bound I) \<phi>)) (Neg \<phi>)))))"
 
@@ -703,7 +772,7 @@ definition trigger_safe_bounded :: "formula \<Rightarrow> \<I> \<Rightarrow> for
   "trigger_safe_bounded \<phi> I \<psi> = And (once I TT) (Or (Or (historically_safe_bounded I \<psi>) (once (flip_int_less_lower I) \<phi>)) (once (flip_int_less_lower I) (Prev all (Since \<psi> (int_remove_lower_bound I) (And \<phi> \<psi>)))))"
 
 definition release_safe_0 :: "formula \<Rightarrow> \<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "release_safe_0 \<phi> I \<psi> = Or (Until \<psi> I (And \<psi> \<phi>)) (always_safe_bounded I (And \<psi> (Neg \<phi>)))"
+  "release_safe_0 \<phi> I \<psi> = Or (Until \<psi> I (And \<psi> \<phi>)) (always_safe_0 I (And \<psi> (Neg \<phi>)))"
 
 definition release_safe_bounded :: "formula \<Rightarrow> \<I> \<Rightarrow> formula \<Rightarrow> formula" where
   "release_safe_bounded \<phi> I \<psi> = And (sometimes I TT) (Or (Or (always_safe_bounded I \<psi>) (sometimes (flip_int_less_lower I) \<phi>)) (sometimes (flip_int_less_lower I) (Next all (Until \<psi> (int_remove_lower_bound I) (And \<phi> \<psi>)))))"
@@ -1563,6 +1632,166 @@ next
     by auto
 qed
 
+lemma always_rewrite_0:
+  fixes I :: \<I>
+  assumes "mem I 0" "bounded I"
+  shows "sat \<sigma> V v i (always I \<phi>) = sat \<sigma> V v i (always_safe_0 I \<phi>)"
+proof (rule iffI)
+  assume all: "sat \<sigma> V v i (always I \<phi>)"
+  {
+    define A where "A = {j. j\<ge>i \<and> mem (flip_int_double_upper I) (\<tau> \<sigma> j - \<tau> \<sigma> i)}"
+    define j where "j = Inf A"
+    assume "\<exists>j\<ge>i. mem (flip_int_double_upper I) (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+    then have "A \<noteq> {}" using A_def by auto
+    then have "j \<in> A" using j_def by (simp add: Inf_nat_def1)
+    then have j_props: "j\<ge>i" "mem (flip_int_double_upper I) (\<tau> \<sigma> j - \<tau> \<sigma> i)" using A_def by auto
+    {
+      fix k
+      assume k_props: "k \<in> {i..<j}"
+      then have ineq: "\<tau> \<sigma> k - \<tau> \<sigma> i \<le> \<tau> \<sigma> j - \<tau> \<sigma> i" by (simp add: diff_le_mono)
+      {
+        assume "mem (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+        then have "k \<in> A" using A_def k_props by auto
+        then have "k \<ge> j" using j_def cInf_lower by auto
+        then have "False" using k_props by auto
+      }
+      then have "\<not>mem (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)" by blast
+      then have "mem I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+        using j_props ineq assms(1) flip_int_double_upper_leq[of I "(\<tau> \<sigma> j - \<tau> \<sigma> i)" "(\<tau> \<sigma> k - \<tau> \<sigma> i)"]
+        by auto 
+      then have "sat \<sigma> V v k \<phi>" using k_props all by auto
+    }
+    then have until_j: "\<forall>k\<in>{i..<j}. sat \<sigma> V v k \<phi>" by blast
+    have "mem (int_remove_lower_bound (flip_int_double_upper I)) (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+      using j_props int_remove_lower_bound_mem
+      by auto
+    moreover have "sat \<sigma> V v i \<phi>" using assms all by auto
+    ultimately have "sat \<sigma> V v j (once (int_remove_lower_bound (flip_int_double_upper I)) \<phi>)"
+      using j_props
+      by auto
+    then have "sat \<sigma> V v i (Until \<phi> (flip_int_double_upper I) (once (int_remove_lower_bound (flip_int_double_upper I)) \<phi>))"
+      using j_props until_j
+      by auto
+  }
+  moreover {
+    define B where "B = {b. \<not>memR I b}"
+    define b where "b = Inf B"
+    define C where "C = {k. k\<ge>i \<and> b \<le> \<tau> \<sigma> k - \<tau> \<sigma> i}"
+    define c where "c = Inf C"
+    assume empty_int: "\<forall>j\<ge>i. \<not> mem (flip_int_double_upper I) (\<tau> \<sigma> j - \<tau> \<sigma> i)" (* [b+1, 2b] *)
+    from assms(2) have "B \<noteq> {}" using B_def bounded_memR by auto
+    then have "b \<in> B" using b_def by (simp add: Inf_nat_def1)
+    then have b_props: "\<not>memR I b" using B_def by auto
+    have "\<forall>x. \<exists>j\<ge>i. x \<le> \<tau> \<sigma> j" using Suc_le_lessD ex_le_\<tau> by blast
+    then have exists_db: "\<forall>x. \<exists>j\<ge>i. x \<le> \<tau> \<sigma> j - \<tau> \<sigma> i" using nat_move_sub_le by blast
+    then have "C \<noteq> {}" using C_def by auto
+    then have "c \<in> C" using c_def by (simp add: Inf_nat_def1)
+    then have c_props: "c\<ge>i" "b \<le> \<tau> \<sigma> c - \<tau> \<sigma> i" using C_def by auto
+    {
+      assume "b = 0"
+      then have "False" using b_props by auto
+    }
+    then have b_pos: "b>0" by blast
+    {
+      assume "c = i"
+      then have "False" using c_props b_pos by auto
+    }
+    then have c_ge_i: "c>i" using c_props using le_less by blast
+    {
+      assume "\<not>mem I (\<tau> \<sigma> (c-1) - \<tau> \<sigma> i)"
+      then have "\<not>memR I (\<tau> \<sigma> (c-1) - \<tau> \<sigma> i)" using assms(1) memL_mono by blast
+      then have "(\<tau> \<sigma> (c-1) - \<tau> \<sigma> i) \<in> B" using B_def by auto
+      then have "(\<tau> \<sigma> (c-1) - \<tau> \<sigma> i) \<ge> b" using b_def cInf_lower by auto
+      then have "(c-1) \<in> C" using C_def c_ge_i by auto
+      then have "c-1 \<ge> c" using c_def cInf_lower by auto
+      then have "False" using c_ge_i by auto
+    }
+    then have c_pred_mem: "mem I (\<tau> \<sigma> (c-1) - \<tau> \<sigma> i)" by blast
+    then have c_pred_sat: "sat \<sigma> V v (c-1) \<phi>" using all c_ge_i by auto
+    {
+      assume "\<not>mem (flip_int I) (\<tau> \<sigma> c - \<tau> \<sigma> (c-1))" (* [b+1, \<infinity>] but attention, here 'b' = b+1 *)
+      then have "memR I (\<tau> \<sigma> c - \<tau> \<sigma> (c-1))" using assms(1) bounded_memR int_flip_mem by blast
+      then have c_dist: "(\<tau> \<sigma> c - \<tau> \<sigma> (c-1)) < b" using b_props memR_antimono not_le by blast
+      from c_pred_mem have "memR I (\<tau> \<sigma> (c-1) - \<tau> \<sigma> i)" by auto
+      then have "(\<tau> \<sigma> (c-1) - \<tau> \<sigma> i) < b" using b_props memR_antimono not_le by blast
+      then have b_ineq: "b \<le> (\<tau> \<sigma> c - \<tau> \<sigma> i)" "(\<tau> \<sigma> c - \<tau> \<sigma> i) \<le> 2 * (b-1)"
+        using c_props c_dist
+        by auto
+      {
+        assume "\<not>memR I (b-1)"
+        then have "(b-1) \<in> B" using B_def by auto
+        then have "(b-1) \<ge> b" using b_def cInf_lower by auto
+        then have "False" using b_pos by linarith
+      }
+      then have "memR I (b-1)" by blast
+      then have "(\<lambda>i. memR I ((div) i 2)) (2*(b-1))" by auto
+      then have "(\<lambda>i. memR I ((div) i 2)) (\<tau> \<sigma> c - \<tau> \<sigma> i)" using b_ineq by auto
+      then have "memR (flip_int_double_upper I) (\<tau> \<sigma> c - \<tau> \<sigma> i)"
+        by (simp add: flip_int_double_upper.rep_eq memR.rep_eq)
+      moreover have "memL (flip_int_double_upper I) (\<tau> \<sigma> c - \<tau> \<sigma> i)"
+        using b_ineq b_props flip_int_double_upper.rep_eq memL.rep_eq memR_antimono
+        by auto
+      ultimately have "False" using empty_int c_props by auto
+    }
+    then have "mem (flip_int I) (\<tau> \<sigma> c - \<tau> \<sigma> (c-1))" by blast
+    then have c_pred_sat: "sat \<sigma> V v (c-1) (And \<phi> (Next (flip_int I) TT))"
+      using c_pred_sat c_ge_i
+      by auto
+    have "\<forall>j\<in>{i..<(c-1)}. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+      by (meson \<tau>_mono assms(1) atLeastLessThan_iff c_pred_mem diff_le_mono le_eq_less_or_eq memL_mono memR_antimono zero_le)
+    then have "\<forall>j\<in>{i..<(c-1)}. sat \<sigma> V v j \<phi>" using all by auto
+    then have
+        "(c-1)\<ge>i"
+        "mem I (\<tau> \<sigma> (c-1) - \<tau> \<sigma> i)"
+        "sat \<sigma> V v (c-1) (And \<phi> (Next (flip_int I) TT))"
+        "(\<forall>k \<in> {i ..< (c-1)}. sat \<sigma> V v k \<phi>)"
+      using c_ge_i c_pred_mem c_pred_sat
+      by auto
+    then have "sat \<sigma> V v i (Until \<phi> I (And \<phi> (Next (flip_int I) TT)))"
+      by auto
+  }
+  ultimately have "sat \<sigma> V v i (Or (Until \<phi> (flip_int_double_upper I) (once (int_remove_lower_bound (flip_int_double_upper I)) \<phi>)) (Until \<phi> I (And \<phi> (Next (flip_int I) TT))))"
+    by auto
+  then show "sat \<sigma> V v i (always_safe_0 I \<phi>)" using always_safe_0_def by auto
+next
+  assume "sat \<sigma> V v i (always_safe_0 I \<phi>)"
+  then have "sat \<sigma> V v i (Or (Until \<phi> (flip_int_double_upper I) (once (int_remove_lower_bound (flip_int_double_upper I)) \<phi>)) (Until \<phi> I (And \<phi> (Next (flip_int I) TT))))"
+    using always_safe_0_def
+    by auto
+  then have "sat \<sigma> V v i (Until \<phi> (flip_int_double_upper I) TT) \<or> sat \<sigma> V v i (Until \<phi> I (And \<phi> (Next (flip_int I) TT)))" by auto
+  moreover {
+    assume "sat \<sigma> V v i (Until \<phi> (flip_int_double_upper I) TT)"
+    then obtain j where j_props:
+      "j\<ge>i" "mem (flip_int_double_upper I) (\<tau> \<sigma> j - \<tau> \<sigma> i)" "\<forall>k\<in>{i..<j}. sat \<sigma> V v k \<phi>"
+      by auto
+    then have "\<forall>k\<ge>i. mem I (\<tau> \<sigma> k - \<tau> \<sigma> i) \<longrightarrow> k<j"
+      by (metis (no_types, lifting) assms flip_int_double_upper.rep_eq forall_finite(1) interval_leq leI memL.rep_eq prod.sel(1))
+    then have "sat \<sigma> V v i (always I \<phi>)" using j_props by auto
+  }
+  moreover {
+    assume "sat \<sigma> V v i (Until \<phi> I (And \<phi> (Next (flip_int I) TT)))"
+    then obtain j where j_props:
+      "j\<ge>i" "mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)" "sat \<sigma> V v j (And \<phi> (Next (flip_int I) TT))"
+      "\<forall>k\<in>{i..<j}. sat \<sigma> V v k \<phi>"
+      by auto
+    then have phi_sat: "\<forall>k\<in>{i..j}. sat \<sigma> V v k \<phi>" by auto
+    {
+      fix k
+      assume k_props: "k>j" "mem I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+      then have t_geq: "(\<tau> \<sigma> k - \<tau> \<sigma> i) \<ge> (\<tau> \<sigma> (j+1) - \<tau> \<sigma> i)" using diff_le_mono by auto
+      from j_props have "mem (flip_int I) (\<tau> \<sigma> (j+1) - \<tau> \<sigma> j)" by auto
+      then have "\<not>mem I (\<tau> \<sigma> (j+1) - \<tau> \<sigma> i)"
+        by (metis \<tau>_mono assms(2) diff_le_mono2 flip_int.rep_eq j_props(1) memL.rep_eq memL_mono prod.sel(1))
+      then have "\<not>memR I (\<tau> \<sigma> (j+1) - \<tau> \<sigma> i)" using assms memL_mono by blast
+      then have "\<not>memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)" using t_geq memR_antimono by blast
+      then have "False" using k_props by auto
+    }
+    then have "\<forall>k>j. \<not>mem I (\<tau> \<sigma> k - \<tau> \<sigma> i)" by auto
+    then have "sat \<sigma> V v i (always I \<phi>)" using phi_sat by auto
+  }
+  ultimately show "sat \<sigma> V v i (always I \<phi>)" by blast
+qed
+
 lemma always_rewrite_bounded:
   fixes I1 :: \<I>
   assumes "bounded I1" (* [a, b] *)
@@ -1746,19 +1975,19 @@ proof (rule iffI)
     ultimately have "sat \<sigma> V v i (Or (Until \<psi> I (And \<phi> \<psi>)) (always I (And \<psi> (Neg \<phi>))))" by auto
   }
   ultimately have "sat \<sigma> V v i (Or (Until \<psi> I (And \<phi> \<psi>)) (always I (And \<psi> (Neg \<phi>))))" by blast
-  then have "sat \<sigma> V v i (Or (Until \<psi> I (And \<phi> \<psi>)) (always_safe_bounded I (And \<psi> (Neg \<phi>))))"
-    using assms always_rewrite_bounded[of I \<sigma> V v i "(And \<psi> (Neg \<phi>))"]
-    by (metis always_def diff_self_eq_0 le_refl sat.simps(6-8) sat_sometimes)
+  then have "sat \<sigma> V v i (Or (Until \<psi> I (And \<phi> \<psi>)) (always_safe_0 I (And \<psi> (Neg \<phi>))))"
+    using assms always_rewrite_0[of I \<sigma> V v i "(And \<psi> (Neg \<phi>))"]
+    by auto
   then show "sat \<sigma> V v i (release_safe_0 \<phi> I \<psi>)"
     using assms release_safe_0_def[of \<phi> I \<psi>]
     by auto
 next
   assume "sat \<sigma> V v i (release_safe_0 \<phi> I \<psi>)"
-  then have "sat \<sigma> V v i (Or (Until \<psi> I (And \<phi> \<psi>)) (always_safe_bounded I (And \<psi> (Neg \<phi>))))"
+  then have "sat \<sigma> V v i (Or (Until \<psi> I (And \<phi> \<psi>)) (always_safe_0 I (And \<psi> (Neg \<phi>))))"
     using assms release_safe_0_def[of \<phi> I \<psi>]
     by auto
   then have "sat \<sigma> V v i (Or (Until \<psi> I (And \<phi> \<psi>)) (always I (And \<psi> (Neg \<phi>))))"
-    using assms always_rewrite_bounded[of I \<sigma> V v i "(And \<psi> (Neg \<phi>))"]
+    using assms always_rewrite_0[of I \<sigma> V v i "(And \<psi> (Neg \<phi>))"]
     by auto
   moreover {
     assume "sat \<sigma> V v i (always I \<psi>)"
@@ -2293,6 +2522,14 @@ lemma historically_safe_bounded_future_bounded[simp]: "future_bounded \<phi> \<a
   by (simp add: historically_safe_bounded_def sometimes_def once_def bounded.rep_eq int_remove_lower_bound.rep_eq)
 
 (* always *)
+
+(* [0, b] *)
+
+lemma always_safe_0_safe[simp]: "safe_formula \<phi> \<Longrightarrow> safe_formula (always_safe_0 I \<phi>)"
+  by (simp add: always_safe_0_def sometimes_def once_def)
+
+lemma always_safe_0_future_bounded[simp]: "future_bounded \<phi> \<Longrightarrow> bounded I \<Longrightarrow> future_bounded (always_safe_0 I \<phi>)"
+  by (simp add: always_safe_0_def sometimes_def once_def bounded.rep_eq flip_int_double_upper.rep_eq)
 
 (* [a, b] *)
 
