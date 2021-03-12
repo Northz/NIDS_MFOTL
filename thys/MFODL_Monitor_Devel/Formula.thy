@@ -543,17 +543,7 @@ qed
 
 
 lemma interval_all: "mem all i"
-proof -               
-  have "memL = fst o Rep_\<I>" using memL_def map_fun_def[of Rep_\<I> id fst] by auto
-  then have "memL all = fst (Rep_\<I> all)" using comp_apply[of fst Rep_\<I> all] by auto
-  then have memL: "memL all = (\<lambda>_. True)" using Interval.all.rep_eq by simp
-
-  have "memR = (fst o snd) o Rep_\<I>" using memR_def map_fun_def[of Rep_\<I> id "fst o snd"] by auto
-  then have "memR all = (fst o snd) (Rep_\<I> all)" using comp_apply[of "fst o snd" Rep_\<I> all] by auto
-  then have memR: "memR all = (\<lambda>_. True)" using Interval.all.rep_eq by simp
-
-  show ?thesis using memL memR by auto
-qed
+  by transfer auto
 
 definition "first = Neg (Prev all TT)"
 
@@ -632,7 +622,7 @@ lift_definition flip_int_less_lower :: "\<I> \<Rightarrow> \<I>" is
   by transfer (auto simp: upclosed_def downclosed_def)
 
 (* [a, b] \<Rightarrow> [0, b] *)
-lift_definition int_remove_lower_bound :: "\<I> \<Rightarrow> \<I>" is
+lift_definition int_remove_lower_bound :: "\<I> \<Rightarrow> \<I>" is
   "\<lambda>I. ((\<lambda>i. True), (\<lambda>i. memR I i), bounded I)"
   by transfer (auto simp: upclosed_def downclosed_def)
 
@@ -1548,13 +1538,13 @@ qed
 lemma sat_trigger_rewrite_unbounded:
   fixes I1 I2 :: \<I>
   assumes "\<not>mem I1 0" "\<not>bounded I1" (* [a, b] *)
-  assumes "I2 = flip_int_less_lower I1" (* [0, a-1] *)
   shows "sat \<sigma> V v i (And (once I1 TT) (Trigger \<phi> I1 \<psi>)) = sat \<sigma> V v i (trigger_safe_unbounded \<phi> I1 \<psi>)"
 proof (rule iffI)
+  define I2 where "I2 = flip_int_less_lower I1" (* [0, a-1] *)
   assume trigger: "sat \<sigma> V v i (And (once I1 TT) (Trigger \<phi> I1 \<psi>))"
   then obtain j where j_props: "j\<le>i" "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)" "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>)" by auto
   have disj: "sat \<sigma> V v i (Or (Or (historically I1 \<psi>) (once I2 \<phi>)) (once I2 (Prev all (Since \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))))"
-      using trigger assms sat_trigger_rewrite
+      using trigger assms I2_def sat_trigger_rewrite
       by auto
   {
     assume "sat \<sigma> V v j \<psi>"
@@ -1575,31 +1565,32 @@ proof (rule iffI)
     using trigger
     by auto
   then show "sat \<sigma> V v i (trigger_safe_unbounded \<phi> I1 \<psi>)"
-    using trigger_safe_unbounded_def[of \<phi> I1 \<psi>] assms
+    using trigger_safe_unbounded_def[of \<phi> I1 \<psi>] assms I2_def
     by auto
 next
+  define I2 where "I2 = flip_int_less_lower I1" (* [0, a-1] *)
   assume "sat \<sigma> V v i (trigger_safe_unbounded \<phi> I1 \<psi>)"
   then have assm: "sat \<sigma> V v i (And (once I1 TT) (Or (Or (historically_safe_unbounded I1 \<psi>) (once I2 \<phi>)) (once I2 (Prev all (Since \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))))"
-    using assms trigger_safe_unbounded_def
+    using assms I2_def trigger_safe_unbounded_def
     by auto
   then have "sat \<sigma> V v i (Or (Or (historically I1 \<psi>) (once I2 \<phi>)) (once I2 (Prev all (Since \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))))"
     using assms historically_rewrite_unbounded[of I1 \<sigma> V v i \<psi>]
     by auto
   then show "sat \<sigma> V v i (And (once I1 TT) (Trigger \<phi> I1 \<psi>))"
-    using assms sat_trigger_rewrite assm
+    using assms I2_def sat_trigger_rewrite assm
     by auto
 qed
 
 lemma sat_trigger_rewrite_bounded:
   fixes I1 I2 :: \<I>
   assumes "\<not>mem I1 0" "bounded I1" (* [a, b] *)
-  assumes "I2 = flip_int_less_lower I1" (* [0, a-1] *)
   shows "sat \<sigma> V v i (And (once I1 TT) (Trigger \<phi> I1 \<psi>)) = sat \<sigma> V v i (trigger_safe_bounded \<phi> I1 \<psi>)"
 proof (rule iffI)
+  define I2 where "I2 = flip_int_less_lower I1" (* [0, a-1] *)
   assume trigger: "sat \<sigma> V v i (And (once I1 TT) (Trigger \<phi> I1 \<psi>))"
   then obtain j where j_props: "j\<le>i" "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)" "sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>)" by auto
   have disj: "sat \<sigma> V v i (Or (Or (historically I1 \<psi>) (once I2 \<phi>)) (once I2 (Prev all (Since \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))))"
-      using trigger assms sat_trigger_rewrite
+      using trigger assms I2_def sat_trigger_rewrite
       by auto
   {
     assume "sat \<sigma> V v j \<psi>"
@@ -1620,18 +1611,19 @@ proof (rule iffI)
     using trigger
     by auto
   then show "sat \<sigma> V v i (trigger_safe_bounded \<phi> I1 \<psi>)"
-    using trigger_safe_bounded_def[of \<phi> I1 \<psi>] assms
+    using trigger_safe_bounded_def[of \<phi> I1 \<psi>] assms I2_def
     by auto
 next
+  define I2 where "I2 = flip_int_less_lower I1" (* [0, a-1] *)
   assume "sat \<sigma> V v i (trigger_safe_bounded \<phi> I1 \<psi>)"
   then have assm: "sat \<sigma> V v i (And (once I1 TT) (Or (Or (historically_safe_bounded I1 \<psi>) (once I2 \<phi>)) (once I2 (Prev all (Since \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))))"
-    using assms trigger_safe_bounded_def
+    using assms I2_def trigger_safe_bounded_def
     by auto
   then have "sat \<sigma> V v i (Or (Or (historically I1 \<psi>) (once I2 \<phi>)) (once I2 (Prev all (Since \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))))"
     using assms historically_rewrite_bounded[of I1 \<sigma> V v i]
     by auto
   then show "sat \<sigma> V v i (And (once I1 TT) (Trigger \<phi> I1 \<psi>))"
-    using assms sat_trigger_rewrite assm
+    using assms I2_def sat_trigger_rewrite assm
     by auto
 qed
 
@@ -2027,10 +2019,9 @@ qed
 lemma sat_release_rewrite:
   fixes I1 I2 :: \<I>
   assumes "bounded I1" "\<not>mem I1 0" (* [a, b] *)
-  assumes "I2 = flip_int_less_lower I1" (* [0, a-1] *)
-  assumes "a>0"
 shows "sat \<sigma> V v i (And (sometimes I1 TT) (Release \<phi> I1 \<psi>)) = sat \<sigma> V v i (release_safe_bounded \<phi> I1 \<psi>)"
 proof (rule iffI)
+  define I2 where "I2 = flip_int_less_lower I1" (* [0, a-1] *)
   assume release: "sat \<sigma> V v i (And (sometimes I1 TT) (Release \<phi> I1 \<psi>))"
   {
     assume "\<forall>j\<ge>i. mem I1 (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v j \<psi>"
@@ -2061,7 +2052,7 @@ proof (rule iffI)
         moreover have "memR I1 (\<tau> \<sigma> j - \<tau> \<sigma> i)" using assms j_props by auto 
         ultimately have "memR I1 (\<tau> \<sigma> x - \<tau> \<sigma> i)" using memR_antimono by blast
         moreover have "memL I1 (\<tau> \<sigma> x - \<tau> \<sigma> i)"
-          using k_not_mem_1 x_props assms
+          using k_not_mem_1 x_props assms I2_def
           by (metis flip_int_less_lower.rep_eq memL.rep_eq memR.rep_eq prod.sel(1) prod.sel(2))
         ultimately have "mem I1 (\<tau> \<sigma> x - \<tau> \<sigma> i)" using assms by auto
         then have "False" using k_not_mem_1 by auto
@@ -2231,12 +2222,13 @@ proof (rule iffI)
     using release
     by auto
   then show "sat \<sigma> V v i (release_safe_bounded \<phi> I1 \<psi>)"
-    using assms release_safe_bounded_def
+    using assms I2_def release_safe_bounded_def
     by simp
 next
+  define I2 where "I2 = flip_int_less_lower I1" (* [0, a-1] *)
   assume "sat \<sigma> V v i (release_safe_bounded \<phi> I1 \<psi>)"
   then have assm: "sat \<sigma> V v i (And (sometimes I1 TT) (Or (Or (always_safe_bounded I1 \<psi>) (sometimes I2 \<phi>)) (sometimes I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))))"
-    using assms release_safe_bounded_def
+    using assms I2_def release_safe_bounded_def
     by simp
   then have sometimes: "sat \<sigma> V v i (sometimes I1 TT)" by auto
   then have "sat \<sigma> V v i (always_safe_bounded I1 \<psi>) \<or> sat \<sigma> V v i (sometimes I2 \<phi>) \<or> sat \<sigma> V v i (sometimes I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))"
@@ -2259,9 +2251,9 @@ next
       {
         assume "x\<le>j"
         then have "\<tau> \<sigma> x \<le> \<tau> \<sigma> j" by auto
-        then have "mem I2 (\<tau> \<sigma> x - \<tau> \<sigma> i)" using j_props assms flip_int_less_lower_props
+        then have "mem I2 (\<tau> \<sigma> x - \<tau> \<sigma> i)" using j_props assms I2_def flip_int_less_lower_props
           by (meson diff_le_mono memL_mono memR_antimono memR_zero zero_le)
-        then have "False" using x_props assms
+        then have "False" using x_props assms I2_def
           using flip_int_less_lower.rep_eq memR.rep_eq memR_zero
           by auto
       }
@@ -2299,10 +2291,10 @@ next
           {
             assume "l<(j+1)"
             then have "\<tau> \<sigma> l \<le> \<tau> \<sigma> j" by auto
-            then have "mem I2 (\<tau> \<sigma> l - \<tau> \<sigma> i)" using assms j_props flip_int_less_lower_props
+            then have "mem I2 (\<tau> \<sigma> l - \<tau> \<sigma> i)" using assms I2_def j_props flip_int_less_lower_props
             by (meson diff_le_mono le0 memL_mono memR_antimono memR_zero)
             then have "\<not>mem I1 (\<tau> \<sigma> l - \<tau> \<sigma> i)"
-              using assms flip_int_less_lower.rep_eq memR.rep_eq memR_zero
+              using assms I2_def flip_int_less_lower.rep_eq memR.rep_eq memR_zero
               by auto
             then have "False" using l_assms by auto
           }
@@ -2517,7 +2509,7 @@ lemma historically_safe_future_bounded[simp]:"future_bounded \<phi> \<Longrighta
 lemma historically_safe_bounded_safe[simp]: "safe_formula \<phi> \<Longrightarrow> safe_formula (historically_safe_bounded I \<phi>)"
   by (simp add: historically_safe_bounded_def sometimes_def once_def)
 
-lemma historically_safe_bounded_future_bounded[simp]: "future_bounded \<phi> \<and> bounded I \<Longrightarrow> future_bounded (historically_safe_bounded I \<phi>)"
+lemma historically_safe_bounded_future_bounded[simp]: "future_bounded \<phi> ==> bounded I \<Longrightarrow> future_bounded (historically_safe_bounded I \<phi>)"
   by (simp add: historically_safe_bounded_def sometimes_def once_def bounded.rep_eq int_remove_lower_bound.rep_eq)
 
 (* always *)
