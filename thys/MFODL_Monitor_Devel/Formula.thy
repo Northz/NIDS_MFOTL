@@ -727,14 +727,14 @@ definition historically :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" wh
 lemma sat_historically[simp] : "sat \<sigma> V v i (historically I \<phi>) = (\<forall>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> sat \<sigma> V v j \<phi>)"
   by (auto simp: historically_def)
 
-definition sometimes :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "sometimes I \<phi> = Until TT I \<phi>"
+definition eventually :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "eventually I \<phi> = Until TT I \<phi>"
 
-lemma sat_sometimes[simp] : "sat \<sigma> V v i (sometimes I \<phi>) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j \<phi>)"
-  by (auto simp: sometimes_def)
+lemma sat_eventually[simp] : "sat \<sigma> V v i (eventually I \<phi>) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j \<phi>)"
+  by (auto simp: eventually_def)
 
 definition always :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "always I \<phi> = (Neg (sometimes I (Neg \<phi>)))"
+  "always I \<phi> = (Neg (eventually I (Neg \<phi>)))"
 
 lemma sat_always[simp] : "sat \<sigma> V v i (always I \<phi>) = (\<forall>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v j \<phi>)"
   by (auto simp: always_def)
@@ -747,13 +747,13 @@ definition historically_safe_unbounded :: "\<I> \<Rightarrow> formula \<Rightarr
   "historically_safe_unbounded I \<phi> = (And (once (flip_int_less_lower I) (Prev all (Since \<phi> all (And \<phi> first)))) (once I \<phi>))"
 
 definition historically_safe_bounded :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "historically_safe_bounded I \<phi> = (And (once I \<phi>) (Neg (once I (And (Or (once (int_remove_lower_bound I) \<phi>) (sometimes (int_remove_lower_bound I) \<phi>)) (Neg \<phi>)))))"
+  "historically_safe_bounded I \<phi> = (And (once I \<phi>) (Neg (once I (And (Or (once (int_remove_lower_bound I) \<phi>) (eventually (int_remove_lower_bound I) \<phi>)) (Neg \<phi>)))))"
 
 definition always_safe_0 :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
   "always_safe_0 I \<phi> = (Or (Until \<phi> (flip_int_double_upper I) (Prev all \<phi>)) (Until \<phi> I (And \<phi> (Next (flip_int I) TT))))"
 
 definition always_safe_bounded :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "always_safe_bounded I \<phi> = (And (sometimes I \<phi>) (Neg (sometimes I (And (Or (once (int_remove_lower_bound I) \<phi>) (sometimes (int_remove_lower_bound I) \<phi>)) (Neg \<phi>)))))"
+  "always_safe_bounded I \<phi> = (And (eventually I \<phi>) (Neg (eventually I (And (Or (once (int_remove_lower_bound I) \<phi>) (eventually (int_remove_lower_bound I) \<phi>)) (Neg \<phi>)))))"
 
 definition trigger_safe_0 :: "formula \<Rightarrow> \<I> \<Rightarrow> formula \<Rightarrow> formula" where
   "trigger_safe_0 \<phi> I \<psi> = Or (Since \<psi> I (And \<psi> \<phi>)) (historically_safe_0 I (And \<psi> (Neg \<phi>)))"
@@ -768,7 +768,7 @@ definition release_safe_0 :: "formula \<Rightarrow> \<I> \<Rightarrow> formula \
   "release_safe_0 \<phi> I \<psi> = Or (Until \<psi> I (And \<psi> \<phi>)) (always_safe_0 I (And \<psi> (Neg \<phi>)))"
 
 definition release_safe_bounded :: "formula \<Rightarrow> \<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "release_safe_bounded \<phi> I \<psi> = And (sometimes I TT) (Or (Or (always_safe_bounded I \<psi>) (sometimes (flip_int_less_lower I) \<phi>)) (sometimes (flip_int_less_lower I) (Next all (Until \<psi> (int_remove_lower_bound I) (And \<phi> \<psi>)))))"
+  "release_safe_bounded \<phi> I \<psi> = And (eventually I TT) (Or (Or (always_safe_bounded I \<psi>) (eventually (flip_int_less_lower I) \<phi>)) (eventually (flip_int_less_lower I) (Next all (Until \<psi> (int_remove_lower_bound I) (And \<phi> \<psi>)))))"
 
 lemma since_true:
   assumes "\<not>mem I 0"
@@ -1037,20 +1037,20 @@ proof (rule iffI)
 next
   define I2 where "I2 = int_remove_lower_bound I1"
   assume "sat \<sigma> V v i (historically_safe_bounded I1 \<phi>)"
-  then have rewrite: "sat \<sigma> V v i (And (once I1 \<phi>) (Neg (once I1 (And (Or (once I2 \<phi>) (sometimes I2 \<phi>)) (Neg \<phi>)))))"
+  then have rewrite: "sat \<sigma> V v i (And (once I1 \<phi>) (Neg (once I1 (And (Or (once I2 \<phi>) (eventually I2 \<phi>)) (Neg \<phi>)))))"
     using assms I2_def historically_safe_bounded_def
     by auto
   then obtain j where j_props: "j\<le>i" "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)" "sat \<sigma> V v j \<phi>" by auto
-  have j_leq_i_sat: "\<forall>j\<le>i. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> (sat \<sigma> V v j (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v j (Neg (sometimes I2 \<phi>))) \<or> sat \<sigma> V v j \<phi>"
+  have j_leq_i_sat: "\<forall>j\<le>i. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> (sat \<sigma> V v j (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v j (Neg (eventually I2 \<phi>))) \<or> sat \<sigma> V v j \<phi>"
     using rewrite
     by auto
   {
     fix k
     assume k_props: "k\<le>i" "mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> k)"
-    then have "(sat \<sigma> V v k (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v k (Neg (sometimes I2 \<phi>))) \<or> sat \<sigma> V v k \<phi>"
+    then have "(sat \<sigma> V v k (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v k (Neg (eventually I2 \<phi>))) \<or> sat \<sigma> V v k \<phi>"
       using j_leq_i_sat by auto
     moreover {
-      assume assm: "(sat \<sigma> V v k (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v k (Neg (sometimes I2 \<phi>)))"
+      assume assm: "(sat \<sigma> V v k (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v k (Neg (eventually I2 \<phi>)))"
       then have leq_k_sat: "\<forall>j\<le>k. mem I2 (\<tau> \<sigma> k - \<tau> \<sigma> j) \<longrightarrow> \<not>sat \<sigma> V v j \<phi>" by auto
       have geq_k_sat: "\<forall>j\<ge>k. mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> k) \<longrightarrow> \<not>sat \<sigma> V v j \<phi>" using assm by auto
       have j_int: "memL I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)" "memR I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)"
@@ -1786,29 +1786,29 @@ qed
 lemma always_rewrite_bounded:
   fixes I1 :: \<I>
   assumes "bounded I1" (* [a, b] *)
-  shows "sat \<sigma> V v i (And (sometimes I1 \<phi>) (always I1 \<phi>)) = sat \<sigma> V v i (always_safe_bounded I1 \<phi>)"
+  shows "sat \<sigma> V v i (And (eventually I1 \<phi>) (always I1 \<phi>)) = sat \<sigma> V v i (always_safe_bounded I1 \<phi>)"
 proof (rule iffI)
-  assume "sat \<sigma> V v i (And (sometimes I1 \<phi>) (always I1 \<phi>))"
+  assume "sat \<sigma> V v i (And (eventually I1 \<phi>) (always I1 \<phi>))"
   then show "sat \<sigma> V v i (always_safe_bounded I1 \<phi>)"
     using assms always_safe_bounded_def
     by auto
 next
   define I2 where "I2 = int_remove_lower_bound I1"
   assume "sat \<sigma> V v i (always_safe_bounded I1 \<phi>)"
-  then have rewrite: "sat \<sigma> V v i (And (sometimes I1 \<phi>) (Neg (sometimes I1 (And (Or (once I2 \<phi>) (sometimes I2 \<phi>)) (Neg \<phi>)))))"
+  then have rewrite: "sat \<sigma> V v i (And (eventually I1 \<phi>) (Neg (eventually I1 (And (Or (once I2 \<phi>) (eventually I2 \<phi>)) (Neg \<phi>)))))"
     using assms I2_def always_safe_bounded_def
     by auto
   then obtain j where j_props: "j\<ge>i" "mem I1 (\<tau> \<sigma> j - \<tau> \<sigma> i)" "sat \<sigma> V v j \<phi>" by auto
-  have j_geq_i_sat: "\<forall>j\<ge>i. mem I1 (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> (sat \<sigma> V v j (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v j (Neg (sometimes I2 \<phi>))) \<or> sat \<sigma> V v j \<phi>"
+  have j_geq_i_sat: "\<forall>j\<ge>i. mem I1 (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> (sat \<sigma> V v j (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v j (Neg (eventually I2 \<phi>))) \<or> sat \<sigma> V v j \<phi>"
     using rewrite
     by auto
   {
     fix k
     assume k_props: "k\<ge>i" "mem I1 (\<tau> \<sigma> k - \<tau> \<sigma> i)"
-    then have "(sat \<sigma> V v k (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v k (Neg (sometimes I2 \<phi>))) \<or> sat \<sigma> V v k \<phi>"
+    then have "(sat \<sigma> V v k (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v k (Neg (eventually I2 \<phi>))) \<or> sat \<sigma> V v k \<phi>"
       using j_geq_i_sat by auto
     moreover {
-      assume assm: "(sat \<sigma> V v k (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v k (Neg (sometimes I2 \<phi>)))"
+      assume assm: "(sat \<sigma> V v k (Neg (once I2 \<phi>)) \<and> sat \<sigma> V v k (Neg (eventually I2 \<phi>)))"
       then have leq_k_sat: "\<forall>j\<le>k. mem I2 (\<tau> \<sigma> k - \<tau> \<sigma> j) \<longrightarrow> \<not>sat \<sigma> V v j \<phi>" by auto
       have geq_k_sat: "\<forall>j\<ge>k. mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> k) \<longrightarrow> \<not>sat \<sigma> V v j \<phi>" using assm by auto
       have j_int: "memL I1 (\<tau> \<sigma> j - \<tau> \<sigma> i)" "memR I1 (\<tau> \<sigma> j - \<tau> \<sigma> i)"
@@ -1841,7 +1841,7 @@ next
     ultimately have "sat \<sigma> V v k \<phi>" by auto
   }
   then have "\<forall>j\<ge>i. mem I1 (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v j \<phi>" by auto
-  then show "sat \<sigma> V v i (And (sometimes I1 \<phi>) (always I1 \<phi>))"
+  then show "sat \<sigma> V v i (And (eventually I1 \<phi>) (always I1 \<phi>))"
     using rewrite
     by auto
 qed
@@ -2019,10 +2019,10 @@ qed
 lemma sat_release_rewrite:
   fixes I1 I2 :: \<I>
   assumes "bounded I1" "\<not>mem I1 0" (* [a, b] *)
-shows "sat \<sigma> V v i (And (sometimes I1 TT) (Release \<phi> I1 \<psi>)) = sat \<sigma> V v i (release_safe_bounded \<phi> I1 \<psi>)"
+shows "sat \<sigma> V v i (And (eventually I1 TT) (Release \<phi> I1 \<psi>)) = sat \<sigma> V v i (release_safe_bounded \<phi> I1 \<psi>)"
 proof (rule iffI)
   define I2 where "I2 = flip_int_less_lower I1" (* [0, a-1] *)
-  assume release: "sat \<sigma> V v i (And (sometimes I1 TT) (Release \<phi> I1 \<psi>))"
+  assume release: "sat \<sigma> V v i (And (eventually I1 TT) (Release \<phi> I1 \<psi>))"
   {
     assume "\<forall>j\<ge>i. mem I1 (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v j \<psi>"
     then have all: "sat \<sigma> V v i (always I1 \<psi>)" by auto
@@ -2030,7 +2030,7 @@ proof (rule iffI)
     then have "sat \<sigma> V v i (always_safe_bounded I1 \<psi>)"
       using assms always_rewrite_bounded[of I1 \<sigma> V v i \<psi>] all
       by auto
-    then have "sat \<sigma> V v i (Or (Or (always_safe_bounded I1 \<psi>) (sometimes I2 \<phi>)) (sometimes I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))))"
+    then have "sat \<sigma> V v i (Or (Or (always_safe_bounded I1 \<psi>) (eventually I2 \<phi>)) (eventually I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))))"
       by auto
   }
   moreover {
@@ -2062,7 +2062,7 @@ proof (rule iffI)
     then have geq_j_mem: "\<forall>x\<le>j. \<not>mem I2 (\<tau> \<sigma> x - \<tau> \<sigma> i) \<longrightarrow> mem I1 (\<tau> \<sigma> x - \<tau> \<sigma> i)" by auto
     {
       assume "mem I2 (\<tau> \<sigma> k - \<tau> \<sigma> i)"
-      then have "sat \<sigma> V v i (Or (Or (always_safe_bounded I1 \<psi>) (sometimes I2 \<phi>)) (sometimes I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))))"
+      then have "sat \<sigma> V v i (Or (Or (always_safe_bounded I1 \<psi>) (eventually I2 \<phi>)) (eventually I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))))"
         using k_props
         by auto
     }
@@ -2083,7 +2083,7 @@ proof (rule iffI)
         by auto
       {
         assume "k=i"
-        then have "sat \<sigma> V v i (Or (Or (always_safe_bounded I1 \<psi>) (sometimes I2 \<phi>)) (sometimes I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))))"
+        then have "sat \<sigma> V v i (Or (Or (always_safe_bounded I1 \<psi>) (eventually I2 \<phi>)) (eventually I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))))"
           using k_sat sat_once[of \<sigma> V v i I2 \<phi>] using assms k_mem by auto
       }
       moreover {
@@ -2111,7 +2111,7 @@ proof (rule iffI)
           ultimately have "(\<exists>j\<ge>i. mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))"
             using k_pred_geq_i
             by blast
-          then have "sat \<sigma> V v i (sometimes I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))"
+          then have "sat \<sigma> V v i (eventually I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))"
             by auto
         }
         moreover {
@@ -2200,25 +2200,25 @@ proof (rule iffI)
               then have "(c-1)\<ge>i" "mem I2 (\<tau> \<sigma> (c-1) - \<tau> \<sigma> i)" "sat \<sigma> V v (c-1) (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))"
                 using c_pred_geq_i c_sat interval_all c_pos
                 by auto
-              then have "sat \<sigma> V v i (sometimes I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))"
-                using interval_all sat_sometimes
+              then have "sat \<sigma> V v i (eventually I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))"
+                using interval_all sat_eventually
                 by blast
             }
-            ultimately have "sat \<sigma> V v i (sometimes I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))" by auto
+            ultimately have "sat \<sigma> V v i (eventually I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))" by auto
           }
-          ultimately have "sat \<sigma> V v i (sometimes I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))" by blast
+          ultimately have "sat \<sigma> V v i (eventually I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))" by blast
         }
-        ultimately have "sat \<sigma> V v i (sometimes I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))"
+        ultimately have "sat \<sigma> V v i (eventually I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))"
           by blast
-        then have "sat \<sigma> V v i (Or (Or (always_safe_bounded I1 \<psi>) (sometimes I2 \<phi>)) (sometimes I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))))"
+        then have "sat \<sigma> V v i (Or (Or (always_safe_bounded I1 \<psi>) (eventually I2 \<phi>)) (eventually I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))))"
           by simp
       }
-      ultimately have "sat \<sigma> V v i (Or (Or (always_safe_bounded I1 \<psi>) (sometimes I2 \<phi>)) (sometimes I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))))"
+      ultimately have "sat \<sigma> V v i (Or (Or (always_safe_bounded I1 \<psi>) (eventually I2 \<phi>)) (eventually I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))))"
           by blast
     }
-    ultimately have "sat \<sigma> V v i (Or (Or (always_safe_bounded I1 \<psi>) (sometimes I2 \<phi>)) (sometimes I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))))" by blast
+    ultimately have "sat \<sigma> V v i (Or (Or (always_safe_bounded I1 \<psi>) (eventually I2 \<phi>)) (eventually I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))))" by blast
   }
-  ultimately have "sat \<sigma> V v i (And (sometimes I1 TT) (Or (Or (always_safe_bounded I1 \<psi>) (sometimes I2 \<phi>)) (sometimes I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))))"
+  ultimately have "sat \<sigma> V v i (And (eventually I1 TT) (Or (Or (always_safe_bounded I1 \<psi>) (eventually I2 \<phi>)) (eventually I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))))"
     using release
     by auto
   then show "sat \<sigma> V v i (release_safe_bounded \<phi> I1 \<psi>)"
@@ -2227,11 +2227,11 @@ proof (rule iffI)
 next
   define I2 where "I2 = flip_int_less_lower I1" (* [0, a-1] *)
   assume "sat \<sigma> V v i (release_safe_bounded \<phi> I1 \<psi>)"
-  then have assm: "sat \<sigma> V v i (And (sometimes I1 TT) (Or (Or (always_safe_bounded I1 \<psi>) (sometimes I2 \<phi>)) (sometimes I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))))"
+  then have assm: "sat \<sigma> V v i (And (eventually I1 TT) (Or (Or (always_safe_bounded I1 \<psi>) (eventually I2 \<phi>)) (eventually I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))))"
     using assms I2_def release_safe_bounded_def
     by simp
-  then have sometimes: "sat \<sigma> V v i (sometimes I1 TT)" by auto
-  then have "sat \<sigma> V v i (always_safe_bounded I1 \<psi>) \<or> sat \<sigma> V v i (sometimes I2 \<phi>) \<or> sat \<sigma> V v i (sometimes I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))"
+  then have eventually: "sat \<sigma> V v i (eventually I1 TT)" by auto
+  then have "sat \<sigma> V v i (always_safe_bounded I1 \<psi>) \<or> sat \<sigma> V v i (eventually I2 \<phi>) \<or> sat \<sigma> V v i (eventually I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))"
     using assm
     by auto
   moreover {
@@ -2242,7 +2242,7 @@ next
     then have "sat \<sigma> V v i (Release \<phi> I1 \<psi>)" by auto
   }
   moreover {
-    assume "sat \<sigma> V v i (sometimes I2 \<phi>)"
+    assume "sat \<sigma> V v i (eventually I2 \<phi>)"
     then have "\<exists>j\<ge>i. mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j \<phi>" by auto
     then obtain j where j_props: "j\<ge>i" "mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> i)" "sat \<sigma> V v j \<phi>" by blast
     {
@@ -2264,7 +2264,7 @@ next
     then have "sat \<sigma> V v i (Release \<phi> I1 \<psi>)" using j_props by auto
   }
   moreover {
-    assume until: "sat \<sigma> V v i (sometimes I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))"
+    assume until: "sat \<sigma> V v i (eventually I2 (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))))"
     then have "\<exists>j\<ge>i. mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))" by auto
     then obtain j where j_props: "j\<ge>i" "mem I2 (\<tau> \<sigma> j - \<tau> \<sigma> i)" "sat \<sigma> V v j (Next all (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>)))" by blast
     then have j_pred_sat: "sat \<sigma> V v (j+1) (Until \<psi> (int_remove_lower_bound I1) (And \<phi> \<psi>))" by auto
@@ -2309,7 +2309,7 @@ next
     then have "sat \<sigma> V v i (Release \<phi> I1 \<psi>)" by auto
   }
   ultimately have "sat \<sigma> V v i (Release \<phi> I1 \<psi>)" by blast
-  then show "sat \<sigma> V v i (And (sometimes I1 TT) (Release \<phi> I1 \<psi>))"
+  then show "sat \<sigma> V v i (And (eventually I1 TT) (Release \<phi> I1 \<psi>))"
     using assm
     by auto
 qed
@@ -2448,10 +2448,20 @@ fun safe_formula :: "formula \<Rightarrow> bool" where
     (safe_formula \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False)))"
 | "safe_formula (Until \<phi> I \<psi>) = (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and>
     (safe_formula \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False)))"
-| "safe_formula (Trigger \<phi> I \<psi>) = (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and>
-    mem I 0)"
-| "safe_formula (Release \<phi> I \<psi>) = (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and>
-    mem I 0)"
+| "safe_formula (Trigger \<phi> I \<psi>) = (if (mem I 0) then
+    (safe_formula \<psi> \<and> (
+      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+    ) \<and> (((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>)))
+      else
+    (safe_formula \<phi> \<and> safe_formula \<psi> \<and> fv \<phi> = fv \<psi>))"
+| "safe_formula (Release \<phi> I \<psi>) = (if (mem I 0) then
+    (safe_formula \<psi> \<and> (
+      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+    ) \<and> (((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>)))
+      else
+    (safe_formula \<phi> \<and> safe_formula \<psi> \<and> fv \<phi> = fv \<psi>))"
 | "safe_formula (MatchP I r) = Regex.safe_regex fv (\<lambda>g \<phi>. safe_formula \<phi> \<or>
      (g = Lax \<and> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))) Past Strict r"
 | "safe_formula (MatchF I r) = Regex.safe_regex fv (\<lambda>g \<phi>. safe_formula \<phi> \<or>
@@ -2460,8 +2470,8 @@ fun safe_formula :: "formula \<Rightarrow> bool" where
 
 (* verify that the derived rewrite formulas are safe *)
 
-lemma TT_safe[simp]: "safe_formula TT"
-  by (simp add: TT_def FF_def)
+lemma safe_abbrevs[simp]: "safe_formula TT" "safe_formula FF"
+  unfolding TT_def FF_def by auto
 
 lemma TT_future_bounded[simp]: "future_bounded TT"
   by (simp add: TT_def FF_def)
@@ -2475,60 +2485,86 @@ lemma first_safe[simp]: "safe_formula first"
 lemma first_future_bounded[simp]: "future_bounded first"
   by (simp add: first_def)
 
-lemma once_safe[simp]: "safe_formula \<phi> \<Longrightarrow> safe_formula (once I \<phi>)"
+lemma once_fv[simp]: "fv (once I \<phi>) = fv \<phi>"
   by (simp add: once_def)
 
-lemma once_future_bounded[simp]: "future_bounded \<phi> \<Longrightarrow> future_bounded (once I \<phi>)"
+lemma once_safe[simp]: "safe_formula (once I \<phi>) = safe_formula \<phi>"
   by (simp add: once_def)
 
-lemma sometimes_safe[simp]: "safe_formula \<phi> \<Longrightarrow> safe_formula (sometimes I \<phi>)"
-  by (simp add: sometimes_def)
+lemma once_future_bounded[simp]: "future_bounded (once I \<phi>) = future_bounded \<phi>"
+  by (simp add: once_def)
 
-lemma sometimes_future_bounded[simp]: "future_bounded \<phi> \<Longrightarrow> bounded I \<Longrightarrow> future_bounded (sometimes I \<phi>)"
-  by (simp add: sometimes_def)
+lemma eventually_fv[simp]: "fv (eventually I \<phi>) = fv \<phi>"
+  by (simp add: eventually_def)
+
+lemma eventually_safe[simp]: "safe_formula (eventually I \<phi>) = safe_formula \<phi>"
+  by (simp add: eventually_def)
+
+lemma eventually_future_bounded[simp]: "future_bounded (eventually I \<phi>) = (future_bounded \<phi> \<and> bounded I)"
+  by (simp add: eventually_def)
 
 (* historically *)
 
 (* [0, b] *)
-lemma historically_safe_0_safe[simp]: "safe_formula \<phi> \<Longrightarrow> safe_formula (historically_safe_0 I \<phi>)"
-  by (simp add: historically_safe_0_def sometimes_def)
+lemma historically_safe_0_safe[simp]: "safe_formula (historically_safe_0 I \<phi>) = safe_formula \<phi>"
+  apply (auto simp add: historically_safe_0_def safe_assignment_def split: formula.splits)
+  subgoal for \<phi>
+    by (cases \<phi>) (auto simp add: is_Const_def)
+  subgoal for \<phi>
+    by (cases \<phi>) (auto simp add: is_Const_def)
+  done
 
-lemma historically_safe_0_future_bounded[simp]: "future_bounded \<phi> \<Longrightarrow> future_bounded (historically_safe_0 I \<phi>)"
-  by (simp add: historically_safe_0_def sometimes_def)
+lemma historically_safe_0_fv[simp]: "fv (historically_safe_0 I \<phi>) = fv \<phi>"
+  by (auto simp add: historically_safe_0_def)
+
+lemma historically_safe_0_future_bounded[simp]: "future_bounded (historically_safe_0 I \<phi>) = future_bounded \<phi>"
+  by (simp add: historically_safe_0_def eventually_def)
 
 (* [b, \<infinity>) *)
 
-lemma historically_safe_unbounded_safe[simp]:"safe_formula \<phi> \<Longrightarrow> safe_formula (historically_safe_unbounded I \<phi>)"
-  by (simp add: historically_safe_unbounded_def)
+lemma historically_safe_unbounded_safe[simp]:"safe_formula (historically_safe_unbounded I \<phi>) = safe_formula \<phi>"
+  by (auto simp add: historically_safe_unbounded_def)
 
-lemma historically_safe_future_bounded[simp]:"future_bounded \<phi> \<Longrightarrow> future_bounded (historically_safe_unbounded I \<phi>)"
+lemma historically_safe_unbounded_fv[simp]: "fv (historically_safe_unbounded I \<phi>) = fv \<phi>"
+  by (auto simp add: historically_safe_unbounded_def)
+
+lemma historically_safe_future_bounded[simp]:"future_bounded (historically_safe_unbounded I \<phi>) = future_bounded \<phi>"
   by (simp add: historically_safe_unbounded_def)
 
 (* [a, b] *)
 
-lemma historically_safe_bounded_safe[simp]: "safe_formula \<phi> \<Longrightarrow> safe_formula (historically_safe_bounded I \<phi>)"
-  by (simp add: historically_safe_bounded_def sometimes_def once_def)
+lemma historically_safe_bounded_safe[simp]: "safe_formula (historically_safe_bounded I \<phi>) = safe_formula \<phi>"
+  by (auto simp add: historically_safe_bounded_def)
 
-lemma historically_safe_bounded_future_bounded[simp]: "future_bounded \<phi> ==> bounded I \<Longrightarrow> future_bounded (historically_safe_bounded I \<phi>)"
-  by (simp add: historically_safe_bounded_def sometimes_def once_def bounded.rep_eq int_remove_lower_bound.rep_eq)
+lemma historically_safe_bounded_fv[simp]: "fv (historically_safe_bounded I \<phi>) = fv \<phi>"
+  by (auto simp add: historically_safe_bounded_def)
+
+lemma historically_safe_bounded_future_bounded[simp]: "future_bounded (historically_safe_bounded I \<phi>) = (future_bounded \<phi> \<and> bounded I)"
+  by (auto simp add: historically_safe_bounded_def bounded.rep_eq int_remove_lower_bound.rep_eq)
 
 (* always *)
 
 (* [0, b] *)
 
-lemma always_safe_0_safe[simp]: "safe_formula \<phi> \<Longrightarrow> safe_formula (always_safe_0 I \<phi>)"
-  by (simp add: always_safe_0_def sometimes_def once_def)
+lemma always_safe_0_safe[simp]: "safe_formula (always_safe_0 I \<phi>) = safe_formula \<phi>"
+  by (auto simp add: always_safe_0_def)
 
-lemma always_safe_0_future_bounded[simp]: "future_bounded \<phi> \<Longrightarrow> bounded I \<Longrightarrow> future_bounded (always_safe_0 I \<phi>)"
-  by (simp add: always_safe_0_def sometimes_def once_def bounded.rep_eq flip_int_double_upper.rep_eq)
+lemma always_safe_0_safe_fv[simp]: "fv (always_safe_0 I \<phi>) = fv \<phi>"
+  by (auto simp add: always_safe_0_def)
+
+lemma always_safe_0_future_bounded[simp]: "future_bounded (always_safe_0 I \<phi>) = (future_bounded \<phi> \<and> bounded I)"
+  by (simp add: always_safe_0_def bounded.rep_eq flip_int_double_upper.rep_eq)
 
 (* [a, b] *)
 
-lemma always_safe_bounded_safe[simp]: "safe_formula \<phi> \<Longrightarrow> safe_formula (always_safe_bounded I \<phi>)"
-  by (simp add: always_safe_bounded_def sometimes_def once_def)
+lemma always_safe_bounded_safe[simp]: "safe_formula (always_safe_bounded I \<phi>) = safe_formula \<phi>"
+  by (auto simp add: always_safe_bounded_def)
 
-lemma always_safe_bounded_future_bounded[simp]: "future_bounded \<phi> \<Longrightarrow> bounded I \<Longrightarrow> future_bounded (always_safe_bounded I \<phi>)"
-  by (simp add: always_safe_bounded_def sometimes_def once_def bounded.rep_eq int_remove_lower_bound.rep_eq)
+lemma always_safe_bounded_fv[simp]: "fv (always_safe_bounded I \<phi>) = fv \<phi>"
+  by (auto simp add: always_safe_bounded_def)
+
+lemma always_safe_bounded_future_bounded[simp]: "future_bounded (always_safe_bounded I \<phi>) = (future_bounded \<phi> \<and> bounded I)"
+  by (auto simp add: always_safe_bounded_def bounded.rep_eq int_remove_lower_bound.rep_eq)
 
 (* trigger *)
 
@@ -2538,12 +2574,81 @@ lemma
   assumes "fv \<phi> \<subseteq> fv \<psi>"
   assumes "safe_formula \<phi> \<or> (is_constraint (Neg \<phi>) \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False)))"
   shows "safe_formula (trigger_safe_0 \<phi> I \<psi>)"
-  using assms by (auto simp add: trigger_safe_0_def historically_safe_0_def)
-
-lemma
-  assumes "future_bounded \<psi>" "future_bounded \<phi>"
-  shows "future_bounded (trigger_safe_0 \<phi> I \<psi>)"
   using assms by (auto simp add: trigger_safe_0_def)
+
+lemma safe_formula_neg: "safe_formula (Neg \<phi>) = ((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> ((\<not>(\<exists>x y. \<phi> = Eq (Var x) (Var y))) \<and> fv \<phi> = {} \<and> safe_formula \<phi>))"
+proof (cases \<phi>)
+  case eq: (Eq a b)
+  then show ?thesis
+  proof (cases a)
+    case v1: (Var x1)
+    then show ?thesis using eq
+    proof (cases b)
+      case v2: (Var x2)
+      then show ?thesis using eq v1 v2 by auto
+    qed (auto)
+  qed (auto)
+qed (auto)
+
+lemma trigger_safe_0_conditions: "safe_formula (trigger_safe_0 \<phi> I \<psi>) = (safe_formula \<psi> \<and> (
+      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+    ) \<and> (((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>)))"
+proof (rule iffI)
+  define \<alpha> where "\<alpha> = Since \<psi> I (And \<psi> \<phi>)"
+  define \<beta> where "\<beta> = historically_safe_0 I (And \<psi> (Neg \<phi>))"
+  assume "safe_formula (trigger_safe_0 \<phi> I \<psi>)"
+  then have safe: "safe_formula \<alpha>" "safe_formula \<beta>"
+    using \<alpha>_def \<beta>_def
+    by (auto simp add: trigger_safe_0_def)
+  from safe(1) have a: "safe_formula \<psi> \<and> (
+      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+  )" using \<alpha>_def by auto
+  moreover from safe(2) have b: "safe_formula \<psi> \<and>
+    (safe_formula (Neg \<phi>) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))"
+    using \<beta>_def by (auto simp add: safe_assignment_def)
+  ultimately have "safe_formula \<psi> \<and> (
+      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+    ) \<and> (safe_formula (Neg \<phi>) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))"
+    by auto
+  then show "safe_formula \<psi> \<and> (
+      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+    ) \<and> (((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))"
+    using safe_formula_neg
+    by blast
+next
+  assume assm: "safe_formula \<psi> \<and> (
+      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+    ) \<and> (((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))"
+  then have "safe_formula \<psi> \<and> (
+      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+    ) \<and> (safe_formula (Neg \<phi>) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))"
+    using safe_formula_neg
+    by blast
+  then show "safe_formula (trigger_safe_0 \<phi> I \<psi>)"
+    by (simp add: trigger_safe_0_def)
+qed
+
+lemma 
+  assumes "mem I 0"
+  shows "safe_formula (Trigger \<phi> I \<psi>) = safe_formula (trigger_safe_0 \<phi> I \<psi>)"
+proof (rule iffI)
+  assume "safe_formula (Trigger \<phi> I \<psi>)"
+  then show "safe_formula (trigger_safe_0 \<phi> I \<psi>)"
+    using assms
+    by (auto simp add: trigger_safe_0_def)
+next
+  assume assm: "safe_formula (trigger_safe_0 \<phi> I \<psi>)"
+  then show "safe_formula (Trigger \<phi> I \<psi>)" using trigger_safe_0_conditions[of \<phi> I \<psi>] assms by auto
+qed
+
+lemma "future_bounded (trigger_safe_0 \<phi> I \<psi>) = (future_bounded \<psi> \<and> future_bounded \<phi>)"
+  by (auto simp add: trigger_safe_0_def)
 
 (* [a, \<infinity>] *)
 
@@ -2557,62 +2662,120 @@ lemma
   using assms
   by (auto simp add: trigger_safe_unbounded_def once_def historically_safe_unbounded_def)
 
-lemma
-  assumes "future_bounded \<psi>" "future_bounded \<phi>"
-  shows "future_bounded (trigger_safe_unbounded \<phi> I \<psi>)"
-  using assms by (auto simp add: trigger_safe_unbounded_def)
+lemma "future_bounded (trigger_safe_unbounded \<phi> I \<psi>) = (future_bounded \<psi> \<and> future_bounded \<phi>)"
+  by (auto simp add: trigger_safe_unbounded_def)
 
 (* [a, b] *)
 
-lemma
-  assumes "safe_formula \<psi>"
-  assumes "safe_formula \<phi>"
-  assumes "fv \<phi> = fv \<psi>"
-  (* can this be improved? probably not. if \<psi> holds everywhere, \<phi> can be assigned anything *)
-  (* vice versa, if \<phi> holds at i, everything can be assigned to \<psi> *)
-  shows "safe_formula (trigger_safe_bounded \<phi> I \<psi>)"
-  using assms int_remove_lower_bound_bounded
-  by (auto simp add: trigger_safe_bounded_def historically_safe_bounded_def once_def sometimes_def)
+lemma 
+  assumes "\<not>mem I 0"
+  shows "safe_formula (Trigger \<phi> I \<psi>) = safe_formula (trigger_safe_bounded \<phi> I \<psi>)"
+proof (rule iffI)
+  assume "safe_formula (Trigger \<phi> I \<psi>)"
+  then show "safe_formula (trigger_safe_bounded \<phi> I \<psi>)"
+    using assms
+    by (simp add: trigger_safe_bounded_def)
+next
+  assume "safe_formula (trigger_safe_bounded \<phi> I \<psi>)"
+  then show "safe_formula (Trigger \<phi> I \<psi>)"
+  by (simp add: trigger_safe_bounded_def safe_assignment_def)
+qed
 
-lemma
-  assumes "future_bounded \<psi>" "future_bounded \<phi>"
-  assumes "bounded I"
-  shows "future_bounded (trigger_safe_bounded \<phi> I \<psi>)"
-  using assms by (auto simp add: trigger_safe_bounded_def)
+lemma "future_bounded (trigger_safe_bounded \<phi> I \<psi>) = (bounded I \<and> future_bounded \<psi> \<and> future_bounded \<phi>)"
+  by (auto simp add: trigger_safe_bounded_def)
 
 (* release *)
 
 (* [0, b] *)
 
-lemma
-  assumes "safe_formula \<psi>"
-  assumes "safe_formula \<phi>"
-  assumes "fv \<phi> = fv \<psi>"
-  shows "safe_formula (release_safe_0 \<phi> I \<psi>)"
-  using assms by (auto simp add: release_safe_0_def always_safe_0_def once_def sometimes_def)
+lemma release_safe_0_conditions: "safe_formula (release_safe_0 \<phi> I \<psi>) = (safe_formula \<psi> \<and> (
+      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+    ) \<and> (((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>)))"
+proof (rule iffI)
+  define \<alpha> where "\<alpha> = Since \<psi> I (And \<psi> \<phi>)"
+  define \<beta> where "\<beta> = always_safe_0 I (And \<psi> (Neg \<phi>))"
+  assume "safe_formula (release_safe_0 \<phi> I \<psi>)"
+  then have safe: "safe_formula \<alpha>" "safe_formula \<beta>"
+    using \<alpha>_def \<beta>_def
+    by (auto simp add: release_safe_0_def)
+  from safe(1) have a: "safe_formula \<psi> \<and> (
+      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+  )" using \<alpha>_def by auto
+  moreover from safe(2) have b: "safe_formula \<psi> \<and>
+    (safe_formula (Neg \<phi>) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))"
+    using \<beta>_def by (auto simp add: safe_assignment_def)
+  ultimately have "safe_formula \<psi> \<and> (
+      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+    ) \<and> (safe_formula (Neg \<phi>) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))"
+    by auto
+  then show "safe_formula \<psi> \<and> (
+      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+    ) \<and> (((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))"
+    using safe_formula_neg
+    by blast
+next
+  assume assm: "safe_formula \<psi> \<and> (
+      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+    ) \<and> (((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))"
+  then have "safe_formula \<psi> \<and> (
+      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+    ) \<and> (safe_formula (Neg \<phi>) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))"
+    using safe_formula_neg
+    by blast
+  then show "safe_formula (release_safe_0 \<phi> I \<psi>)"
+    by (simp add: release_safe_0_def)
+qed
 
-lemma
-  assumes "future_bounded \<psi>" "future_bounded \<phi>"
-  assumes "bounded I"
-  shows "future_bounded (release_safe_0 \<phi> I \<psi>)"
-  using assms by (auto simp add: release_safe_0_def)
+lemma 
+  assumes "mem I 0"
+  shows "safe_formula (Release \<phi> I \<psi>) = safe_formula (release_safe_0 \<phi> I \<psi>)"
+proof (rule iffI)
+  assume "safe_formula (Release \<phi> I \<psi>)"
+  then show "safe_formula (release_safe_0 \<phi> I \<psi>)"
+    using assms
+    by (auto simp add: release_safe_0_def)
+next
+  assume assm: "safe_formula (release_safe_0 \<phi> I \<psi>)"
+  then show "safe_formula (Release \<phi> I \<psi>)" using release_safe_0_conditions[of \<phi> I \<psi>] assms by auto
+qed
+
+lemma "future_bounded (release_safe_0 \<phi> I \<psi>) = (bounded I \<and> future_bounded \<psi> \<and> future_bounded \<phi>)"
+  by (auto simp add: release_safe_0_def)
 
 (* [a, b] *)
 
 lemma
-  assumes "safe_formula \<psi>"
-  assumes "safe_formula \<phi>"
-  assumes "fv \<phi> = fv \<psi>"
-  shows "safe_formula (release_safe_bounded \<phi> I \<psi>)"
-  using assms
-  by (auto simp add: release_safe_bounded_def always_safe_bounded_def once_def sometimes_def)
+  assumes "\<not>mem I 0"
+  shows "safe_formula (Release \<phi> I \<psi>) = safe_formula (release_safe_bounded \<phi> I \<psi>)"
+proof (rule iffI)
+  assume "safe_formula (Release \<phi> I \<psi>)"
+  then show "safe_formula (release_safe_bounded \<phi> I \<psi>)"
+    using assms
+    by (simp add: release_safe_bounded_def)
+next
+  assume "safe_formula (release_safe_bounded \<phi> I \<psi>)"
+  then show "safe_formula (Release \<phi> I \<psi>)"
+  by (simp add: release_safe_bounded_def safe_assignment_def)
+qed
 
-lemma
-  assumes "future_bounded \<psi>" "future_bounded \<phi>"
-  assumes "\<not>mem I 0" "bounded I"
-  shows "future_bounded (release_safe_bounded \<phi> I \<psi>)"
-  using assms flip_int_less_lower_props[of I "flip_int_less_lower I"] int_remove_lower_bound_bounded
-  by (auto simp add: release_safe_bounded_def sometimes_def)
+lemma "future_bounded (release_safe_bounded \<phi> I \<psi>) = (bounded I \<and> \<not>mem I 0 \<and> future_bounded \<psi> \<and> future_bounded \<phi>)"
+proof (rule iffI)
+  assume "future_bounded (release_safe_bounded \<phi> I \<psi>)"
+  then show "bounded I \<and> \<not>mem I 0 \<and> future_bounded \<psi> \<and> future_bounded \<phi>"
+    by (auto simp add: release_safe_bounded_def eventually_def bounded.rep_eq flip_int_less_lower.rep_eq)
+next
+  assume "bounded I \<and> \<not>mem I 0 \<and> future_bounded \<psi> \<and> future_bounded \<phi>"
+  then show "future_bounded (release_safe_bounded \<phi> I \<psi>)"
+    using flip_int_less_lower_props[of I "flip_int_less_lower I"] int_remove_lower_bound_bounded
+  by (auto simp add: release_safe_bounded_def eventually_def)
+qed
+  
 
 abbreviation "safe_regex \<equiv> Regex.safe_regex fv (\<lambda>g \<phi>. safe_formula \<phi> \<or>
   (g = Lax \<and> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False)))"
@@ -2621,9 +2784,6 @@ lemma safe_regex_safe_formula:
   "safe_regex m g r \<Longrightarrow> \<phi> \<in> Regex.atms r \<Longrightarrow> safe_formula \<phi> \<or>
   (\<exists>\<psi>. \<phi> = Neg \<psi> \<and> safe_formula \<psi>)"
   by (cases g) (auto dest!: safe_regex_safe[rotated] split: formula.splits[where formula=\<phi>])
-
-lemma safe_abbrevs[simp]: "safe_formula TT" "safe_formula FF"
-  unfolding TT_def FF_def by auto
 
 definition safe_neg :: "formula \<Rightarrow> bool" where
   "safe_neg \<phi> \<longleftrightarrow> (\<not> safe_formula \<phi> \<longrightarrow> safe_formula (remove_neg \<phi>))"
@@ -2680,6 +2840,20 @@ lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Va
     and Until: "\<And>\<phi> I \<psi>. fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Until \<phi> I \<psi>)"
     and Not_Until: "\<And>\<phi> I \<psi>. fv (Neg \<phi>) \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow>
       \<not> safe_formula (Neg \<phi>) \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Until (Neg \<phi>) I \<psi>)"
+    and Trigger_0: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi>
+      \<Longrightarrow> (safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+      )
+      \<Longrightarrow> (((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))
+      \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Trigger \<phi> I \<psi>)"
+    and Trigger: "\<And>\<phi> I \<psi>. \<not>mem I 0 \<Longrightarrow> fv \<phi> = fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Trigger \<phi> I \<psi>)"
+    and Release_0: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi>
+      \<Longrightarrow> (safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+      )
+      \<Longrightarrow> (((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))
+      \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Trigger \<phi> I \<psi>)"
+    and Release: "\<And>\<phi> I \<psi>. \<not>mem I 0 \<Longrightarrow> fv \<phi> = fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Release \<phi> I \<psi>)"
     and MatchP: "\<And>I r. safe_regex Past Strict r \<Longrightarrow> \<forall>\<phi> \<in> atms r. P \<phi> \<Longrightarrow> P (MatchP I r)"
     and MatchF: "\<And>I r. safe_regex Futu Strict r \<Longrightarrow> \<forall>\<phi> \<in> atms r. P \<phi> \<Longrightarrow> P (MatchF I r)"
   shows "P \<phi>"
@@ -2725,15 +2899,41 @@ next
   then show ?case
   proof (cases \<phi>)
     case (Ands l)
-    then show ?thesis using "15.IH"(1) "15.IH"(3) "15.prems" Since by auto
+    then show ?thesis using "15.IH"(1-2) "15.prems" Since by auto
   qed (auto 0 3 elim!: disjE_Not2 intro: Since Not_Since) (*SLOW*)
 next
   case (16 \<phi> I \<psi>)
   then show ?case
   proof (cases \<phi>)
     case (Ands l)
-    then show ?thesis using "16.IH"(1) "16.IH"(3) "16.prems" Until by auto
+    then show ?thesis using "16.IH"(1-2)"16.prems" Until by auto
   qed (auto 0 3 elim!: disjE_Not2 intro: Until Not_Until) (*SLOW*)
+next
+  case (17 \<phi> I \<psi>)
+  then show ?case
+  proof (cases "mem I 0")
+    case True
+    then have "safe_formula \<psi> \<and> (safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+    ) \<and> (((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))"
+      using 17
+      by auto
+    then have "safe_formula \<phi> \<or> safe_formula (Neg \<phi>)" by auto
+    then show ?thesis using Trigger_0 17 by auto
+  next
+    case False
+    then show ?thesis using Trigger 17 by auto
+  qed
+next
+  case (18 \<phi> I \<psi>)
+  then show ?case
+  proof (cases "mem I 0")
+    case True
+    then show ?thesis using Release_0 18 by auto
+  next
+    case False
+    then show ?thesis using Release 18 by auto
+  qed
 next
   case (19 I r)
   then show ?case
@@ -2913,6 +3113,14 @@ next
   show ?case using Until.IH[of S V] Until.prems
     by (auto simp: Collect_disj_eq Int_Un_distrib subset_iff)
 next
+  case (Trigger \<phi> I \<psi>)
+  show ?case using Trigger.IH[of S V] Trigger.prems
+    by (auto simp: Collect_disj_eq Int_Un_distrib subset_iff)
+next
+  case (Release \<phi> I \<psi>)
+  show ?case using Release.IH[of S V] Release.prems
+    by (auto simp: Collect_disj_eq Int_Un_distrib subset_iff)
+next
   case (MatchP I r)
   from MatchP.prems(1-3) have "Regex.match (sat \<sigma> V v) r = Regex.match (sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) V' v) r"
     by (intro Regex.match_fv_cong MatchP(1)[of _ S V v] MatchP.prems(4)) auto
@@ -3034,6 +3242,26 @@ next
     with False 16 show ?thesis by simp
   qed
 next
+  case (17 \<phi> I \<psi>)
+  show ?case proof (cases "mem I 0")
+    case True
+    show ?thesis
+    proof (cases "safe_formula \<phi>")
+      case safe: True
+      then show ?thesis using 17 True by auto
+    next
+      case unsafe: False
+      then obtain \<phi>' where "\<phi> = Neg \<phi>'" using 17 True sorry
+      then show ?thesis using 17 True by auto
+    qed
+  next
+    case False
+    then show ?thesis using 17 by auto
+  qed
+next
+  case (18 \<phi> I \<psi>)
+  show ?case sorry
+next
   case (19 I r)
   then show ?case
     unfolding convert_multiway.simps fvi.simps fv_regex_alt regex.set_map image_image
@@ -3060,8 +3288,7 @@ lemma future_bounded_get_and:
   by (induction \<phi>) simp_all
 
 lemma safe_convert_multiway: "safe_formula \<phi> \<Longrightarrow> safe_formula (convert_multiway \<phi>)"
-proof (induction \<phi> rule: 
-safe_formula_induct)
+proof (induction \<phi> rule: safe_formula_induct)
   case (And_safe \<phi> \<psi>)
   let ?a = "And \<phi> \<psi>"
   let ?b = "convert_multiway ?a"
