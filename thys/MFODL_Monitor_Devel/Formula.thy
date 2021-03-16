@@ -2899,19 +2899,23 @@ lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Va
     and Until: "\<And>\<phi> I \<psi>. fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Until \<phi> I \<psi>)"
     and Not_Until: "\<And>\<phi> I \<psi>. fv (Neg \<phi>) \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow>
       \<not> safe_formula (Neg \<phi>) \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Until (Neg \<phi>) I \<psi>)"
-    and Trigger_0: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi>
-      \<Longrightarrow> (safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-      )
-      \<Longrightarrow> (((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))
-      \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Trigger \<phi> I \<psi>)"
+    and Trigger_0_safe_phi: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow>
+      safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Trigger \<phi> I \<psi>)"
+    and Trigger_0_constraint_safe_assignment: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow>
+      \<not>safe_formula \<phi> \<Longrightarrow> is_constraint (Neg \<phi>) \<Longrightarrow> safe_assignment (fv \<psi>) \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Trigger \<phi> I \<psi>)"
+    and Trigger_0_constraint_eq: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow>
+      \<not>safe_formula \<phi> \<Longrightarrow> is_constraint (Neg \<phi>) \<Longrightarrow> (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<Longrightarrow> P \<psi> \<Longrightarrow> P (Trigger \<phi> I \<psi>)"
+    and Trigger_0_constraint: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow>
+      \<not>safe_formula \<phi> \<Longrightarrow> is_constraint (Neg \<phi>) \<Longrightarrow> is_constraint \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Trigger \<phi> I \<psi>)"
     and Trigger: "\<And>\<phi> I \<psi>. \<not>mem I 0 \<Longrightarrow> fv \<phi> = fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Trigger \<phi> I \<psi>)"
-    and Release_0: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi>
-      \<Longrightarrow> (safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-      )
-      \<Longrightarrow> (((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))
-      \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Trigger \<phi> I \<psi>)"
+    and Release_0_safe_phi: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow>
+      safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Release \<phi> I \<psi>)"
+    and Release_0_constraint_safe_assignment: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow>
+      \<not>safe_formula \<phi> \<Longrightarrow> is_constraint (Neg \<phi>) \<Longrightarrow> safe_assignment (fv \<psi>) \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Release \<phi> I \<psi>)"
+    and Release_0_constraint_eq: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow>
+      \<not>safe_formula \<phi> \<Longrightarrow> is_constraint (Neg \<phi>) \<Longrightarrow> (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<Longrightarrow> P \<psi> \<Longrightarrow> P (Release \<phi> I \<psi>)"
+    and Release_0_constraint: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow>
+      \<not>safe_formula \<phi> \<Longrightarrow> is_constraint (Neg \<phi>) \<Longrightarrow> is_constraint \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Release \<phi> I \<psi>)"
     and Release: "\<And>\<phi> I \<psi>. \<not>mem I 0 \<Longrightarrow> fv \<phi> = fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Release \<phi> I \<psi>)"
     and MatchP: "\<And>I r. safe_regex Past Strict r \<Longrightarrow> \<forall>\<phi> \<in> atms r. P \<phi> \<Longrightarrow> P (MatchP I r)"
     and MatchF: "\<And>I r. safe_regex Futu Strict r \<Longrightarrow> \<forall>\<phi> \<in> atms r. P \<phi> \<Longrightarrow> P (MatchF I r)"
@@ -2972,8 +2976,35 @@ next
   then show ?case
   proof (cases "mem I 0")
     case mem: True
-    then have "P \<phi>" using 17 mem by auto
-    then show ?thesis using Trigger_0 17 mem by auto
+    show ?thesis
+    proof (cases "safe_formula \<phi>")
+      case True
+      then show ?thesis using mem Trigger_0_safe_phi "17.IH"(1-2) "17.prems" by auto
+    next
+      case unsafe: False
+      then have neg_phi_props: "(safe_assignment (fv \<psi>) \<phi>) \<or> (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> is_constraint \<phi>"
+        using mem "17.prems"
+        by auto
+      moreover {
+        assume "safe_assignment (fv \<psi>) \<phi>"
+        then have ?thesis
+          using mem unsafe Trigger_0_constraint_safe_assignment "17.IH"(1) "17.prems"
+          by auto
+      }
+      moreover {
+        assume "\<exists>x. \<phi> = Eq (Var x) (Var x)"
+        then have ?thesis
+          using mem unsafe Trigger_0_constraint_eq "17.IH"(1) "17.prems"
+          by auto
+      }
+      moreover {
+        assume "is_constraint \<phi>"
+        then have ?thesis
+          using mem unsafe Trigger_0_constraint "17.IH"(1) "17.prems"
+          by auto
+      }
+      ultimately show ?thesis by blast
+    qed
   next
     case False
     then show ?thesis using Trigger 17 by auto
@@ -2982,8 +3013,36 @@ next
   case (18 \<phi> I \<psi>)
   then show ?case
   proof (cases "mem I 0")
-    case True
-    then show ?thesis using Release_0 18 by auto
+    case mem: True
+    show ?thesis
+    proof (cases "safe_formula \<phi>")
+      case True
+      then show ?thesis using mem Release_0_safe_phi "18.IH"(1-2) "18.prems" by auto
+    next
+      case unsafe: False
+      then have neg_phi_props: "(safe_assignment (fv \<psi>) \<phi>) \<or> (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> is_constraint \<phi>"
+        using mem "18.prems"
+        by auto
+      moreover {
+        assume "safe_assignment (fv \<psi>) \<phi>"
+        then have ?thesis
+          using mem unsafe Release_0_constraint_safe_assignment "18.IH"(1) "18.prems"
+          by auto
+      }
+      moreover {
+        assume "\<exists>x. \<phi> = Eq (Var x) (Var x)"
+        then have ?thesis
+          using mem unsafe Release_0_constraint_eq "18.IH"(1) "18.prems"
+          by auto
+      }
+      moreover {
+        assume "is_constraint \<phi>"
+        then have ?thesis
+          using mem unsafe Release_0_constraint "18.IH"(1) "18.prems"
+          by auto
+      }
+      ultimately show ?thesis by blast
+    qed
   next
     case False
     then show ?thesis using Release 18 by auto
