@@ -2867,7 +2867,10 @@ lemma disjE_Not2: "P \<or> Q \<Longrightarrow> (P \<Longrightarrow> R) \<Longrig
 
 lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Var Pred Let
     And_assign And_safe And_constraint And_Not Ands Neg Or Exists Agg
-    Prev Next Since Not_Since Until Not_Until MatchP MatchF]:
+    Prev Next Since Not_Since Until Not_Until
+    Trigger_0_safe_phi Trigger_0_constraint_safe_assignment Trigger_0_constraint_eq Trigger_0_constraint Trigger
+    Release_0_safe_phi Release_0_constraint_safe_assignment Release_0_constraint_eq Release_0_constraint Release
+    MatchP MatchF]:
   assumes "safe_formula \<phi>"
     and Eq_Const: "\<And>c d. P (Eq (Const c) (Const d))"
     and Eq_Var1: "\<And>c x. P (Eq (Const c) (Var x))"
@@ -2899,7 +2902,7 @@ lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Va
     and Until: "\<And>\<phi> I \<psi>. fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Until \<phi> I \<psi>)"
     and Not_Until: "\<And>\<phi> I \<psi>. fv (Neg \<phi>) \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow>
       \<not> safe_formula (Neg \<phi>) \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Until (Neg \<phi>) I \<psi>)"
-    and Trigger_0_safe_phi: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow>
+    and Trigger_0_safe_phi: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow> 
       safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Trigger \<phi> I \<psi>)"
     and Trigger_0_constraint_safe_assignment: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow>
       \<not>safe_formula \<phi> \<Longrightarrow> is_constraint (Neg \<phi>) \<Longrightarrow> safe_assignment (fv \<psi>) \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Trigger \<phi> I \<psi>)"
@@ -3356,16 +3359,45 @@ next
   qed
 next
   case (17 \<phi> I \<psi>)
-  show ?case proof (cases "mem I 0")
-    case True
+  then show ?case
+  proof (cases "mem I 0")
+    case mem: True
     show ?thesis
     proof (cases "safe_formula \<phi>")
-      case safe: True
-      then show ?thesis using 17 True by auto
+      case True
+      then show ?thesis using mem "17.IH"(1-2) "17.prems" by auto
     next
       case unsafe: False
-      then obtain \<phi>' where "\<phi> = Neg \<phi>'" using 17 True sorry
-      then show ?thesis using 17 True by auto
+      then have neg_phi_props: "(safe_assignment (fv \<psi>) \<phi>) \<or> (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> is_constraint \<phi>"
+        using mem "17.prems"
+        by auto
+      moreover {
+        assume "safe_assignment (fv \<psi>) \<phi>"
+        then have "fvi b (convert_multiway \<phi>) = fvi b \<phi>"
+          by (auto simp add: safe_assignment_def split: formula.splits)
+        then have ?thesis
+          using mem unsafe "17.IH"(1) "17.prems"
+          by auto
+      }
+      moreover {
+        assume "\<exists>x. \<phi> = Eq (Var x) (Var x)"
+        then have ?thesis
+          using mem unsafe "17.IH"(1) "17.prems"
+          by auto
+      }
+      moreover {
+        assume c: "is_constraint \<phi>"
+        then have "fvi b (convert_multiway \<phi>) = fvi b \<phi>"
+        proof (cases \<phi>)
+          case (Neg \<alpha>)
+          then show ?thesis using c
+          proof (cases \<alpha>) qed (auto)
+        qed (auto)
+        then have ?thesis
+          using mem unsafe "17.IH"(1) "17.prems"
+          by auto
+      }
+      ultimately show ?thesis by blast
     qed
   next
     case False
@@ -3373,7 +3405,50 @@ next
   qed
 next
   case (18 \<phi> I \<psi>)
-  show ?case sorry
+  then show ?case
+  proof (cases "mem I 0")
+    case mem: True
+    show ?thesis
+    proof (cases "safe_formula \<phi>")
+      case True
+      then show ?thesis using mem "18.IH"(1-2) "18.prems" by auto
+    next
+      case unsafe: False
+      then have neg_phi_props: "(safe_assignment (fv \<psi>) \<phi>) \<or> (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> is_constraint \<phi>"
+        using mem "18.prems"
+        by auto
+      moreover {
+        assume "safe_assignment (fv \<psi>) \<phi>"
+        then have "fvi b (convert_multiway \<phi>) = fvi b \<phi>"
+          by (auto simp add: safe_assignment_def split: formula.splits)
+        then have ?thesis
+          using mem unsafe "18.IH"(1) "18.prems"
+          by auto
+      }
+      moreover {
+        assume "\<exists>x. \<phi> = Eq (Var x) (Var x)"
+        then have ?thesis
+          using mem unsafe "18.IH"(1) "18.prems"
+          by auto
+      }
+      moreover {
+        assume c: "is_constraint \<phi>"
+        then have "fvi b (convert_multiway \<phi>) = fvi b \<phi>"
+        proof (cases \<phi>)
+          case (Neg \<alpha>)
+          then show ?thesis using c
+          proof (cases \<alpha>) qed (auto)
+        qed (auto)
+        then have ?thesis
+          using mem unsafe "18.IH"(1) "18.prems"
+          by auto
+      }
+      ultimately show ?thesis by blast
+    qed
+  next
+    case False
+    then show ?thesis using 18 by auto
+  qed
 next
   case (19 I r)
   then show ?case
