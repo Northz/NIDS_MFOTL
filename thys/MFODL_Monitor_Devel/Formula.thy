@@ -2449,17 +2449,19 @@ fun safe_formula :: "formula \<Rightarrow> bool" where
 | "safe_formula (Until \<phi> I \<psi>) = (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and>
     (safe_formula \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False)))"
 | "safe_formula (Trigger \<phi> I \<psi>) = (if (mem I 0) then
-    (safe_formula \<psi> \<and> (
-      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-    ) \<and> (((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>)))
+    (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> is_constraint (Neg \<phi>) \<and> (
+      (safe_assignment (fv \<psi>) \<phi>) \<or>
+      (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or>
+      is_constraint \<phi>
+    )))
       else
     (safe_formula \<phi> \<and> safe_formula \<psi> \<and> fv \<phi> = fv \<psi>))"
 | "safe_formula (Release \<phi> I \<psi>) = (if (mem I 0) then
-    (safe_formula \<psi> \<and> (
-      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-    ) \<and> (((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>)))
+    (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> is_constraint (Neg \<phi>) \<and> (
+      (safe_assignment (fv \<psi>) \<phi>) \<or>
+      (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or>
+      is_constraint \<phi>
+    )))
       else
     (safe_formula \<phi> \<and> safe_formula \<psi> \<and> fv \<phi> = fv \<psi>))"
 | "safe_formula (MatchP I r) = Regex.safe_regex fv (\<lambda>g \<phi>. safe_formula \<phi> \<or>
@@ -2634,6 +2636,59 @@ next
     by (simp add: trigger_safe_0_def)
 qed
 
+lemma neg_phi_and_constraint: "(case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False) \<Longrightarrow> is_constraint (Neg \<phi>) \<Longrightarrow> False"
+proof (cases \<phi>)
+  case phi: (Neg \<phi>')
+  assume "is_constraint (Neg \<phi>)"
+  then show ?thesis using phi by auto
+qed (auto)
+
+lemma safe_formula_constraint_simp: "((case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False) \<and> (safe_formula \<phi> \<or> is_constraint (Neg \<phi>))) =
+       ((case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False) \<and> (safe_formula \<phi>))"
+  using neg_phi_and_constraint
+  by auto
+
+lemma trigger_release_conditions_simp:
+  "(safe_formula \<psi> \<and> (
+      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+    ) \<and> (((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>)))
+  =
+  (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> is_constraint (Neg \<phi>) \<and> (
+      (safe_assignment (fv \<psi>) \<phi>) \<or>
+      (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or>
+      is_constraint \<phi>
+    )))"
+proof -
+  have "(safe_formula \<psi> \<and> (
+      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
+        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+    ) \<and> (((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>)))
+    =
+    (safe_formula \<psi> \<and> (
+      safe_assignment (fv \<psi>) \<phi> \<and> ((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))) \<or>
+      safe_formula \<phi> \<and> ((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))) \<or>
+      fv \<phi> \<subseteq> fv \<psi> \<and> ((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<and> is_constraint \<phi> \<or> (is_constraint \<phi> \<and> (safe_formula \<phi> \<or> is_constraint (Neg \<phi>)) \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False) \<and> (safe_formula \<phi> \<or> is_constraint (Neg \<phi>))))
+    ))
+" by auto
+  moreover have "(safe_formula \<psi> \<and> (
+      safe_assignment (fv \<psi>) \<phi> \<and> ((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))) \<or>
+      safe_formula \<phi> \<and> ((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))) \<or>
+      fv \<phi> \<subseteq> fv \<psi> \<and> ((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<and> is_constraint \<phi> \<or> (is_constraint \<phi> \<and> (safe_formula \<phi> \<or> is_constraint (Neg \<phi>)) \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False) \<and> (safe_formula \<phi> \<or> is_constraint (Neg \<phi>))))
+    ))
+= 
+      (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> is_constraint (Neg \<phi>) \<and> (
+        (safe_assignment (fv \<psi>) \<phi>) \<or>
+        (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or>
+        is_constraint \<phi>
+      )))
+"
+    by (auto simp add: safe_formula_constraint_simp safe_assignment_def)
+  ultimately show ?thesis by auto
+qed
+
+
+
 lemma 
   assumes "mem I 0"
   shows "safe_formula (Trigger \<phi> I \<psi>) = safe_formula (trigger_safe_0 \<phi> I \<psi>)"
@@ -2644,7 +2699,9 @@ proof (rule iffI)
     by (auto simp add: trigger_safe_0_def)
 next
   assume assm: "safe_formula (trigger_safe_0 \<phi> I \<psi>)"
-  then show "safe_formula (Trigger \<phi> I \<psi>)" using trigger_safe_0_conditions[of \<phi> I \<psi>] assms by auto
+  then show "safe_formula (Trigger \<phi> I \<psi>)" using
+      trigger_safe_0_conditions[of \<phi> I \<psi>] assms trigger_release_conditions_simp
+    by auto
 qed
 
 lemma "future_bounded (trigger_safe_0 \<phi> I \<psi>) = (future_bounded \<psi> \<and> future_bounded \<phi>)"
@@ -2742,7 +2799,9 @@ proof (rule iffI)
     by (auto simp add: release_safe_0_def)
 next
   assume assm: "safe_formula (release_safe_0 \<phi> I \<psi>)"
-  then show "safe_formula (Release \<phi> I \<psi>)" using release_safe_0_conditions[of \<phi> I \<psi>] assms by auto
+  then show "safe_formula (Release \<phi> I \<psi>)"
+    using release_safe_0_conditions[of \<phi> I \<psi>] assms trigger_release_conditions_simp
+    by auto
 qed
 
 lemma "future_bounded (release_safe_0 \<phi> I \<psi>) = (bounded I \<and> future_bounded \<psi> \<and> future_bounded \<phi>)"
@@ -2912,14 +2971,9 @@ next
   case (17 \<phi> I \<psi>)
   then show ?case
   proof (cases "mem I 0")
-    case True
-    then have "safe_formula \<psi> \<and> (safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-    ) \<and> (((\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Neg \<phi>) \<or> safe_formula \<phi>))"
-      using 17
-      by auto
-    then have "safe_formula \<phi> \<or> safe_formula (Neg \<phi>)" by auto
-    then show ?thesis using Trigger_0 17 by auto
+    case mem: True
+    then have "P \<phi>" using 17 mem by auto
+    then show ?thesis using Trigger_0 17 mem by auto
   next
     case False
     then show ?thesis using Trigger 17 by auto
