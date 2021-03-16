@@ -3408,7 +3408,7 @@ next
   then show ?case
   proof (cases "mem I 0")
     case mem: True
-    show ?thesis
+    show ?thesis 
     proof (cases "safe_formula \<phi>")
       case True
       then show ?thesis using mem "18.IH"(1-2) "18.prems" by auto
@@ -3611,6 +3611,18 @@ next
     using that by (cases "Neg \<phi>'" rule: safe_formula.cases) simp_all
   with Neg show ?case by (simp add: fv_convert_multiway)
 next
+  case assms: (Trigger_0_constraint_safe_assignment \<phi> I \<psi>)
+  then show ?case proof (cases \<phi>) qed (auto simp add: fv_convert_multiway)
+next
+  case assms: (Trigger_0_constraint \<phi> I \<psi>)
+  then show ?case proof (cases \<phi>) qed (auto simp add: fv_convert_multiway)
+next
+  case assms: (Release_0_constraint_safe_assignment \<phi> I \<psi>)
+  then show ?case proof (cases \<phi>) qed (auto simp add: fv_convert_multiway)
+next
+  case (Release_0_constraint \<phi> I \<psi>)
+  then show ?case proof (cases \<phi>) qed (auto simp add: fv_convert_multiway)
+next
   case (MatchP I r)
   then show ?case
     by (auto 0 3 simp: atms_def fv_convert_multiway intro!: safe_regex_map_regex
@@ -3622,7 +3634,7 @@ next
     by (auto 0 3 simp: atms_def fv_convert_multiway intro!: safe_regex_map_regex
       elim!: disjE_Not2 case_NegE
       dest: safe_regex_safe_formula split: if_splits)
-qed (auto simp add: fv_convert_multiway nfv_convert_multiway)
+qed (auto simp add: fv_convert_multiway nfv_convert_multiway split: if_splits)
 
 lemma future_bounded_remove_neg: "future_bounded (remove_neg \<phi>) = future_bounded \<phi>"
   by (cases \<phi>) auto
@@ -3661,6 +3673,24 @@ next
     unfolding b_def by (simp add: list.pred_map o_def)
   ultimately show ?case by auto
 next
+  case (Trigger_0_constraint_safe_assignment \<phi> I \<psi>)
+  then show ?case proof (cases \<phi>) qed (auto)
+next
+  case (Trigger_0_constraint_eq \<phi> I \<psi>)
+  then show ?case proof (cases \<phi>) qed (auto)
+next
+  case (Trigger_0_constraint \<phi> I \<psi>)
+  then show ?case proof (cases \<phi>) qed (auto)
+next
+  case (Release_0_constraint_safe_assignment \<phi> I \<psi>)
+  then show ?case proof (cases \<phi>) qed (auto)
+next
+  case (Release_0_constraint_eq \<phi> I \<psi>)
+  then show ?case proof (cases \<phi>) qed (auto)
+next
+  case (Release_0_constraint \<phi> I \<psi>)
+  then show ?case proof (cases \<phi>) qed (auto)
+next
   case (MatchP I r)
   then show ?case
     by (fastforce simp: atms_def regex.pred_set regex.set_map ball_Un
@@ -3698,6 +3728,24 @@ next
   case (Agg y \<omega> b f \<phi>)
   then show ?case
     by (simp add: nfv_def fv_convert_multiway cong: conj_cong)
+next
+  case (Trigger_0_constraint_safe_assignment \<phi> I \<psi>)
+  then show ?case proof (cases \<phi>) qed (auto)
+next
+  case (Trigger_0_constraint_eq \<phi> I \<psi>)
+then show ?case proof (cases \<phi>) qed (auto)
+next
+  case (Trigger_0_constraint \<phi> I \<psi>)
+  then show ?case proof (cases \<phi>) qed (auto)
+next
+  case (Release_0_constraint_safe_assignment \<phi> I \<psi>)
+  then show ?case proof (cases \<phi>) qed (auto)
+next
+  case (Release_0_constraint_eq \<phi> I \<psi>)
+  then show ?case proof (cases \<phi>) qed (auto)
+next
+  case (Release_0_constraint \<phi> I \<psi>)
+  then show ?case proof (cases \<phi>) qed (auto)
 next
   case (MatchP I r)
   then have "Regex.match (sat \<sigma> V v) (convert_multiway_regex r) = Regex.match (sat \<sigma> V v) r"
