@@ -1603,19 +1603,8 @@ lemma
   shows "safe_formula (trigger_safe_0 \<phi> I \<psi>)"
   using assms by (auto simp add: trigger_safe_0_def)
 
-lemma safe_formula_neg: "safe_formula (Formula.Neg \<phi>) = ((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> ((\<not>(\<exists>x y. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var y))) \<and> fv \<phi> = {} \<and> safe_formula \<phi>))"
-proof (cases \<phi>)
-  case eq: (Eq a b)
-  then show ?thesis
-  proof (cases a)
-    case v1: (Var x1)
-    then show ?thesis using eq
-    proof (cases b)
-      case v2: (Var x2)
-      then show ?thesis using eq v1 v2 by auto
-    qed (auto)
-  qed (auto)
-qed (auto)
+lemma safe_formula_neg: "safe_formula (Formula.Neg \<phi>) = ((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>))"
+  by (induct "Formula.Neg \<phi>" rule: safe_formula.induct) auto
 
 lemma trigger_safe_0_conditions: "safe_formula (trigger_safe_0 \<phi> I \<psi>) = (safe_formula \<psi> \<and> (
       safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
