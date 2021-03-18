@@ -1758,6 +1758,10 @@ next
   with Neg show ?case by (simp add: fv_convert_multiway)
 next
   case assms: (Trigger_0_constraint_safe_assignment \<phi> I \<psi>)
+  (*
+    this works as well but is a bit slower:
+    then show ?case by (induct \<phi> rule: safe_formula.induct) (auto simp add: fv_convert_multiway)
+  *)
   then show ?case proof (cases \<phi>) qed (auto simp add: fv_convert_multiway)
 next
   case assms: (Trigger_0_constraint \<phi> I \<psi>)
