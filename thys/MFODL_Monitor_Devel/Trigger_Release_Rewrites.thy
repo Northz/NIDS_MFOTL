@@ -1603,9 +1603,6 @@ lemma
   shows "safe_formula (trigger_safe_0 \<phi> I \<psi>)"
   using assms by (auto simp add: trigger_safe_0_def)
 
-lemma safe_formula_neg: "safe_formula (Formula.Neg \<phi>) = ((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>))"
-  by (induct "Formula.Neg \<phi>" rule: safe_formula.induct) auto
-
 lemma trigger_safe_0_conditions: "safe_formula (trigger_safe_0 \<phi> I \<psi>) = (safe_formula \<psi> \<and> (
       safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
         fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
@@ -1633,7 +1630,7 @@ proof (rule iffI)
       safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
         fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
     ) \<and> (((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>))"
-    using safe_formula_neg
+    using safe_formula_NegD
     by blast
 next
   assume assm: "safe_formula \<psi> \<and> (
@@ -1644,7 +1641,7 @@ next
       safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
         fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
     ) \<and> (safe_formula (Formula.Neg \<phi>) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>))"
-    using safe_formula_neg
+    using safe_formula_NegD
     by blast
   then show "safe_formula (trigger_safe_0 \<phi> I \<psi>)"
     by (simp add: trigger_safe_0_def)
@@ -1784,7 +1781,7 @@ proof (rule iffI)
       safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
         fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
     ) \<and> (((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>))"
-    using safe_formula_neg
+    using safe_formula_NegD
     by blast
 next
   assume assm: "safe_formula \<psi> \<and> (
@@ -1795,7 +1792,7 @@ next
       safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
         fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
     ) \<and> (safe_formula (Formula.Neg \<phi>) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>))"
-    using safe_formula_neg
+    using safe_formula_NegD
     by blast
   then show "safe_formula (release_safe_0 \<phi> I \<psi>)"
     by (simp add: release_safe_0_def)

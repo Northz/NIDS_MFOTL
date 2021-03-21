@@ -1206,10 +1206,8 @@ next
     by (intro MatchF) (auto simp: atms_def dest: safe_regex_safe_formula split: if_splits)
 qed (auto simp: assms)
 
-lemma safe_formula_NegD:
-  "safe_formula (Formula.Neg \<phi>) \<Longrightarrow> fv \<phi> = {} \<or> (\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x))"
-  by (induct "Formula.Neg \<phi>" rule: safe_formula_induct) auto
-
+lemma safe_formula_NegD: "safe_formula (Formula.Neg \<phi>) = ((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>))"
+  by (induct "Formula.Neg \<phi>" rule: safe_formula.induct) auto
 
 subsection \<open>Slicing traces\<close>
 
