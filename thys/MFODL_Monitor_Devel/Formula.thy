@@ -102,6 +102,7 @@ qualified datatype (discs_sels) formula = Pred name "trm list"
   | Neg formula | Or formula formula | And formula formula | Ands "formula list" | Exists formula
   | Agg nat agg_op nat trm formula
   | Prev \<I> formula | Next \<I> formula
+  | Historically \<I> formula | Always \<I> formula
   | Since formula \<I> formula | Until formula \<I> formula
   | Trigger formula \<I> formula | Release formula \<I> formula
   | MatchF \<I> "formula Regex.regex" | MatchP \<I> "formula Regex.regex"
@@ -123,6 +124,8 @@ qualified fun fvi :: "nat \<Rightarrow> formula \<Rightarrow> nat set" where
 | "fvi b (Agg y \<omega> b' f \<phi>) = fvi (b + b') \<phi> \<union> fvi_trm (b + b') f \<union> (if b \<le> y then {y - b} else {})"
 | "fvi b (Prev I \<phi>) = fvi b \<phi>"
 | "fvi b (Next I \<phi>) = fvi b \<phi>"
+| "fvi b (Historically I \<phi>) = fvi b \<phi>"
+| "fvi b (Always I \<phi>) = fvi b \<phi>"
 | "fvi b (Since \<phi> I \<psi>) = fvi b \<phi> \<union> fvi b \<psi>"
 | "fvi b (Until \<phi> I \<psi>) = fvi b \<phi> \<union> fvi b \<psi>"
 | "fvi b (Trigger \<phi> I \<psi>) = fvi b \<phi> \<union> fvi b \<psi>"
@@ -206,6 +209,8 @@ lemma nfv_simps[simp]:
   "nfv (And \<phi> \<psi>) = max (nfv \<phi>) (nfv \<psi>)"
   "nfv (Prev I \<phi>) = nfv \<phi>"
   "nfv (Next I \<phi>) = nfv \<phi>"
+  "nfv (Historically I \<phi>) = nfv \<phi>"
+  "nfv (Always I \<phi>) = nfv \<phi>"
   "nfv (Since \<phi> I \<psi>) = max (nfv \<phi>) (nfv \<psi>)"
   "nfv (Until \<phi> I \<psi>) = max (nfv \<phi>) (nfv \<psi>)"
   "nfv (MatchP I r) = Regex.nfv_regex fv r"
@@ -255,13 +260,14 @@ qualified fun future_bounded :: "formula \<Rightarrow> bool" where
 | "future_bounded (Agg y \<omega> b f \<phi>) = future_bounded \<phi>"
 | "future_bounded (Prev I \<phi>) = future_bounded \<phi>"
 | "future_bounded (Next I \<phi>) = future_bounded \<phi>"
+| "future_bounded (Historically I \<phi>) = future_bounded \<phi>"
+| "future_bounded (Always I \<phi>) = (future_bounded \<phi> \<and> bounded I)"
 | "future_bounded (Since \<phi> I \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
 | "future_bounded (Until \<phi> I \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi> \<and> bounded I)"
 | "future_bounded (Trigger \<phi> I \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
 | "future_bounded (Release \<phi> I \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi> \<and> bounded I)"
 | "future_bounded (MatchP I r) = Regex.pred_regex future_bounded r"
 | "future_bounded (MatchF I r) = (Regex.pred_regex future_bounded r \<and> bounded I)"
-
 
 subsubsection \<open>Semantics\<close>
 
@@ -286,6 +292,8 @@ qualified fun sat :: "trace \<Rightarrow> (name \<rightharpoonup> nat \<Rightarr
     in (M = {} \<longrightarrow> fv \<phi> \<subseteq> {0..<b}) \<and> v ! y = eval_agg_op \<omega> M)"
 | "sat \<sigma> V v i (Prev I \<phi>) = (case i of 0 \<Rightarrow> False | Suc j \<Rightarrow> mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>)"
 | "sat \<sigma> V v i (Next I \<phi>) = (mem I ((\<tau> \<sigma> (Suc i) - \<tau> \<sigma> i)) \<and> sat \<sigma> V v (Suc i) \<phi>)"
+| "sat \<sigma> V v i (Historically I \<phi>) = (\<forall>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> sat \<sigma> V v j \<phi>)"
+| "sat \<sigma> V v i (Always I \<phi>) = (\<forall>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v j \<phi>)"
 | "sat \<sigma> V v i (Since \<phi> I \<psi>) = (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<psi> \<and> (\<forall>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>))"
 | "sat \<sigma> V v i (Until \<phi> I \<psi>) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j \<psi> \<and> (\<forall>k \<in> {i ..< j}. sat \<sigma> V v k \<phi>))"
 | "sat \<sigma> V v i (Trigger \<phi> I \<psi>) = (\<forall>j\<le>i. (mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)) \<longrightarrow> (sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>)))"
@@ -643,11 +651,11 @@ definition once :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
 lemma sat_once[simp] : "sat \<sigma> V v i (once I \<phi>) = (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>)"
   by (auto simp: once_def)
 
-definition historically :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "historically I \<phi> = (Neg (once I (Neg \<phi>)))"
+(* definition historically :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "historically I \<phi> = (Neg (once I (Neg \<phi>)))" *)
 
-lemma sat_historically[simp] : "sat \<sigma> V v i (historically I \<phi>) = (\<forall>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> sat \<sigma> V v j \<phi>)"
-  by (auto simp: historically_def)
+lemma "sat \<sigma> V v i (Historically I \<phi>) = sat \<sigma> V v i (Neg (once I (Neg \<phi>)))"
+  by auto
 
 definition eventually :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
   "eventually I \<phi> = Until TT I \<phi>"
@@ -655,11 +663,11 @@ definition eventually :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" wher
 lemma sat_eventually[simp] : "sat \<sigma> V v i (eventually I \<phi>) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j \<phi>)"
   by (auto simp: eventually_def)
 
-definition always :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "always I \<phi> = (Neg (eventually I (Neg \<phi>)))"
+(*definition always :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "always I \<phi> = (Neg (eventually I (Neg \<phi>)))"*)
 
-lemma sat_always[simp] : "sat \<sigma> V v i (always I \<phi>) = (\<forall>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v j \<phi>)"
-  by (auto simp: always_def)
+lemma "sat \<sigma> V v i (Always I \<phi>) = sat \<sigma> V v i (Neg (eventually I (Neg \<phi>)))"
+  by auto
 
 (* case distrinction since intervals aren't allowed to be empty and flip_int [0, \<infinity>] would be *)
 definition historically_safe_0 :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
@@ -746,6 +754,8 @@ fun past_only :: "formula \<Rightarrow> bool" where
 | "past_only (Agg _ _ _ _ \<psi>) = past_only \<psi>"
 | "past_only (Prev _ \<psi>) = past_only \<psi>"
 | "past_only (Next _ _) = False"
+| "past_only (Historically _ \<phi>) = past_only \<phi>"
+| "past_only (Always _ \<phi>) = False"
 | "past_only (Since \<alpha> _ \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
 | "past_only (Until \<alpha> _ \<beta>) = False"
 | "past_only (Trigger \<alpha> _ \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
@@ -797,6 +807,9 @@ next
   case (Prev I \<phi>)
   with \<tau>_prefix_conv[OF assms] show ?case by (simp split: nat.split)
 next
+  case (Historically I \<phi>)
+  with \<tau>_prefix_conv[OF assms] show ?case by auto
+next
   case (Since \<phi>1 I \<phi>2)
   with \<tau>_prefix_conv[OF assms] show ?case by auto
 next
@@ -842,6 +855,31 @@ definition safe_assignment :: "nat set \<Rightarrow> formula \<Rightarrow> bool"
      | Eq t (Var x) \<Rightarrow> (x \<notin> X \<and> fv_trm t \<subseteq> X)
      | _ \<Rightarrow> False)"
 
+definition restricted_formula :: "formula \<Rightarrow> nat set \<Rightarrow> bool" where
+  "restricted_formula \<phi> V = (is_constraint (Neg \<phi>) \<and> (
+      (safe_assignment V \<phi>) \<or>
+      (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or>
+      is_constraint \<phi>
+  ))"
+
+lemma restricted_formula_future_bounded: "restricted_formula \<phi> V \<Longrightarrow> future_bounded \<phi>"
+proof -
+  assume "restricted_formula \<phi> V"
+  moreover {
+    assume "is_constraint (Neg \<phi>) \<and> safe_assignment V \<phi>"
+    then have "future_bounded \<phi>" proof (cases \<phi>) qed(auto)
+  }
+  moreover {
+    assume "is_constraint (Neg \<phi>) \<and> (\<exists>x. \<phi> = Eq (Var x) (Var x))"
+    then have "future_bounded \<phi>" by auto
+  }
+  moreover {
+    assume "is_constraint (Neg \<phi>) \<and> is_constraint \<phi>"
+    then have "future_bounded \<phi>" proof (cases \<phi>) qed(auto)
+  }
+  ultimately show "future_bounded \<phi>" using restricted_formula_def by blast
+qed
+
 fun safe_formula :: "formula \<Rightarrow> bool" where
   "safe_formula (Eq t1 t2) = (is_Const t1 \<and> (is_Const t2 \<or> is_Var t2) \<or> is_Var t1 \<and> is_Const t2)"
 | "safe_formula (Neg (Eq (Var x) (Var y))) = (x = y)"
@@ -860,24 +898,18 @@ fun safe_formula :: "formula \<Rightarrow> bool" where
 | "safe_formula (Agg y \<omega> b f \<phi>) = (safe_formula \<phi> \<and> y + b \<notin> fv \<phi> \<and> {0..<b} \<subseteq> fv \<phi> \<and> fv_trm f \<subseteq> fv \<phi>)"
 | "safe_formula (Prev I \<phi>) = (safe_formula \<phi>)"
 | "safe_formula (Next I \<phi>) = (safe_formula \<phi>)"
+| "safe_formula (Historically I \<phi>) = (safe_formula \<phi>)"
+| "safe_formula (Always I \<phi>) = (safe_formula \<phi>)"
 | "safe_formula (Since \<phi> I \<psi>) = (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and>
     (safe_formula \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False)))"
 | "safe_formula (Until \<phi> I \<psi>) = (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and>
     (safe_formula \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False)))"
 | "safe_formula (Trigger \<phi> I \<psi>) = (if (mem I 0) then
-    (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> is_constraint (Neg \<phi>) \<and> (
-      (safe_assignment (fv \<psi>) \<phi>) \<or>
-      (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or>
-      is_constraint \<phi>
-    )))
+    (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> restricted_formula \<phi> (fv \<psi>)))
       else
     (safe_formula \<phi> \<and> safe_formula \<psi> \<and> fv \<phi> = fv \<psi>))"
 | "safe_formula (Release \<phi> I \<psi>) = (if (mem I 0) then
-    (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> is_constraint (Neg \<phi>) \<and> (
-      (safe_assignment (fv \<psi>) \<phi>) \<or>
-      (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or>
-      is_constraint \<phi>
-    )))
+    (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> restricted_formula \<phi> (fv \<psi>)))
       else
     (safe_formula \<phi> \<and> safe_formula \<psi> \<and> fv \<phi> = fv \<psi>))"
 | "safe_formula (MatchP I r) = Regex.safe_regex fv (\<lambda>g \<phi>. safe_formula \<phi> \<or>
@@ -957,6 +989,15 @@ lemma historically_safe_bounded_fv[simp]: "fv (historically_safe_bounded I \<phi
 lemma historically_safe_bounded_future_bounded[simp]: "future_bounded (historically_safe_bounded I \<phi>) = (future_bounded \<phi> \<and> bounded I)"
   by (auto simp add: historically_safe_bounded_def bounded.rep_eq int_remove_lower_bound.rep_eq)
 
+lemma "safe_formula (Historically I \<phi>) = safe_formula (historically_safe_0 I \<phi>)"
+  by auto
+
+lemma "safe_formula (Historically I \<phi>) = safe_formula (historically_safe_unbounded I \<phi>)"
+  by auto
+
+lemma "safe_formula (Historically I \<phi>) = safe_formula (historically_safe_bounded I \<phi>)"
+  by auto
+
 (* always *)
 
 (* [0, b] *)
@@ -980,6 +1021,12 @@ lemma always_safe_bounded_fv[simp]: "fv (always_safe_bounded I \<phi>) = fv \<ph
 
 lemma always_safe_bounded_future_bounded[simp]: "future_bounded (always_safe_bounded I \<phi>) = (future_bounded \<phi> \<and> bounded I)"
   by (auto simp add: always_safe_bounded_def bounded.rep_eq int_remove_lower_bound.rep_eq)
+
+lemma "safe_formula (Always I \<phi>) = safe_formula (always_safe_0 I \<phi>)"
+  by auto
+
+lemma "safe_formula (Always I \<phi>) = safe_formula (always_safe_bounded I \<phi>)"
+  by auto
   
 
 abbreviation "safe_regex \<equiv> Regex.safe_regex fv (\<lambda>g \<phi>. safe_formula \<phi> \<or>
@@ -1013,9 +1060,10 @@ lemma disjE_Not2: "P \<or> Q \<Longrightarrow> (P \<Longrightarrow> R) \<Longrig
 
 lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Var Pred Let
     And_assign And_safe And_constraint And_Not Ands Neg Or Exists Agg
-    Prev Next Since Not_Since Until Not_Until
-    Trigger_0_safe_phi Trigger_0_constraint_safe_assignment Trigger_0_constraint_eq Trigger_0_constraint Trigger
-    Release_0_safe_phi Release_0_constraint_safe_assignment Release_0_constraint_eq Release_0_constraint Release
+    Prev Next Historically Always
+    Since Not_Since Until Not_Until
+    Trigger_0 Trigger
+    Release_0 Release
     MatchP MatchF]:
   assumes "safe_formula \<phi>"
     and Eq_Const: "\<And>c d. P (Eq (Const c) (Const d))"
@@ -1042,29 +1090,19 @@ lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Va
       safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Agg y \<omega> b f \<phi>)"
     and Prev: "\<And>I \<phi>. safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Prev I \<phi>)"
     and Next: "\<And>I \<phi>. safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Next I \<phi>)"
+    and Historically: "\<And>I \<phi>. safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Historically I \<phi>)"
+    and Always: "\<And>I \<phi>. safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Always I \<phi>)"
     and Since: "\<And>\<phi> I \<psi>. fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Since \<phi> I \<psi>)"
     and Not_Since: "\<And>\<phi> I \<psi>. fv (Neg \<phi>) \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow>
       \<not> safe_formula (Neg \<phi>) \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Since (Neg \<phi>) I \<psi> )"
     and Until: "\<And>\<phi> I \<psi>. fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Until \<phi> I \<psi>)"
     and Not_Until: "\<And>\<phi> I \<psi>. fv (Neg \<phi>) \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow>
       \<not> safe_formula (Neg \<phi>) \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Until (Neg \<phi>) I \<psi>)"
-    and Trigger_0_safe_phi: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow> 
-      safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Trigger \<phi> I \<psi>)"
-    and Trigger_0_constraint_safe_assignment: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow>
-      \<not>safe_formula \<phi> \<Longrightarrow> is_constraint (Neg \<phi>) \<Longrightarrow> safe_assignment (fv \<psi>) \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Trigger \<phi> I \<psi>)"
-    and Trigger_0_constraint_eq: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow>
-      \<not>safe_formula \<phi> \<Longrightarrow> is_constraint (Neg \<phi>) \<Longrightarrow> (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<Longrightarrow> P \<psi> \<Longrightarrow> P (Trigger \<phi> I \<psi>)"
-    and Trigger_0_constraint: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow>
-      \<not>safe_formula \<phi> \<Longrightarrow> is_constraint (Neg \<phi>) \<Longrightarrow> is_constraint \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Trigger \<phi> I \<psi>)"
+    and Trigger_0: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow> 
+      ((safe_formula \<phi> \<and> P \<phi>) \<or> restricted_formula \<phi> (fv \<psi>)) \<Longrightarrow> P \<psi> \<Longrightarrow> P (Trigger \<phi> I \<psi>)"
     and Trigger: "\<And>\<phi> I \<psi>. \<not>mem I 0 \<Longrightarrow> fv \<phi> = fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Trigger \<phi> I \<psi>)"
-    and Release_0_safe_phi: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow>
-      safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Release \<phi> I \<psi>)"
-    and Release_0_constraint_safe_assignment: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow>
-      \<not>safe_formula \<phi> \<Longrightarrow> is_constraint (Neg \<phi>) \<Longrightarrow> safe_assignment (fv \<psi>) \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Release \<phi> I \<psi>)"
-    and Release_0_constraint_eq: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow>
-      \<not>safe_formula \<phi> \<Longrightarrow> is_constraint (Neg \<phi>) \<Longrightarrow> (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<Longrightarrow> P \<psi> \<Longrightarrow> P (Release \<phi> I \<psi>)"
-    and Release_0_constraint: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow>
-      \<not>safe_formula \<phi> \<Longrightarrow> is_constraint (Neg \<phi>) \<Longrightarrow> is_constraint \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Release \<phi> I \<psi>)"
+    and Release_0: "\<And>\<phi> I \<psi>. mem I 0 \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow> 
+      ((safe_formula \<phi> \<and> P \<phi>) \<or> restricted_formula \<phi> (fv \<psi>)) \<Longrightarrow> P \<psi> \<Longrightarrow> P (Release \<phi> I \<psi>)"
     and Release: "\<And>\<phi> I \<psi>. \<not>mem I 0 \<Longrightarrow> fv \<phi> = fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Release \<phi> I \<psi>)"
     and MatchP: "\<And>I r. safe_regex Past Strict r \<Longrightarrow> \<forall>\<phi> \<in> atms r. P \<phi> \<Longrightarrow> P (MatchP I r)"
     and MatchF: "\<And>I r. safe_regex Futu Strict r \<Longrightarrow> \<forall>\<phi> \<in> atms r. P \<phi> \<Longrightarrow> P (MatchF I r)"
@@ -1107,106 +1145,50 @@ next
     using "10.IH"(2)[OF posneg] safe_remove_neg by (simp add: list_all_iff)
   ultimately show ?case using "10.IH"(1) "10.prems" Ands posneg by simp
 next
-  case (15 \<phi> I \<psi>)
-  then show ?case
-  proof (cases \<phi>)
-    case (Ands l)
-    then show ?thesis using "15.IH"(1-2) "15.prems" Since by auto
-  qed (auto 0 3 elim!: disjE_Not2 intro: Since Not_Since) (*SLOW*)
-next
-  case (16 \<phi> I \<psi>)
-  then show ?case
-  proof (cases \<phi>)
-    case (Ands l)
-    then show ?thesis using "16.IH"(1-2)"16.prems" Until by auto
-  qed (auto 0 3 elim!: disjE_Not2 intro: Until Not_Until) (*SLOW*)
-next
   case (17 \<phi> I \<psi>)
   then show ?case
-  proof (cases "mem I 0")
-    case mem: True
-    show ?thesis
-    proof (cases "safe_formula \<phi>")
-      case True
-      then show ?thesis using mem Trigger_0_safe_phi "17.IH"(1-2) "17.prems" by auto
-    next
-      case unsafe: False
-      then have neg_phi_props: "(safe_assignment (fv \<psi>) \<phi>) \<or> (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> is_constraint \<phi>"
-        using mem "17.prems"
-        by auto
-      moreover {
-        assume "safe_assignment (fv \<psi>) \<phi>"
-        then have ?thesis
-          using mem unsafe Trigger_0_constraint_safe_assignment "17.IH"(1) "17.prems"
-          by auto
-      }
-      moreover {
-        assume "\<exists>x. \<phi> = Eq (Var x) (Var x)"
-        then have ?thesis
-          using mem unsafe Trigger_0_constraint_eq "17.IH"(1) "17.prems"
-          by auto
-      }
-      moreover {
-        assume "is_constraint \<phi>"
-        then have ?thesis
-          using mem unsafe Trigger_0_constraint "17.IH"(1) "17.prems"
-          by auto
-      }
-      ultimately show ?thesis by blast
-    qed
-  next
-    case False
-    then show ?thesis using Trigger 17 by auto
-  qed
+  proof (cases \<phi>)
+    case (Ands l)
+    then show ?thesis using "17.IH"(1-2) "17.prems" Since by auto
+  qed (auto 0 3 elim!: disjE_Not2 intro: Since Not_Since) (*SLOW*)
 next
   case (18 \<phi> I \<psi>)
   then show ?case
+  proof (cases \<phi>)
+    case (Ands l)
+    then show ?thesis using "18.IH"(1-2)"18.prems" Until by auto
+  qed (auto 0 3 elim!: disjE_Not2 intro: Until Not_Until) (*SLOW*)
+next
+  case (19 \<phi> I \<psi>)
+  then show ?case
   proof (cases "mem I 0")
     case mem: True
-    show ?thesis
-    proof (cases "safe_formula \<phi>")
-      case True
-      then show ?thesis using mem Release_0_safe_phi "18.IH"(1-2) "18.prems" by auto
-    next
-      case unsafe: False
-      then have neg_phi_props: "(safe_assignment (fv \<psi>) \<phi>) \<or> (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> is_constraint \<phi>"
-        using mem "18.prems"
-        by auto
-      moreover {
-        assume "safe_assignment (fv \<psi>) \<phi>"
-        then have ?thesis
-          using mem unsafe Release_0_constraint_safe_assignment "18.IH"(1) "18.prems"
-          by auto
-      }
-      moreover {
-        assume "\<exists>x. \<phi> = Eq (Var x) (Var x)"
-        then have ?thesis
-          using mem unsafe Release_0_constraint_eq "18.IH"(1) "18.prems"
-          by auto
-      }
-      moreover {
-        assume "is_constraint \<phi>"
-        then have ?thesis
-          using mem unsafe Release_0_constraint "18.IH"(1) "18.prems"
-          by auto
-      }
-      ultimately show ?thesis by blast
-    qed
+    then show ?thesis using 19 Trigger_0 by auto
   next
     case False
-    then show ?thesis using Release 18 by auto
+    then show ?thesis using Trigger 19 by auto
   qed
 next
-  case (19 I r)
+  case (20 \<phi> I \<psi>)
+  then show ?case
+  proof (cases "mem I 0")
+    case mem: True
+    then show ?thesis using 20 Release_0 by auto
+  next
+    case False
+    then show ?thesis using Release 20 by auto
+  qed
+next
+  case (21 I r)
   then show ?case
     by (intro MatchP) (auto simp: atms_def dest: safe_regex_safe_formula split: if_splits)
 next
-  case (20 I r)
+  case (22 I r)
   then show ?case
     by (intro MatchF) (auto simp: atms_def dest: safe_regex_safe_formula split: if_splits)
 qed (auto simp: assms)
 
-lemma safe_formula_NegD: "safe_formula (Formula.Neg \<phi>) = ((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>))"
+lemma safe_formula_Neg: "safe_formula (Formula.Neg \<phi>) = ((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>))"
   by (induct "Formula.Neg \<phi>" rule: safe_formula.induct) auto
 
 subsection \<open>Slicing traces\<close>
@@ -1228,6 +1210,8 @@ qualified fun matches ::
 | "matches v (Agg y \<omega> b f \<phi>) e = (\<exists>zs. length zs = b \<and> matches (zs @ v) \<phi> e)"
 | "matches v (Prev I \<phi>) e = matches v \<phi> e"
 | "matches v (Next I \<phi>) e = matches v \<phi> e"
+| "matches v (Historically I \<phi>) e = matches v \<phi> e"
+| "matches v (Always I \<phi>) e = matches v \<phi> e"
 | "matches v (Since \<phi> I \<psi>) e = (matches v \<phi> e \<or> matches v \<psi> e)"
 | "matches v (Until \<phi> I \<psi>) e = (matches v \<phi> e \<or> matches v \<psi> e)"
 | "matches v (Trigger \<phi> I \<psi>) e = (matches v \<phi> e \<or> matches v \<psi> e)"
@@ -1430,6 +1414,8 @@ primrec convert_multiway :: "formula \<Rightarrow> formula" where
 | "convert_multiway (Agg y \<omega> b f \<phi>) = Agg y \<omega> b f (convert_multiway \<phi>)"
 | "convert_multiway (Prev I \<phi>) = Prev I (convert_multiway \<phi>)"
 | "convert_multiway (Next I \<phi>) = Next I (convert_multiway \<phi>)"
+| "convert_multiway (Historically I \<phi>) = Historically I (convert_multiway \<phi>)"
+| "convert_multiway (Always I \<phi>) = Always I (convert_multiway \<phi>)"
 | "convert_multiway (Since \<phi> I \<psi>) = Since (convert_multiway \<phi>) I (convert_multiway \<psi>)"
 | "convert_multiway (Until \<phi> I \<psi>) = Until (convert_multiway \<phi>) I (convert_multiway \<psi>)"
 | "convert_multiway (Trigger \<phi> I \<psi>) = Trigger (convert_multiway \<phi>) I (convert_multiway \<psi>)"
@@ -1482,51 +1468,51 @@ next
     by (intro arg_cong[where f=Union, OF image_cong[OF refl]])
       (fastforce simp: list.pred_set)
 next
-  case (15 \<phi> I \<psi>)
-  show ?case proof (cases "safe_formula \<phi>")
-    case True
-    with 15 show ?thesis by simp
-  next
-    case False
-    with "15.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 15 show ?thesis by simp
-  qed
-next
-  case (16 \<phi> I \<psi>)
-  show ?case proof (cases "safe_formula \<phi>")
-    case True
-    with 16 show ?thesis by simp
-  next
-    case False
-    with "16.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 16 show ?thesis by simp
-  qed
-next
   case (17 \<phi> I \<psi>)
+  show ?case proof (cases "safe_formula \<phi>")
+    case True
+    with 17 show ?thesis by simp
+  next
+    case False
+    with "17.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
+    with False 17 show ?thesis by simp
+  qed
+next
+  case (18 \<phi> I \<psi>)
+  show ?case proof (cases "safe_formula \<phi>")
+    case True
+    with 18 show ?thesis by simp
+  next
+    case False
+    with "18.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
+    with False 18 show ?thesis by simp
+  qed
+next
+  case (19 \<phi> I \<psi>)
   then show ?case
   proof (cases "mem I 0")
     case mem: True
     show ?thesis
     proof (cases "safe_formula \<phi>")
       case True
-      then show ?thesis using mem "17.IH"(1-2) "17.prems" by auto
+      then show ?thesis using mem "19.IH"(1-2) "19.prems" by auto
     next
       case unsafe: False
       then have neg_phi_props: "(safe_assignment (fv \<psi>) \<phi>) \<or> (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> is_constraint \<phi>"
-        using mem "17.prems"
+        using mem "19.prems" restricted_formula_def
         by auto
       moreover {
         assume "safe_assignment (fv \<psi>) \<phi>"
         then have "fvi b (convert_multiway \<phi>) = fvi b \<phi>"
           by (auto simp add: safe_assignment_def split: formula.splits)
         then have ?thesis
-          using mem unsafe "17.IH"(1) "17.prems"
+          using mem unsafe "19.IH"(1) "19.prems"
           by auto
       }
       moreover {
         assume "\<exists>x. \<phi> = Eq (Var x) (Var x)"
         then have ?thesis
-          using mem unsafe "17.IH"(1) "17.prems"
+          using mem unsafe "19.IH"(1) "19.prems"
           by auto
       }
       moreover {
@@ -1538,41 +1524,41 @@ next
           proof (cases \<alpha>) qed (auto)
         qed (auto)
         then have ?thesis
-          using mem unsafe "17.IH"(1) "17.prems"
+          using mem unsafe "19.IH"(1) "19.prems"
           by auto
       }
       ultimately show ?thesis by blast
     qed
   next
     case False
-    then show ?thesis using 17 by auto
+    then show ?thesis using 19 by auto
   qed
 next
-  case (18 \<phi> I \<psi>)
+  case (20 \<phi> I \<psi>)
   then show ?case
   proof (cases "mem I 0")
     case mem: True
     show ?thesis 
     proof (cases "safe_formula \<phi>")
       case True
-      then show ?thesis using mem "18.IH"(1-2) "18.prems" by auto
+      then show ?thesis using mem "20.IH"(1-2) "20.prems" by auto
     next
       case unsafe: False
       then have neg_phi_props: "(safe_assignment (fv \<psi>) \<phi>) \<or> (\<exists>x. \<phi> = Eq (Var x) (Var x)) \<or> is_constraint \<phi>"
-        using mem "18.prems"
+        using mem "20.prems" restricted_formula_def
         by auto
       moreover {
         assume "safe_assignment (fv \<psi>) \<phi>"
         then have "fvi b (convert_multiway \<phi>) = fvi b \<phi>"
           by (auto simp add: safe_assignment_def split: formula.splits)
         then have ?thesis
-          using mem unsafe "18.IH"(1) "18.prems"
+          using mem unsafe "20.IH"(1) "20.prems"
           by auto
       }
       moreover {
         assume "\<exists>x. \<phi> = Eq (Var x) (Var x)"
         then have ?thesis
-          using mem unsafe "18.IH"(1) "18.prems"
+          using mem unsafe "20.IH"(1) "20.prems"
           by auto
       }
       moreover {
@@ -1584,23 +1570,23 @@ next
           proof (cases \<alpha>) qed (auto)
         qed (auto)
         then have ?thesis
-          using mem unsafe "18.IH"(1) "18.prems"
+          using mem unsafe "20.IH"(1) "20.prems"
           by auto
       }
       ultimately show ?thesis by blast
     qed
   next
     case False
-    then show ?thesis using 18 by auto
+    then show ?thesis using 20 by auto
   qed
 next
-  case (19 I r)
+  case (21 I r)
   then show ?case
     unfolding convert_multiway.simps fvi.simps fv_regex_alt regex.set_map image_image
     by (intro arg_cong[where f=Union, OF image_cong[OF refl]])
       (auto dest!: safe_regex_safe_formula)
 next
-  case (20 I r)
+  case (22 I r)
   then show ?case
     unfolding convert_multiway.simps fvi.simps fv_regex_alt regex.set_map image_image
     by (intro arg_cong[where f=Union, OF image_cong[OF refl]])
@@ -1755,21 +1741,50 @@ next
     using that by (cases "Neg \<phi>'" rule: safe_formula.cases) simp_all
   with Neg show ?case by (simp add: fv_convert_multiway)
 next
-  case assms: (Trigger_0_constraint_safe_assignment \<phi> I \<psi>)
-  (*
-    this works as well but is a bit slower:
-    then show ?case by (induct \<phi> rule: safe_formula.induct) (auto simp add: fv_convert_multiway)
-  *)
-  then show ?case proof (cases \<phi>) qed (auto simp add: fv_convert_multiway)
-next
-  case assms: (Trigger_0_constraint \<phi> I \<psi>)
-  then show ?case proof (cases \<phi>) qed (auto simp add: fv_convert_multiway)
-next
-  case assms: (Release_0_constraint_safe_assignment \<phi> I \<psi>)
-  then show ?case proof (cases \<phi>) qed (auto simp add: fv_convert_multiway)
-next
-  case (Release_0_constraint \<phi> I \<psi>)
-  then show ?case proof (cases \<phi>) qed (auto simp add: fv_convert_multiway)
+  case assms: (Trigger_0 \<phi> I \<psi>)
+  moreover {
+    assume "safe_formula \<phi> \<and> safe_formula (convert_multiway \<phi>)"
+    then have ?case using assms by (simp add: fv_convert_multiway)
+  }
+  moreover {
+    assume "restricted_formula \<phi> (fv \<psi>)"
+    moreover {
+      assume "is_constraint (Neg \<phi>) \<and> safe_assignment (fv \<psi>) \<phi>"
+      then have ?case using assms proof (cases \<phi>) qed (auto simp add: fv_convert_multiway)
+    }
+    moreover {
+      assume "is_constraint (Neg \<phi>) \<and> (\<exists>x. \<phi> = Eq (Var x) (Var x))"
+      then have ?case using assms by (auto simp add: fv_convert_multiway)
+    }
+    moreover {
+      assume "is_constraint (Neg \<phi>) \<and> is_constraint \<phi>"
+      then have ?case using assms proof (cases \<phi>) qed (auto simp add: fv_convert_multiway)
+    }
+    ultimately have ?case using restricted_formula_def by blast
+  }
+  ultimately show ?case by blast
+case assms: (Release_0 \<phi> I \<psi>)
+  moreover {       
+    assume "safe_formula \<phi> \<and> safe_formula (convert_multiway \<phi>)"
+    then have ?case using assms by (simp add: fv_convert_multiway)
+  }
+  moreover {
+    assume "restricted_formula \<phi> (fv \<psi>)"
+    moreover {
+      assume "is_constraint (Neg \<phi>) \<and> safe_assignment (fv \<psi>) \<phi>"
+      then have ?case using assms proof (cases \<phi>) qed (auto simp add: fv_convert_multiway)
+    }
+    moreover {
+      assume "is_constraint (Neg \<phi>) \<and> (\<exists>x. \<phi> = Eq (Var x) (Var x))"
+      then have ?case using assms by (auto simp add: fv_convert_multiway)
+    }
+    moreover {
+      assume "is_constraint (Neg \<phi>) \<and> is_constraint \<phi>"
+      then have ?case using assms proof (cases \<phi>) qed (auto simp add: fv_convert_multiway)
+    }
+    ultimately have ?case using restricted_formula_def by blast
+  }
+  ultimately show ?case by blast
 next
   case (MatchP I r)
   then show ?case
@@ -1821,23 +1836,11 @@ next
     unfolding b_def by (simp add: list.pred_map o_def)
   ultimately show ?case by auto
 next
-  case (Trigger_0_constraint_safe_assignment \<phi> I \<psi>)
-  then show ?case proof (cases \<phi>) qed (auto)
+  case assms: (Trigger_0 \<phi> I \<psi>)
+  then show ?case using restricted_formula_def proof (cases \<phi>) qed (auto)
 next
-  case (Trigger_0_constraint_eq \<phi> I \<psi>)
-  then show ?case proof (cases \<phi>) qed (auto)
-next
-  case (Trigger_0_constraint \<phi> I \<psi>)
-  then show ?case proof (cases \<phi>) qed (auto)
-next
-  case (Release_0_constraint_safe_assignment \<phi> I \<psi>)
-  then show ?case proof (cases \<phi>) qed (auto)
-next
-  case (Release_0_constraint_eq \<phi> I \<psi>)
-  then show ?case proof (cases \<phi>) qed (auto)
-next
-  case (Release_0_constraint \<phi> I \<psi>)
-  then show ?case proof (cases \<phi>) qed (auto)
+  case assms: (Release_0 \<phi> I \<psi>)
+  then show ?case using restricted_formula_def proof (cases \<phi>) qed (auto)
 next
   case (MatchP I r)
   then show ?case
@@ -1877,23 +1880,10 @@ next
   then show ?case
     by (simp add: nfv_def fv_convert_multiway cong: conj_cong)
 next
-  case (Trigger_0_constraint_safe_assignment \<phi> I \<psi>)
-  then show ?case proof (cases \<phi>) qed (auto)
-next
-  case (Trigger_0_constraint_eq \<phi> I \<psi>)
-then show ?case proof (cases \<phi>) qed (auto)
-next
-  case (Trigger_0_constraint \<phi> I \<psi>)
-  then show ?case proof (cases \<phi>) qed (auto)
-next
-  case (Release_0_constraint_safe_assignment \<phi> I \<psi>)
-  then show ?case proof (cases \<phi>) qed (auto)
-next
-  case (Release_0_constraint_eq \<phi> I \<psi>)
-  then show ?case proof (cases \<phi>) qed (auto)
-next
-  case (Release_0_constraint \<phi> I \<psi>)
-  then show ?case proof (cases \<phi>) qed (auto)
+  case (Trigger_0 \<phi> I \<psi>)
+  then show ?case using restricted_formula_def proof (cases \<phi>) qed (auto)
+  case (Release_0 \<phi> I \<psi>)
+  then show ?case using restricted_formula_def proof (cases \<phi>) qed (auto)
 next
   case (MatchP I r)
   then have "Regex.match (sat \<sigma> V v) (convert_multiway_regex r) = Regex.match (sat \<sigma> V v) r"

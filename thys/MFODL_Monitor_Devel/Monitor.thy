@@ -127,11 +127,21 @@ next
     unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
     by (auto simp: cases_Neg_iff)
 next
-  case (17 I r)
+  case (17 \<phi> I \<psi>)
+  then show ?case
+    unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
+    sorry
+next
+  case (18 \<phi> I \<psi>)
+  then show ?case
+    unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
+    sorry
+next
+  case (19 I r)
   then show ?case
     by (auto elim!: safe_regex_mono[rotated] simp: cases_Neg_iff regex.pred_set)
 next
-  case (18 I r)
+  case (20 I r)
   then show ?case
     by (auto elim!: safe_regex_mono[rotated] simp: cases_Neg_iff regex.pred_set)
 qed (auto simp add: is_simple_eq_def list.pred_set)
