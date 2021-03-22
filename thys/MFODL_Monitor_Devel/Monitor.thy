@@ -42,10 +42,20 @@ fun mmonitorable_exec :: "Formula.formula \<Rightarrow> bool" where
     y + b \<notin> Formula.fv \<phi> \<and> {0..<b} \<subseteq> Formula.fv \<phi> \<and> Formula.fv_trm f \<subseteq> Formula.fv \<phi>)"
 | "mmonitorable_exec (Formula.Prev I \<phi>) = (mmonitorable_exec \<phi>)"
 | "mmonitorable_exec (Formula.Next I \<phi>) = (mmonitorable_exec \<phi>)"
+| "mmonitorable_exec (Formula.Historically I \<phi>) = (mmonitorable_exec \<phi>)"
+| "mmonitorable_exec (Formula.Always I \<phi>) = (mmonitorable_exec \<phi> \<and> bounded I)"
 | "mmonitorable_exec (Formula.Since \<phi> I \<psi>) = (Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and>
     (mmonitorable_exec \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False)) \<and> mmonitorable_exec \<psi>)"
 | "mmonitorable_exec (Formula.Until \<phi> I \<psi>) = (Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and> bounded I \<and>
     (mmonitorable_exec \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False)) \<and> mmonitorable_exec \<psi>)"
+| "mmonitorable_exec (Formula.Trigger \<phi> I \<psi>) = (if (mem I 0) then
+    (mmonitorable_exec \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (mmonitorable_exec \<phi> \<or> restricted_formula \<phi> (fv \<psi>)))
+      else
+    (mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi> \<and> fv \<phi> = fv \<psi>))"
+| "mmonitorable_exec (Formula.Release \<phi> I \<psi>) = (bounded I \<and> (if (mem I 0) then
+    (mmonitorable_exec \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (mmonitorable_exec \<phi> \<or> restricted_formula \<phi> (fv \<psi>)))
+      else
+    (mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi> \<and> fv \<phi> = fv \<psi>)))"
 | "mmonitorable_exec (Formula.MatchP I r) = Regex.safe_regex Formula.fv (\<lambda>g \<phi>. mmonitorable_exec \<phi> \<or> (g = Lax \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False))) Past Strict r"
 | "mmonitorable_exec (Formula.MatchF I r) = (Regex.safe_regex Formula.fv (\<lambda>g \<phi>. mmonitorable_exec \<phi> \<or> (g = Lax \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False))) Futu Strict r \<and> bounded I)"
 | "mmonitorable_exec _ = False"
@@ -117,31 +127,21 @@ next
     by fastforce
   ultimately show ?case using posnegm by simp
 next
-  case (15 \<phi> I \<psi>)
-  then show ?case
-    unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
-    by (auto simp: cases_Neg_iff)
-next
-  case (16 \<phi> I \<psi>)
-  then show ?case
-    unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
-    by (auto simp: cases_Neg_iff)
-next
   case (17 \<phi> I \<psi>)
   then show ?case
     unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
-    sorry
+    by (auto simp: cases_Neg_iff)
 next
   case (18 \<phi> I \<psi>)
   then show ?case
     unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
-    sorry
+    by (auto simp: cases_Neg_iff)
 next
-  case (19 I r)
+  case (21 I r)
   then show ?case
     by (auto elim!: safe_regex_mono[rotated] simp: cases_Neg_iff regex.pred_set)
 next
-  case (20 I r)
+  case (22 I r)
   then show ?case
     by (auto elim!: safe_regex_mono[rotated] simp: cases_Neg_iff regex.pred_set)
 qed (auto simp add: is_simple_eq_def list.pred_set)
@@ -202,22 +202,32 @@ next
   qed
   ultimately show ?case unfolding mmonitorable_def ..
 next
-  case (13 \<phi> I \<psi>)
+  case (15 \<phi> I \<psi>)
   then show ?case
     unfolding mmonitorable_def mmonitorable_exec.simps safe_formula.simps
     by (fastforce simp: cases_Neg_iff)
 next
-  case (14 \<phi> I \<psi>)
+  case (16 \<phi> I \<psi>)
   then show ?case
     unfolding mmonitorable_def mmonitorable_exec.simps safe_formula.simps
     by (fastforce simp: one_enat_def cases_Neg_iff)
 next
-  case (15 I r)
+  case (17 \<phi> I \<psi>)
+  then show ?case
+    using mmonitorable_def restricted_formula_future_bounded
+    by auto
+next
+  case (18 \<phi> I \<psi>)
+  then show ?case
+    using mmonitorable_def restricted_formula_future_bounded
+    by auto
+next
+  case (19 I r)
   then show ?case
     by (auto elim!: safe_regex_mono[rotated] dest: safe_regex_safe[rotated]
         simp: mmonitorable_regex_def mmonitorable_def cases_Neg_iff regex.pred_set)
 next
-  case (16 I r)
+  case (20 I r)
   then show ?case
     by (auto 0 3 elim!: safe_regex_mono[rotated] dest: safe_regex_safe[rotated]
         simp: mmonitorable_regex_def mmonitorable_def cases_Neg_iff regex.pred_set)

@@ -550,7 +550,7 @@ qed
 lemma interval_all: "mem all i"
   by transfer auto
 
-definition "first = Neg (Prev all TT)"
+qualified definition "first = Neg (Prev all TT)"
 
 lemma first_sat[simp] : "sat \<sigma> V v i first = (i=0)"
   using interval_all by (auto simp: first_def split: nat.split)
