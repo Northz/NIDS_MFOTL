@@ -34,31 +34,26 @@ definition trigger_results :: "\<I> \<Rightarrow> ts \<Rightarrow> 'a mtaux \<Ri
 }"
 
 locale mtaux =
-  fixes valid_mtaux :: "targs \<Rightarrow> ts \<Rightarrow> 'mtaux \<Rightarrow> event_data mtaux \<Rightarrow> bool"
-    and init_mtaux :: "targs \<Rightarrow> 'mtaux"
+  fixes init_mtaux :: "targs \<Rightarrow> 'mtaux"
     and update_mtaux :: "targs \<Rightarrow> ts \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> 'mtaux \<Rightarrow> 'mtaux"
     and result_mtaux :: "targs \<Rightarrow> ts \<Rightarrow> 'mtaux \<Rightarrow> event_data table"
 
   (* the initial state should be valid *)
   assumes valid_init_mtaux: "L \<subseteq> R \<Longrightarrow>
-    valid_mtaux (init_targs I n L R) 0 (init_mtaux (init_targs I n L R)) {}"
+    result_mtaux (init_targs I n L R) 0 (init_mtaux (init_targs I n L R)) = trigger_results I 0 {}"
 
-  (* assuming the state was valid, it should remain so after an update *)
+  (* assuming the previous state outputted the same result, the next will as well *)
   assumes valid_update_mtaux: "
-    valid_mtaux args cur aux auxset \<Longrightarrow>
     nt \<ge> cur \<Longrightarrow>
     table (args_n args) (args_L args) relL \<Longrightarrow>
     table (args_n args) (args_R args) relR \<Longrightarrow>
-    valid_mtaux args nt (update_mtaux args nt relL relR aux)
-    ({(t, relL, relR) \<in> auxset. memR (targs_ivl args) (nt - t)} \<union> {(nt, relL, relR)})"
-  (* remove tables that aren't in the interval anymore and add newest *)
-
-  (* and the results reported should be correct *)
-   and valid_result_mtaux: "
-    valid_mtaux args cur aux auxset \<Longrightarrow>
-    result_mtaux args cur aux =
-    trigger_results (args_ivl args) cur auxset
-   "
+    result_mtaux args cur aux = trigger_results (args_ivl args) cur auxset \<Longrightarrow>
+    result_mtaux args cur (update_mtaux args nt relL relR aux) =
+      trigger_results
+        (args_ivl args)
+        cur
+        ({(t, relL, relR) \<in> auxset. memR (targs_ivl args) (nt - t)} \<union> {(nt, relL, relR)})
+  "
 
 type_synonym 'a mmtaux = "
   ts \<times>                              \<comment> \<open>the newest timestamp\<close>
