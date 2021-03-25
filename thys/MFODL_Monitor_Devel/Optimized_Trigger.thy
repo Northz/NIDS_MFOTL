@@ -91,23 +91,6 @@ fun result_mmtaux :: "targs \<Rightarrow> ts \<Rightarrow> event_data mmtaux \<R
   }
 "
 
-fun valid_mmtaux :: "targs \<Rightarrow> ts \<Rightarrow> event_data mmtaux \<Rightarrow> event_data mtaux \<Rightarrow> bool" where
-  "valid_mmtaux args cur (nt, maskL, maskR, data_in, data_prev, data_in_count, tuple_sat_count) auxset \<longleftrightarrow>
-    (targs_L args) \<subseteq> (targs_R args) \<and> \<comment> \<open>free variables of the lhs are a subset of the rhs\<close>
-    maskL = join_mask (targs_n args) (targs_L args) \<and> \<comment> \<open>check if maskL & masR were computed correctly\<close>
-    maskR = join_mask (targs_n args) (targs_R args) \<and>
-    \<comment> \<open>check whether all tuples are well-formed\<close>
-    (\<forall>(t, L, R) \<in> auxset. table (targs_n args) (targs_L args) L \<and> table (targs_n args) (targs_R args) R) \<and>
-    \<comment> \<open>check if all tuples in intervals_prev_growing\<close>
-    table (targs_n args) (targs_R args \<union> targs_L args) (Mapping.keys tuple_sat_count) \<and>
-    \<comment> \<open>the ts cannot be in the future and by definition of data_prev, the timestamps shouldn't be in the interval yet\<close>
-    (\<forall>t \<in> fst ` set data_prev. t \<le> nt \<and> \<not> memL (targs_ivl args) (nt - t)) \<and>
-    sorted (map fst data_in) \<and>
-    \<comment> \<open>the ts cannot be in the future and by definition of data_in, the timestamps should be in the interval\<close>
-    (\<forall>t \<in> fst ` set data_in. t \<le> nt \<and> memL (targs_ivl args) (nt - t)) \<and>
-    cur = nt  \<comment> \<open>stores latest ts\<close>
-"
-
 (* tail recursive function to split a list into two based on a predicate while maintaining the order *)
 fun split_list :: "('a \<Rightarrow> bool) \<Rightarrow> 'a list \<Rightarrow> 'a list \<Rightarrow> 'a list \<Rightarrow> 'a list \<times> 'a list" where
   "split_list p [] t f = (t, f)"
