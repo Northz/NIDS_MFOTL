@@ -139,6 +139,9 @@ abbreviation "fv_regex \<equiv> Regex.fv_regex fv"
 lemma fv_abbrevs[simp]: "fv TT = {}" "fv FF = {}"
   unfolding TT_def FF_def by auto
 
+lemma fvi_abbrevs[simp]: "\<forall>b. fvi b TT = {}" "\<forall>b. fvi b FF = {}"
+  unfolding TT_def FF_def by auto
+
 lemma fv_subset_Ands: "\<phi> \<in> set \<phi>s \<Longrightarrow> fv \<phi> \<subseteq> fv (Ands \<phi>s)"
   by auto
 
@@ -555,6 +558,9 @@ qualified definition "first = Neg (Prev all TT)"
 lemma first_sat[simp] : "sat \<sigma> V v i first = (i=0)"
   using interval_all by (auto simp: first_def split: nat.split)
 
+lemma first_fvi[simp]: "fvi b first = {}"
+  by (auto simp: first_def TT_def FF_def split: nat.split)
+
 lemma interval_bounds:
   fixes a:: nat
   fixes b:: enat
@@ -651,6 +657,9 @@ definition once :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
 lemma sat_once[simp] : "sat \<sigma> V v i (once I \<phi>) = (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>)"
   by (auto simp: once_def)
 
+lemma once_fvi[simp] : "fvi b (once I \<phi>) = fvi b \<phi>"
+  by (auto simp: once_def)
+
 (* definition historically :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
   "historically I \<phi> = (Neg (once I (Neg \<phi>)))" *)
 
@@ -659,6 +668,9 @@ lemma "sat \<sigma> V v i (Historically I \<phi>) = sat \<sigma> V v i (Neg (onc
 
 definition eventually :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
   "eventually I \<phi> = Until TT I \<phi>"
+
+lemma eventually_fvi[simp] : "fvi b (eventually I \<phi>) = fvi b \<phi>"
+  by (auto simp: eventually_def)
 
 lemma sat_eventually[simp] : "sat \<sigma> V v i (eventually I \<phi>) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j \<phi>)"
   by (auto simp: eventually_def)

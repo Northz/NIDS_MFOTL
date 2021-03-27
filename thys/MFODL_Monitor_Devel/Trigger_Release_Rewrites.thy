@@ -122,7 +122,7 @@ proof (rule iffI)
     then have mem_leq_j: "\<forall>j\<le>i. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)" using assms
       using bounded_memR memL_mono
       by blast
-    then have "Formula.sat \<sigma> V v i (Formula.Since \<phi> I1 (Formula.And first \<phi>))"
+    then have "Formula.sat \<sigma> V v i (Formula.Since \<phi> I1 (Formula.And Formula.first \<phi>))"
       using mem_leq_j hist
       by auto
   }
@@ -130,7 +130,7 @@ proof (rule iffI)
     assume "\<forall>j\<le>i. \<not>mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j)"
     then have mem_leq_j: "\<forall>j\<le>i. mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)" using assms I2_def
       by (transfer' fixing: \<sigma>) (auto split: if_splits)
-    then have "Formula.sat \<sigma> V v i (Formula.Since \<phi> I1 (Formula.And first \<phi>))"
+    then have "Formula.sat \<sigma> V v i (Formula.Since \<phi> I1 (Formula.And Formula.first \<phi>))"
       using mem_leq_j hist
       by auto
   }
@@ -142,10 +142,10 @@ next
   assume hist: "Formula.sat \<sigma> V v i (historically_safe_0 I1 \<phi>)"
   {
     assume int_bounded: "bounded I1"
-    then have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Since \<phi> I2 (Formula.Next all \<phi>)) (Formula.Since \<phi> I1 (Formula.And first \<phi>)))"
+    then have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Since \<phi> I2 (Formula.Next all \<phi>)) (Formula.Since \<phi> I1 (Formula.And Formula.first \<phi>)))"
       using I2_def historically_safe_0_def hist
       by simp
-    then have "Formula.sat \<sigma> V v i (Formula.Since \<phi> I2 (Formula.Next all \<phi>)) \<or> Formula.sat \<sigma> V v i (Formula.Since \<phi> I1 (Formula.And first \<phi>))" by auto
+    then have "Formula.sat \<sigma> V v i (Formula.Since \<phi> I2 (Formula.Next all \<phi>)) \<or> Formula.sat \<sigma> V v i (Formula.Since \<phi> I1 (Formula.And Formula.first \<phi>))" by auto
     moreover {
       assume since: "Formula.sat \<sigma> V v i (Formula.Since \<phi> I2 (Formula.Next all \<phi>))"
       then have "(\<exists>j\<le>i. mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> (\<forall>k \<in> {j <.. i}. Formula.sat \<sigma> V v k \<phi>))" by auto
@@ -168,14 +168,14 @@ next
       then have "Formula.sat \<sigma> V v i (Formula.Historically I1 \<phi>)" by auto
     }
     moreover {
-      assume "Formula.sat \<sigma> V v i (Formula.Since \<phi> I1 (Formula.And first \<phi>))"
+      assume "Formula.sat \<sigma> V v i (Formula.Since \<phi> I1 (Formula.And Formula.first \<phi>))"
       then have "Formula.sat \<sigma> V v i (Formula.Historically I1 \<phi>)" by auto
     }
     ultimately have "Formula.sat \<sigma> V v i (Formula.Historically I1 \<phi>)" by blast
   }
   moreover {
     assume "\<not>bounded I1"
-    then have "Formula.sat \<sigma> V v i (Formula.Since \<phi> I1 (Formula.And first \<phi>))"
+    then have "Formula.sat \<sigma> V v i (Formula.Since \<phi> I1 (Formula.And Formula.first \<phi>))"
       using historically_safe_0_def hist
       by simp
     then have "Formula.sat \<sigma> V v i (Formula.Historically I1 \<phi>)" by auto
@@ -237,10 +237,10 @@ proof (rule iffI)
   then have "Formula.sat \<sigma> V v (k-1) \<phi>" using historically k_props by auto
   then have "(k-1) \<in> A" using A_def k_pre k_props by auto
   then have "(k-1) \<le> j" using j_def A_props by auto
-  then have "Formula.sat \<sigma> V v i (once I2 (Formula.Prev all (Formula.Since \<phi> all (Formula.And \<phi> first))))"
+  then have "Formula.sat \<sigma> V v i (once I2 (Formula.Prev all (Formula.Since \<phi> all (Formula.And \<phi> Formula.first))))"
     using interval_all k_pos leq_j k_props
     by (auto split: nat.split)
-  then have "Formula.sat \<sigma> V v i (once I2 (Formula.Prev all (Formula.Since \<phi> all (Formula.And \<phi> first)))) \<and> Formula.sat \<sigma> V v i (once I1 \<phi>)"
+  then have "Formula.sat \<sigma> V v i (once I2 (Formula.Prev all (Formula.Since \<phi> all (Formula.And \<phi> Formula.first)))) \<and> Formula.sat \<sigma> V v i (once I1 \<phi>)"
     using historically
     by auto
   then show "Formula.sat \<sigma> V v i (historically_safe_unbounded I1 \<phi>)"
@@ -250,24 +250,24 @@ next
   define I2 where "I2 = flip_int_less_lower I1"
   define A where "A = {j. j\<le>i \<and> mem I1 (\<tau> \<sigma> i - \<tau> \<sigma> j)}"
   assume "Formula.sat \<sigma> V v i (historically_safe_unbounded I1 \<phi>)"
-  then have rewrite: "Formula.sat \<sigma> V v i (Formula.And (once I2 (Formula.Prev all (Formula.Since \<phi> all (Formula.And \<phi> first)))) (once I1 \<phi>))"
+  then have rewrite: "Formula.sat \<sigma> V v i (Formula.And (once I2 (Formula.Prev all (Formula.Since \<phi> all (Formula.And \<phi> Formula.first)))) (once I1 \<phi>))"
     using assms historically_safe_unbounded_def I2_def
     by auto
-  then have "Formula.sat \<sigma> V v i (Formula.And (once I2 (Formula.Prev all (Formula.Since \<phi> all (Formula.And \<phi> first)))) (once I1 \<phi>))"
+  then have "Formula.sat \<sigma> V v i (Formula.And (once I2 (Formula.Prev all (Formula.Since \<phi> all (Formula.And \<phi> Formula.first)))) (once I1 \<phi>))"
     by auto
-  then have "Formula.sat \<sigma> V v i (once I2 (Formula.Prev all (Formula.Since \<phi> all (Formula.And \<phi> first))))" by auto
-  then have "\<exists>j\<le>i. mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> Formula.sat \<sigma> V v j (Formula.Prev all (Formula.Since \<phi> all (Formula.And \<phi> first)))"
+  then have "Formula.sat \<sigma> V v i (once I2 (Formula.Prev all (Formula.Since \<phi> all (Formula.And \<phi> Formula.first))))" by auto
+  then have "\<exists>j\<le>i. mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> Formula.sat \<sigma> V v j (Formula.Prev all (Formula.Since \<phi> all (Formula.And \<phi> Formula.first)))"
     by auto
   then obtain j where j_props:
-    "j\<le>i" "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j)" "Formula.sat \<sigma> V v j (Formula.Prev all (Formula.Since \<phi> all (Formula.And \<phi> first)))"
+    "j\<le>i" "mem I2 (\<tau> \<sigma> i - \<tau> \<sigma> j)" "Formula.sat \<sigma> V v j (Formula.Prev all (Formula.Since \<phi> all (Formula.And \<phi> Formula.first)))"
     by blast
   {
     assume "j = 0"
-    then have "\<not>Formula.sat \<sigma> V v j (Formula.Prev all (Formula.Since \<phi> all (Formula.And \<phi> first)))" by auto
+    then have "\<not>Formula.sat \<sigma> V v j (Formula.Prev all (Formula.Since \<phi> all (Formula.And \<phi> Formula.first)))" by auto
     then have "False" using j_props by auto
   }
   then have j_pos: "j \<noteq> 0" by auto
-  then have j_pred_sat: "Formula.sat \<sigma> V v (j-1) (Formula.Since \<phi> all (Formula.And \<phi> first))"
+  then have j_pred_sat: "Formula.sat \<sigma> V v (j-1) (Formula.Since \<phi> all (Formula.And \<phi> Formula.first))"
     using j_pos j_props
     by (simp add: Nitpick.case_nat_unfold)
   {
@@ -1843,3 +1843,244 @@ next
     using flip_int_less_lower_props[of I "flip_int_less_lower I"] int_remove_lower_bound_bounded
   by (auto simp add: release_safe_bounded_def eventually_def)
 qed
+
+fun map_formula :: "(Formula.formula \<Rightarrow> Formula.formula) \<Rightarrow> Formula.formula \<Rightarrow> Formula.formula" where
+  "map_formula f (Formula.Pred r ts) = f (Formula.Pred r ts)"
+| "map_formula f (Formula.Let p \<phi> \<psi>) = f (
+    Formula.Let p (map_formula f \<phi>) (map_formula f \<psi>)
+  )"
+| "map_formula f (Formula.Eq t1 t2) = f (Formula.Eq t1 t2)"
+| "map_formula f (Formula.Less t1 t2) = f (Formula.Less t1 t2)"
+| "map_formula f (Formula.LessEq t1 t2) = f (Formula.LessEq t1 t2)"
+| "map_formula f (Formula.Neg \<phi>) = f (Formula.Neg (map_formula f \<phi>))"
+| "map_formula f (Formula.Or \<phi> \<psi>) = f (
+    Formula.Or (map_formula f \<phi>) (map_formula f \<psi>)
+  )"
+| "map_formula f (Formula.And \<phi> \<psi>) = f (
+    Formula.And (map_formula f \<phi>) (map_formula f \<psi>)
+  )"
+| "map_formula f (Formula.Ands \<phi>s) = f (
+    Formula.Ands (map (map_formula f) \<phi>s)
+  )"
+| "map_formula f (Formula.Exists \<phi>) = f (Formula.Exists (map_formula f \<phi>))"
+| "map_formula f (Formula.Agg y \<omega> b f' \<phi>) = f (
+    Formula.Agg y \<omega> b f' (map_formula f \<phi>)
+  )"
+| "map_formula f (Formula.Prev I \<phi>) = f (Formula.Prev I (map_formula f \<phi>))"
+| "map_formula f (Formula.Next I \<phi>) = f (Formula.Next I (map_formula f \<phi>))"
+| "map_formula f (Formula.Historically I \<phi>) = f (Formula.Historically I (map_formula f \<phi>))"
+| "map_formula f (Formula.Always I \<phi>) = f (Formula.Always I (map_formula f \<phi>))"
+| "map_formula f (Formula.Since \<phi> I \<psi>) = f (
+    Formula.Since (map_formula f \<phi>) I ( map_formula f \<psi>)
+  )"
+| "map_formula f (Formula.Until \<phi> I \<psi>) = f (
+    Formula.Until (map_formula f \<phi>) I (map_formula f \<psi>)
+  )"
+| "map_formula f (Formula.Trigger \<phi> I \<psi>) = f (
+    Formula.Trigger (map_formula f \<phi>) I (map_formula f \<psi>)
+  )"
+| "map_formula f (Formula.Release \<phi> I \<psi>) = f (
+    Formula.Release (map_formula f \<phi>) I (map_formula f \<psi>)
+  )"
+| "map_formula f (Formula.MatchF I r) = f (Formula.MatchF I r)"
+| "map_formula f (Formula.MatchP I r) = f (Formula.MatchP I r)"
+
+lemma map_formula_fvi:
+  assumes "\<forall>b \<phi>. Formula.fvi b (f \<phi>) = Formula.fvi b \<phi>"
+  shows "\<forall>b. Formula.fvi b (map_formula f \<phi>) = Formula.fvi b \<phi>"
+proof (induction \<phi>) qed (auto simp add: assms)
+
+
+lemma map_formula_sat:
+  assumes "\<forall>b \<phi>. Formula.fvi b (f \<phi>) = Formula.fvi b \<phi>"
+  assumes "\<forall>\<sigma> V v i \<phi>. Formula.sat \<sigma> V v i (f \<phi>) = Formula.sat \<sigma> V v i \<phi>"
+  shows "\<forall>\<sigma> V v i. Formula.sat \<sigma> V v i \<phi> = Formula.sat \<sigma> V v i (map_formula f \<phi>)"
+using assms proof (induction \<phi>)
+  case assm: (Let p \<phi>' \<psi>')
+  from assms have nfv_eq: "\<forall>\<phi>. Formula.nfv (map_formula f \<phi>) = Formula.nfv \<phi>"
+    using Formula.nfv_def map_formula_fvi
+    by auto
+  {
+    fix \<sigma> V v i
+    have "Formula.sat \<sigma> V v i (formula.Let p \<phi>' \<psi>') = Formula.sat \<sigma> (V(p \<mapsto> \<lambda>i. {v. length v = Formula.nfv \<phi>' \<and> Formula.sat \<sigma> V v i \<phi>'})) v i \<psi>'"
+      by auto
+    then have "Formula.sat \<sigma> V v i (formula.Let p \<phi>' \<psi>') = Formula.sat \<sigma> (V(p \<mapsto> \<lambda>i. {v. length v = Formula.nfv \<phi>' \<and> Formula.sat \<sigma> V v i \<phi>'})) v i (map_formula f \<psi>')"
+      using assm
+      by blast
+    then have "Formula.sat \<sigma> V v i (formula.Let p \<phi>' \<psi>') = Formula.sat \<sigma> V v i (map_formula f (formula.Let p \<phi>' \<psi>'))"
+      using assm nfv_eq assms
+      by auto
+  }
+  then show ?case by blast
+next
+  case assm: (Agg y \<omega> b f' \<phi>')
+  {
+    fix \<sigma> V v i
+    define M where "M = {(x, ecard Zs) |
+        x Zs. Zs = {zs. length zs = b \<and>
+        Formula.sat \<sigma> V (zs @ v) i \<phi>' \<and>
+        Formula.eval_trm (zs @ v) f' = x} \<and> Zs \<noteq> {}
+    }"
+    define M' where "M' = {(x, ecard Zs) |
+        x Zs. Zs = {zs. length zs = b \<and>
+        Formula.sat \<sigma> V (zs @ v) i (map_formula f \<phi>') \<and>
+        Formula.eval_trm (zs @ v) f' = x} \<and> Zs \<noteq> {}
+    }"
+    have M_eq: "M = M'" using M_def M'_def assm by auto
+    have nfv_eq: "\<forall>\<phi>. Formula.nfv (map_formula f \<phi>) = Formula.nfv \<phi>"
+      using assms Formula.nfv_def map_formula_fvi
+      by auto
+    have "Formula.sat \<sigma> V v i (formula.Agg y \<omega> b f' \<phi>') = (
+      (M = {} \<longrightarrow> fv \<phi>' \<subseteq> {0..<b}) \<and> v ! y = eval_agg_op \<omega> M
+    )"
+      using M_def
+      by auto
+    then have "Formula.sat \<sigma> V v i (formula.Agg y \<omega> b f' \<phi>') = (
+      (M' = {} \<longrightarrow> fv (map_formula f \<phi>') \<subseteq> {0..<b}) \<and> v ! y = eval_agg_op \<omega> M')"
+      using assms assm M_eq nfv_eq map_formula_fvi
+      by auto
+    then have "Formula.sat \<sigma> V v i (formula.Agg y \<omega> b f' \<phi>') = Formula.sat \<sigma> V v i (formula.Agg y \<omega> b f' (map_formula f \<phi>'))"
+      using M'_def
+      by auto
+    then have "Formula.sat \<sigma> V v i (formula.Agg y \<omega> b f' \<phi>') = Formula.sat \<sigma> V v i (map_formula f (formula.Agg y \<omega> b f' \<phi>'))"
+      using assms by auto
+  }
+  then show ?case by blast
+qed (auto split: nat.split)
+
+fun rewrite_historically :: "Formula.formula \<Rightarrow> Formula.formula" where
+  "rewrite_historically (Formula.Historically I \<phi>) = (
+    if (mem I 0) then
+      historically_safe_0 I (rewrite_historically \<phi>)
+    else (
+      if (bounded I) then
+        historically_safe_bounded I (rewrite_historically \<phi>)
+      else
+        historically_safe_unbounded I (rewrite_historically \<phi>)
+    )
+  )"
+| "rewrite_historically f = f"
+
+lemma historically_safe_0_fvi[simp]: "Formula.fvi b (historically_safe_0 I \<phi>) = Formula.fvi b \<phi>"
+  by (auto simp add: historically_safe_0_def split: if_splits)
+
+lemma historically_safe_unbounded_fvi[simp]: "Formula.fvi b (historically_safe_unbounded I \<phi>) = Formula.fvi b \<phi>"
+  by (auto simp add: historically_safe_unbounded_def)
+
+lemma historically_safe_bounded_fvi[simp]: "Formula.fvi b (historically_safe_bounded I \<phi>) = Formula.fvi b \<phi>"
+  by (auto simp add: historically_safe_bounded_def)
+
+lemma rewrite_historically_fvi[simp]: "Formula.fvi b (rewrite_historically \<phi>) = Formula.fvi b \<phi>"
+proof (induction \<phi>) qed (auto)
+
+lemma rewrite_historically_sat[simp]: "\<forall>\<sigma> V v i. Formula.sat \<sigma> V v i (rewrite_historically \<phi>) = Formula.sat \<sigma> V v i \<phi>"
+proof (induction \<phi>)
+  case assm: (Historically I \<phi>')
+  {
+    fix \<sigma> V v i
+    {
+      assume mem: "mem I 0"
+      then have "Formula.sat \<sigma> V v i (rewrite_historically (Formula.Historically I \<phi>')) = Formula.sat \<sigma> V v i (historically_safe_0 I (rewrite_historically \<phi>'))"
+        by auto
+      then have "Formula.sat \<sigma> V v i (rewrite_historically (Formula.Historically I \<phi>')) = Formula.sat \<sigma> V v i (formula.Historically I (rewrite_historically \<phi>'))"
+        using mem historically_rewrite_0[of I \<sigma> V v i "(rewrite_historically \<phi>')"]
+        by auto
+    }
+    moreover {
+      assume mem: "\<not> mem I 0"
+      {
+        assume b: "bounded I"
+        then have "Formula.sat \<sigma> V v i (rewrite_historically (Formula.Historically I \<phi>')) = Formula.sat \<sigma> V v i (historically_safe_bounded I (rewrite_historically \<phi>'))"
+          using mem by auto
+        then have "Formula.sat \<sigma> V v i (rewrite_historically (Formula.Historically I \<phi>')) = Formula.sat \<sigma> V v i (formula.Historically I (rewrite_historically \<phi>'))"
+          using mem b historically_rewrite_bounded[of I \<sigma> V v i "(rewrite_historically \<phi>')"]
+          by auto
+      }
+      moreover {
+        assume b: "\<not> bounded I"
+        then have "Formula.sat \<sigma> V v i (rewrite_historically (Formula.Historically I \<phi>')) = Formula.sat \<sigma> V v i (historically_safe_unbounded I (rewrite_historically \<phi>'))"
+          using mem by auto
+        then have "Formula.sat \<sigma> V v i (rewrite_historically (Formula.Historically I \<phi>')) = Formula.sat \<sigma> V v i (formula.Historically I (rewrite_historically \<phi>'))"
+          using mem b historically_rewrite_unbounded[of I \<sigma> V v i "(rewrite_historically \<phi>')"]
+          by auto
+      }
+      ultimately have "Formula.sat \<sigma> V v i (rewrite_historically (Formula.Historically I \<phi>')) = Formula.sat \<sigma> V v i (formula.Historically I (rewrite_historically \<phi>'))"
+        by auto
+    }
+    ultimately have "Formula.sat \<sigma> V v i (rewrite_historically (Formula.Historically I \<phi>')) = Formula.sat \<sigma> V v i (formula.Historically I (rewrite_historically \<phi>'))"
+        by auto
+      then have "Formula.sat \<sigma> V v i (rewrite_historically (formula.Historically I \<phi>')) = Formula.sat \<sigma> V v i (formula.Historically I \<phi>')"
+        using assm
+        by auto
+  }
+  then show ?case by blast
+qed (auto)
+
+fun rewrite_always :: "Formula.formula \<Rightarrow> Formula.formula" where
+  "rewrite_always (Formula.Always I \<phi>) = (
+    if (mem I 0) then
+      always_safe_0 I (rewrite_always \<phi>)
+    else (
+      if (bounded I) then
+        always_safe_bounded I (rewrite_always \<phi>)
+      else
+        undefined
+    )
+  )"
+| "rewrite_always f = f"
+
+lemma always_safe_0_fvi[simp]: "Formula.fvi b (always_safe_0 I \<phi>) = Formula.fvi b \<phi>"
+  by (auto simp add: always_safe_0_def split: if_splits)
+
+lemma always_safe_bounded_fvi[simp]: "Formula.fvi b (always_safe_bounded I \<phi>) = Formula.fvi b \<phi>"
+  by (auto simp add: always_safe_bounded_def)
+
+lemma rewrite_always_fvi[simp]: "Formula.future_bounded \<phi> \<Longrightarrow> Formula.fvi b (rewrite_always \<phi>) = Formula.fvi b \<phi>"
+proof (induction \<phi>) qed (auto)
+
+fun rewrite_trigger :: "Formula.formula \<Rightarrow> Formula.formula" where
+  "rewrite_trigger (Formula.Trigger \<phi> I \<psi>) = (
+    if (mem I 0) then
+      trigger_safe_0 (rewrite_trigger \<phi>) I (rewrite_trigger \<psi>)
+    else (
+      if (bounded I) then
+        trigger_safe_bounded (rewrite_trigger \<phi>) I (rewrite_trigger \<psi>)
+      else
+        trigger_safe_unbounded (rewrite_trigger \<phi>) I (rewrite_trigger \<psi>)
+    )
+  )"
+| "rewrite_trigger f = f"
+
+lemma trigger_safe_0_fvi[simp]: "Formula.fvi b (trigger_safe_0 \<phi> I \<psi>) = Formula.fvi b \<phi> \<union> Formula.fvi b \<psi>"
+  by (auto simp add: trigger_safe_0_def)
+
+lemma trigger_safe_unbounded_fvi[simp]: "Formula.fvi b (trigger_safe_unbounded \<phi> I \<psi>) = Formula.fvi b \<phi> \<union> Formula.fvi b \<psi>"
+  by (auto simp add: trigger_safe_unbounded_def)
+
+lemma trigger_safe_bounded_fvi[simp]: "Formula.fvi b (trigger_safe_bounded \<phi> I \<psi>) = Formula.fvi b \<phi> \<union> Formula.fvi b \<psi>"
+  by (auto simp add: trigger_safe_bounded_def)
+
+lemma rewrite_trigger_fvi[simp]: "Formula.fvi b (rewrite_trigger \<phi>) = Formula.fvi b \<phi>"
+proof (induction \<phi>) qed (auto)
+
+fun rewrite_release :: "Formula.formula \<Rightarrow> Formula.formula" where
+  "rewrite_release (Formula.Release \<phi> I \<psi>) = (
+    if (mem I 0) then
+      release_safe_0 (rewrite_release \<phi>) I (rewrite_release \<psi>)
+    else (
+      if (bounded I) then
+        release_safe_bounded (rewrite_release \<phi>) I (rewrite_release \<psi>)
+      else
+        undefined
+    )
+  )"
+| "rewrite_release f = f"
+
+lemma release_safe_0_fvi[simp]: "Formula.fvi b (release_safe_0 \<phi> I \<psi>) = Formula.fvi b \<phi> \<union> Formula.fvi b \<psi>"
+  by (auto simp add: release_safe_0_def)
+
+lemma release_safe_bounded_fvi[simp]: "Formula.fvi b (release_safe_bounded \<phi> I \<psi>) = Formula.fvi b \<phi> \<union> Formula.fvi b \<psi>"
+  by (auto simp add: release_safe_bounded_def)
+
+lemma rewrite_release_fvi[simp]: "Formula.future_bounded \<phi> \<Longrightarrow> Formula.fvi b (rewrite_release \<phi>) = Formula.fvi b \<phi>"
+proof (induction \<phi>) qed (auto)

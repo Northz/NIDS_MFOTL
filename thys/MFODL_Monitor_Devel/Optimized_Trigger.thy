@@ -27,9 +27,9 @@ definition trigger_results :: "\<I> \<Rightarrow> ts \<Rightarrow> 'a mtaux \<Ri
   "trigger_results I cur auxset = {
     tuple.
       \<comment> \<open>pretty much the definition of trigger\<close>
-      (\<forall>t relL relR. (t, relL, relR) \<in> auxset \<and> memL I (cur - t) \<and> memR I (cur - t) \<longrightarrow> 
+      (\<exists>t relL relR. (t, relL, relR) \<in> auxset \<and> mem I (cur - t) \<and> 
         \<comment> \<open>either \<psi> holds or there is a later database where the same tuple satisfies \<phi>\<close>
-        tuple \<in> relR \<or> (\<exists>t' relL' relR'. (t', relL', relR') \<in> auxset \<and> t < t' \<and> tuple \<in> relL')
+        (tuple \<in> relR \<or> (\<exists>t' relL' relR'. (t', relL', relR') \<in> auxset \<and> t < t' \<and> tuple \<in> relL'))
       )
 }"
 
@@ -45,12 +45,12 @@ locale mtaux =
   (* assuming the previous state outputted the same result, the next will as well *)
   assumes valid_update_mtaux: "
     nt \<ge> cur \<Longrightarrow>
-    table (args_n args) (args_L args) relL \<Longrightarrow>
-    table (args_n args) (args_R args) relR \<Longrightarrow>
-    result_mtaux args cur aux = trigger_results (args_ivl args) cur auxset \<Longrightarrow>
+    table (args_n args) (targs_L args) relL \<Longrightarrow>
+    table (args_n args) (targs_R args) relR \<Longrightarrow>
+    result_mtaux args cur aux = trigger_results (targs_ivl args) cur auxset \<Longrightarrow>
     result_mtaux args cur (update_mtaux args nt relL relR aux) =
       trigger_results
-        (args_ivl args)
+        (targs_ivl args)
         cur
         ({(t, relL, relR) \<in> auxset. memR (targs_ivl args) (nt - t)} \<union> {(nt, relL, relR)})
   "
@@ -82,14 +82,18 @@ fun init_mmtaux :: "targs \<Rightarrow> event_data mmtaux" where
   "init_mmtaux args = (0, [], [], [], [], 0, Mapping.empty)"
 
 
-fun result_mmtaux :: "targs \<Rightarrow> ts \<Rightarrow> event_data mmtaux \<Rightarrow> event_data table" where
-  "result_mmtaux args t (nt, maskL, maskR, data_prev, data_in, data_in_count, tuple_sat_count) = 
+fun result_mmtaux :: "targs \<Rightarrow> event_data mmtaux \<Rightarrow> event_data table" where
+  "result_mmtaux args (nt, maskL, maskR, data_prev, data_in, data_in_count, tuple_sat_count) = 
   {tuple \<in> (Mapping.keys tuple_sat_count).
     case (Mapping.lookup tuple_sat_count tuple) of \<comment> \<open>return all tuples where the count is equal to data_in_count\<close>
       (Some n) \<Rightarrow> n = data_in_count
       | _ \<Rightarrow> False
   }
 "
+
+lemma valid_init_mtaux: "L \<subseteq> R \<Longrightarrow>
+    (result_mmtaux (init_targs I n L R) (init_mmtaux (init_targs I n L R))) = (trigger_results I 0 {})"
+  by (auto simp add: trigger_results_def)
 
 (* tail recursive function to split a list into two based on a predicate while maintaining the order *)
 fun split_list :: "('a \<Rightarrow> bool) \<Rightarrow> 'a list \<Rightarrow> 'a list \<Rightarrow> 'a list \<Rightarrow> 'a list \<times> 'a list" where
@@ -218,6 +222,97 @@ fun update_mmtaux :: "targs \<Rightarrow> ts \<Rightarrow> event_data table \<Ri
     let aux = add_new_table args relL relR aux in
     aux
   )"
+
+lemma x:
+  assumes "nt \<ge> cur"
+  assumes aux_def:  "aux = (nt, maskL, maskR, data_in, data_prev, data_in_count, tuple_sat_count)"
+  assumes aux'_def: "aux' = (nt', maskL', maskR', data_in', data_prev', data_in_count', tuple_sat_count')"
+                    "aux' = (update_mmtaux args nt relL relR aux)"
+  assumes IH: "result_mmtaux args aux = trigger_results (targs_ivl args) cur auxset"
+  shows: "\<forall>tuple \<in> result_mmtaux args aux. "
+
+lemma valid_update_mmtaux:
+  assumes "nt \<ge> cur"
+  assumes "table (args_n args) (args_L args) relL"
+  assumes "table (args_n args) (args_R args) relR"
+  assumes aux_def:  "aux = (nt, maskL, maskR, data_in, data_prev, data_in_count, tuple_sat_count)"
+  assumes aux'_def: "aux' = (nt', maskL', maskR', data_in', data_prev', data_in_count', tuple_sat_count')"
+                    "aux' = (update_mmtaux args nt relL relR aux)"
+  assumes IH: "result_mmtaux args aux = trigger_results (targs_ivl args) cur auxset"
+  shows "result_mmtaux args aux' =
+      trigger_results
+        (targs_ivl args)
+        nt
+        ({(t, relL, relR) \<in> auxset. memR (targs_ivl args) (nt - t)} \<union> {(nt, relL, relR)})"
+proof -
+  define I where "I = targs_ivl args"
+  define auxset' where "auxset' = {(t, relL, relR) \<in> auxset. memR I (nt - t)} \<union> {(nt, relL, relR)}"
+  {
+    fix tuple
+    assume "tuple \<in> result_mmtaux args aux'"
+    then have tuple_props: "tuple \<in> (Mapping.keys tuple_sat_count')"
+      "(case (Mapping.lookup tuple_sat_count' tuple) of
+        (Some n) \<Rightarrow> n = data_in_count'
+        | _ \<Rightarrow> False)"
+      using aux'_def by auto
+    then obtain n where n_props: "Mapping.lookup tuple_sat_count' tuple = Some n" "n = data_in_count'"
+      using case_optionE
+      by blast
+    then have "tuple \<in> (trigger_results (targs_ivl args) nt auxset')"
+    proof (cases "tuple \<in> result_mmtaux args aux")
+      case True
+      then have "tuple \<in> trigger_results (targs_ivl args) cur auxset" using IH by auto
+      then have "\<exists>t relL relR. (t, relL, relR) \<in> auxset \<and> mem I (cur - t) \<and> 
+        (tuple \<in> relR \<or> (\<exists>t' relL' relR'. (t', relL', relR') \<in> auxset \<and> t < t' \<and> tuple \<in> relL'))"
+        using I_def
+        by (auto simp add: trigger_results_def)
+      then obtain t relL relR where rel_props: "(t, relL, relR) \<in> auxset" "mem I (cur - t)"
+        "tuple \<in> relR \<or> (\<exists>t' relL' relR'. (t', relL', relR') \<in> auxset \<and> t < t' \<and> tuple \<in> relL')"
+        by blast
+      show ?thesis
+      proof (cases "memR I (nt - t)")
+        case True
+        then have "memR I (nt - t)" by auto
+        then have mem: "mem I (nt - t)" using assms(1) rel_props(2) by auto
+        then have set: "(t, relL, relR) \<in> auxset'" using rel_props(1) auxset'_def by auto
+        {
+          assume "tuple \<in> relR"
+          then have "\<exists>t relL relR. (t, relL, relR) \<in> auxset' \<and> memL I (nt - t) \<and> memR I (nt - t) \<and> 
+          (tuple \<in> relR \<or> (\<exists>t' relL' relR'. (t', relL', relR') \<in> auxset' \<and> t < t' \<and> tuple \<in> relL'))"
+            using mem set
+            by auto
+        }
+        moreover {
+          assume "\<exists>t' relL' relR'. (t', relL', relR') \<in> auxset \<and> t < t' \<and> tuple \<in> relL'"
+          then obtain t' relL' relR' where rel'_props: "(t', relL', relR') \<in> auxset \<and> t < t' \<and> tuple \<in> relL'" by blast
+          then have "memR I (nt - t')" using mem assms(1) by auto
+          then have "(t', relL', relR') \<in> auxset'" using rel'_props(1) auxset'_def by auto
+          then have "\<exists>t relL relR. (t, relL, relR) \<in> auxset' \<and> memL I (nt - t) \<and> memR I (nt - t) \<and> 
+          (tuple \<in> relR \<or> (\<exists>t' relL' relR'. (t', relL', relR') \<in> auxset' \<and> t < t' \<and> tuple \<in> relL'))"
+            using set mem rel'_props by blast
+        }
+        ultimately have "\<exists>t relL relR. (t, relL, relR) \<in> auxset' \<and> memL I (nt - t) \<and> memR I (nt - t) \<and> 
+        (tuple \<in> relR \<or> (\<exists>t' relL' relR'. (t', relL', relR') \<in> auxset' \<and> t < t' \<and> tuple \<in> relL'))"
+          using rel_props(3)
+          by blast
+        then show ?thesis using I_def by (auto simp add: trigger_results_def)
+      next
+        case notMem: False
+        have "mem I (cur - t)" using rel_props by auto
+      qed
+    next
+      case False
+      then show ?thesis sorry
+    qed
+  }
+  moreover {
+    fix t
+    assume "t \<in> (trigger_results (targs_ivl args) nt auxset')"
+    then have "t \<in> result_mmtaux args (update_mmtaux args nt relL relR aux)"
+      sorry
+  }
+  ultimately show ?thesis using aux'_def auxset'_def sorry
+qed
 
 (*
 fun valid_mmsaux :: "targs \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mtaux \<Rightarrow> bool" where
