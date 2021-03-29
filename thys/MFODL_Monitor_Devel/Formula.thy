@@ -910,8 +910,8 @@ fun safe_formula :: "formula \<Rightarrow> bool" where
 | "safe_formula (Agg y \<omega> b f \<phi>) = (safe_formula \<phi> \<and> y + b \<notin> fv \<phi> \<and> {0..<b} \<subseteq> fv \<phi> \<and> fv_trm f \<subseteq> fv \<phi>)"
 | "safe_formula (Prev I \<phi>) = (safe_formula \<phi>)"
 | "safe_formula (Next I \<phi>) = (safe_formula \<phi>)"
-| "safe_formula (Historically I \<phi>) = (safe_formula \<phi>)"
-| "safe_formula (Always I \<phi>) = (safe_formula \<phi>)"
+| "safe_formula (Historically I \<phi>) = (mem I 0 \<and> safe_formula \<phi>)"
+| "safe_formula (Always I \<phi>) = (mem I 0 \<and> safe_formula \<phi>)"
 | "safe_formula (Since \<phi> I \<psi>) = (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and>
     (safe_formula \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False)))"
 | "safe_formula (Until \<phi> I \<psi>) = (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and>
