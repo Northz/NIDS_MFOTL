@@ -17,7 +17,6 @@ type_synonym 'a mtaux = "(ts \<times> 'a table \<times> 'a table) list"
 definition init_targs :: "\<I> \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> targs" where
   "init_targs I n L R = \<lparr>targs_ivl = I, targs_n = n, targs_L = L, targs_R = R\<rparr>"
 
-
 definition trigger_results :: "\<I> \<Rightarrow> ts \<Rightarrow> 'a mtaux \<Rightarrow> 'a table" where
   "trigger_results I cur auxlist = {
     tuple.
@@ -29,273 +28,108 @@ definition trigger_results :: "\<I> \<Rightarrow> ts \<Rightarrow> 'a mtaux \<Ri
 }"
 
 locale mtaux =
-  fixes init_mtaux :: "targs \<Rightarrow> 'mtaux"
+  fixes valid_mtaux :: "targs \<Rightarrow> ts \<Rightarrow> 'mtaux \<Rightarrow> event_data mtaux \<Rightarrow> bool"
+    and init_mtaux :: "targs \<Rightarrow> 'mtaux"
     and update_mtaux :: "targs \<Rightarrow> ts \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> 'mtaux \<Rightarrow> 'mtaux"
-    and result_mtaux :: "targs \<Rightarrow> ts \<Rightarrow> 'mtaux \<Rightarrow> event_data table"
+    and result_mtaux :: "targs \<Rightarrow> 'mtaux \<Rightarrow> event_data table"
 
   (* the initial state should be valid *)
-  (* TODO: safe_formula definition *)
-  assumes valid_init_mtaux: "L \<subseteq> R \<Longrightarrow>
+  assumes valid_init_mtaux: "(
+    if (mem I 0)
+      then
+        L \<subseteq> R
+      else 
+        L = R
+    ) \<Longrightarrow>
     let args = init_targs I n L R in
-    result_mtaux args 0 (init_mtaux args) = trigger_results I 0 []"
+    valid_mtaux args 0 (init_mtaux args) []"
 
   (* assuming the previous state outputted the same result, the next will as well *)
   assumes valid_update_mtaux: "
     nt \<ge> cur \<Longrightarrow>
     table (targs_n args) (targs_L args) relL \<Longrightarrow>
     table (targs_n args) (targs_R args) relR \<Longrightarrow>
-    result_mtaux args cur aux = trigger_results (targs_ivl args) cur auxlist \<Longrightarrow>
-    result_mtaux args cur (update_mtaux args nt relL relR aux) =
-      trigger_results
-        (targs_ivl args)
-        cur
-        ((filter (\<lambda> (t, relL, relR). memR (targs_ivl args) (nt - t)) auxlist) @ [(nt, relL, relR)])
+    valid_mtaux args cur aux auxlist \<Longrightarrow>
+    valid_mtaux
+      args
+      cur
+      (update_mtaux args nt relL relR aux)
+      ((filter (\<lambda> (t, relL, relR). memR (targs_ivl args) (nt - t)) auxlist) @ [(nt, relL, relR)])
+  "
+
+  and valid_result_mtaux: "
+    valid_mtaux args cur aux auxlist \<Longrightarrow>
+    result_mtaux args aux = trigger_results (targs_ivl args) cur auxlist
   "
 
 type_synonym 'a mmtaux = "
-  ts \<times>                              \<comment> \<open>the newest timestamp\<close>
-  bool list \<times>                       \<comment> \<open>maskL, i.e. all free variables of R \\ L are masked\<close>
-  bool list \<times>                       \<comment> \<open>maskR, i.e. all free variables of L \\ R are masked\<close>
-  (ts \<times> 'a table) list \<times>            \<comment> \<open>data_prev: all databases containing the tuples satisfying the trigger condition where the timestamp doesn't yet satisfy memL\<close>
-  (ts \<times> 'a table) list \<times>            \<comment> \<open>data_in: all databases containing the tuples satisfying the trigger condition where the ts is in the interval\<close>
-  nat \<times>                             \<comment> \<open>the length of data_in\<close>
-  (('a tuple, nat) mapping)          \<comment> \<open>for every tuple the number of databases inside the interval satisfying the trigger condition\<close>
+  ts \<times>                                 \<comment> \<open>the newest timestamp\<close>
+  bool list \<times>                          \<comment> \<open>maskL, i.e. all free variables of R \\ L are masked\<close>
+  bool list \<times>                          \<comment> \<open>maskR, i.e. all free variables of L \\ R are masked\<close>
+  (ts \<times> 'a table \<times> 'a table) queue \<times>  \<comment> \<open>data_prev: all databases containing the tuples satisfying the lhs or the rhs where the timestamp doesn't yet satisfy memL\<close>
+  (ts \<times> 'a table \<times> 'a table) queue \<times>  \<comment> \<open>data_in: all databases containing the tuples satisfying the lhs or the rhs where the ts is in the interval\<close>
+  (('a tuple, ts) mapping) \<times>           \<comment> \<open>tuple_in for once\<close>
+  (('a tuple, ts) mapping) \<times>           \<comment> \<open>tuple_since for historically\<close>
+  (('a tuple, ts) mapping)             \<comment> \<open>tuple_since for \<psi> S (\<psi> \<and> \<phi>)\<close>
 "
 
+definition ts_tuple_rel_binary :: "(ts \<times> 'a table \<times> 'a table) set \<Rightarrow> (ts \<times> 'a tuple \<times> 'a tuple) set" where
+  "ts_tuple_rel_binary ys = {(t, as, bs). \<exists>X Y. as \<in> X \<and> bs \<in> Y \<and> (t, X, Y) \<in> ys}"
 
+definition valid_tuple :: "(('a tuple, ts) mapping) \<Rightarrow> (ts \<times> 'a tuple) \<Rightarrow> bool" where
+  "valid_tuple tuple_since = (\<lambda>(t, as). case Mapping.lookup tuple_since as of None \<Rightarrow> False
+  | Some t' \<Rightarrow> t \<ge> t')"
+
+fun valid_mmtaux :: "targs \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow> 'a mtaux \<Rightarrow> bool" where
+  "valid_mmtaux args cur (nt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since) ys \<longleftrightarrow>
+    (targs_L args) \<subseteq> (targs_R args) \<and>
+    maskL = join_mask (targs_n args) (targs_L args) \<and>
+    maskR = join_mask (targs_n args) (targs_R args) \<and>
+    (\<forall>(t, X, Y) \<in> set ys. table (targs_n args) (targs_R args) X \<and> table (targs_n args) (targs_L args) Y) \<and>
+    table (targs_n args) (targs_R args) (Mapping.keys tuple_in_once) \<and>
+    table (targs_n args) (targs_R args) (Mapping.keys tuple_since_hist) \<and>
+    table (targs_n args) (targs_R args) (Mapping.keys tuple_since_since) \<and>
+    (\<forall>as \<in> \<Union>((fst o snd) ` (set (linearize data_prev))). wf_tuple (targs_n args) (targs_R args) as) \<and>
+    (\<forall>as \<in> \<Union>((snd o snd) ` (set (linearize data_prev))). wf_tuple (targs_n args) (targs_R args) as) \<and>
+    cur = nt \<and>
+     \<comment> \<open>ts_tuple_rel_binary (set ys) =
+    {tas \<in> ts_tuple_rel_binary (set (linearize data_prev) \<union> set (linearize data_in)).
+    valid_tuple tuple_since tas} \<and>\<close>  \<comment> \<open>all tuples in data_prev and data_in have a (valid) entry in the mapping\<close>
+    sorted (map fst (linearize data_prev)) \<and>
+    (\<forall>t \<in> fst ` set (linearize data_prev). t \<le> nt \<and> \<not> memL (targs_ivl args) (nt - t)) \<and>
+    sorted (map fst (linearize data_in)) \<and>
+    (\<forall>t \<in> fst ` set (linearize data_in). t \<le> nt \<and> memL (targs_ivl args) (nt - t)) \<and>
+    valid_tuple_in ts_tuple_rel_binary data_in tuple_in (\<lambda>x. True) \<and>
+    (\<forall>as \<in> Mapping.keys tuple_since_hist. case Mapping.lookup tuple_since_hist as of Some t \<Rightarrow> t \<le> nt) \<and>
+    (\<forall>as \<in> Mapping.keys tuple_since_since. case Mapping.lookup tuple_since_since as of Some t \<Rightarrow> t \<le> nt)
+  "
 
 fun init_mmtaux :: "targs \<Rightarrow> event_data mmtaux" where
-  "init_mmtaux args = (0, [], [], [], [], 0, Mapping.empty)"
+  "init_mmtaux args = (0, [], [], empty_queue, empty_queue, Mapping.empty, Mapping.empty, Mapping.empty)"
+
+lemma valid_init_mtaux: "(
+    if (mem I 0)
+      then
+        L \<subseteq> R
+      else 
+        L = R
+    ) \<Longrightarrow>
+    valid_mmtaux args 0 (init_mmtaux args) []"
+  by (auto simp add: trigger_results_def)
 
 
 fun result_mmtaux :: "targs \<Rightarrow> event_data mmtaux \<Rightarrow> event_data table" where
-  "result_mmtaux args (nt, maskL, maskR, data_prev, data_in, data_in_count, tuple_sat_count) = 
-  {tuple \<in> (Mapping.keys tuple_sat_count).
-    case (Mapping.lookup tuple_sat_count tuple) of \<comment> \<open>return all tuples where the count is equal to data_in_count\<close>
-      (Some n) \<Rightarrow> n = data_in_count
-      | _ \<Rightarrow> False
-  }
+  "result_mmtaux args (nt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since) = 
+  {}
 "
-
-lemma valid_init_mtaux: "L \<subseteq> R \<Longrightarrow>
-    (result_mmtaux (init_targs I n L R) (init_mmtaux (init_targs I n L R))) = (trigger_results I 0 [])"
-  by (auto simp add: trigger_results_def)
 
 (* tail recursive function to split a list into two based on a predicate while maintaining the order *)
 fun split_list :: "('a \<Rightarrow> bool) \<Rightarrow> 'a list \<Rightarrow> 'a list \<Rightarrow> 'a list \<Rightarrow> 'a list \<times> 'a list" where
   "split_list p [] t f = (t, f)"
 | "split_list p (x#xs) t f = (if (p x) then split_list p xs (x#t) f else split_list p xs t (x#f))"
 
-(*
-   - move entries data_prev to data_in and remove entries from data_in
-   - update data_in_count and tuple_sat_count accordingly
-*)
-fun remove_old_entries_mmtaux :: "targs \<Rightarrow> ts \<Rightarrow> event_data mmtaux \<Rightarrow> event_data mmtaux" where
-  "remove_old_entries_mmtaux args t (nt, maskL, maskR, data_in, data_prev, data_in_count, tuple_sat_count) = (
-    \<comment> \<open>split data_in based on whether the db is still in the interval\<close>
-    \<comment> \<open>TODO: optimize. if sorted can stop early\<close>
-    let (filtered_data_in, data_in_dropout) = split_list (\<lambda> (t, _).
-      memR (targs_ivl args) (nt - t) \<comment> \<open>data_in satisfied memL so now remove the ones not satisfying memR anymore\<close>
-    ) [] [] data_in in
-    \<comment> \<open>split data_prev based on whether the db already is in the interval\<close>
-    \<comment> \<open>TODO: optimize. if sorted can stop early\<close>
-    let (data_prev_filtered, data_prev_dropout) = split_list (\<lambda> (t, _).
-      memL (targs_ivl args) (nt - t) \<comment> \<open>split dbs on whether they're already in the interval\<close>
-    ) [] [] data_prev in
-    \<comment> \<open>from the ones that aren't before the lower boundary, remove those that directly drop out\<close>
-    \<comment> \<open>TODO: optimize. if sorted can stop early\<close>
-    let data_prev_move = filter (\<lambda> (t, _).
-      memR (targs_ivl args) (nt -t) \<comment> \<open>drop databases that directly go from data_prev to outside the interval\<close>
-    ) data_prev_dropout in
-    \<comment> \<open>based on data_in_dropout and data_prev_move, update data_in_count and tuple_sat_count\<close>
-    \<comment> \<open>first subtract one for all removed occurences of a tuple\<close>
-    let (updated_count, updated_mapping) = foldr (\<lambda> (t, table) (count, mapping).
-      (
-        count - 1, \<comment> \<open>subtract one from the number of databases in the interval\<close>
-        Finite_Set.fold (\<lambda> tuple mapping.
-          case (Mapping.lookup mapping tuple)
-            of (Some n) \<Rightarrow>
-              if n = 1 then \<comment> \<open>instead of setting a value in the mapping to zero, we can simply remove it\<close>
-                Mapping.delete tuple mapping
-              else
-                Mapping.update tuple (n-1) mapping
-            | _ \<Rightarrow> undefined \<comment> \<open>crash since the mapping should contain the tuple because of the invariant\<close>
-          ) mapping table
-      )
-    ) data_in_dropout (data_in_count, tuple_sat_count) in
-    \<comment> \<open>next add one for all added occurences of a tuple\<close>
-    let (updated_count, updated_mapping) = foldr (\<lambda> (t, table) (count, mapping).
-      (
-        count + 1, \<comment> \<open>add one to the number of databases in the interval\<close>
-        Finite_Set.fold (\<lambda> tuple mapping.
-          Mapping.update tuple (
-            case (Mapping.lookup mapping tuple)
-              of (Some n) \<Rightarrow> n+1
-              | _ \<Rightarrow> 1 \<comment> \<open>if the tuple wasn't present yet, set it's value to one\<close>
-          ) mapping
-        ) mapping table
-      )
-    ) data_prev_move (updated_count, updated_mapping) in
-    (t, maskL, maskR, filtered_data_in @ data_prev_move, data_prev_filtered, updated_count, updated_mapping)
-  )"
-
-(*
-   - add new table to data_in / data_prev
-   - add tuples for which relL / \<phi> is satisfied to all dbs and set their counts to data_in_count
-*)
-fun add_new_table :: "targs \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> event_data mmtaux \<Rightarrow> event_data mmtaux" where
-  "add_new_table args relL relR (nt, maskL, maskR, data_in, data_prev, data_in_count, tuple_sat_count) = (
-    \<comment> \<open>add the new table to data_in or data_prev depending on whether 0 is in the interval
-       if 0 is in the interval, also update tuple_sat_count\<close>
-    let (data_in, data_prev, data_in_count, tuple_sat_count) = (
-      if (mem (targs_ivl args) 0) then
-        (case (data_in) of
-            ([]) \<Rightarrow> (
-              [(nt, relR)], \<comment> \<open>is the first entry\<close>
-              data_prev,
-              data_in_count+1,
-              Finite_Set.fold (\<lambda> tuple mapping.
-                Mapping.update tuple (
-                case (Mapping.lookup mapping tuple)
-                  of (Some n) \<Rightarrow> n+1
-                  | _ \<Rightarrow> 1 \<comment> \<open>if the tuple wasn't present yet, set it's value to one\<close>
-                ) mapping
-              ) tuple_sat_count relR \<comment> \<open>add one for all tuples satisfying the rhs\<close>
-            )
-          | ((t', rel')#xs) \<Rightarrow> (
-             \<comment> \<open>if the ts of the last db is the same, merge the databases\<close>
-            if (t' = nt) then
-              ((t', rel' \<union> relR)#xs, data_prev, data_in_count, tuple_sat_count)
-            else
-              (
-                (nt, relR)#data_in,
-                data_prev,
-                data_in_count,
-                \<comment> \<open>a new db was added to data_in and 0 is in the interval, hence update tuple_sat_count\<close>
-                (Finite_Set.fold (\<lambda> tuple mapping.
-                  Mapping.update tuple (
-                  case (Mapping.lookup mapping tuple)
-                    of (Some n) \<Rightarrow> n+1
-                    | _ \<Rightarrow> 1 \<comment> \<open>if the tuple wasn't present yet, set it's value to one\<close>
-                  ) mapping
-                ) tuple_sat_count relR \<comment> \<open>add one for all tuples satisfying the rhs\<close>)
-            )
-          )
-        )
-      else
-        (case data_prev of
-          \<comment> \<open>if the ts of the last db is the same, merge them\<close>
-            ([])   \<Rightarrow> (data_in, (nt, relR)#data_prev, data_in_count, tuple_sat_count)
-          | ((t', rel')#xs) \<Rightarrow> (data_in, (t', rel' \<union> relR)#xs, data_in_count, tuple_sat_count)
-        )
-    ) in
-     \<comment> \<open>independent of the interval, for all tuples that satisfy \<phi>, set tuple_sat_count to data_in_count
-        and add the tuple to all entries in data_in and data_prev s.t. the count is reduced when
-        the respective table is removed\<close>
-    \<comment> \<open>TODO: optimize somehow\<close>
-    let data_in = map (\<lambda> (t, table). (t, table \<union> relL)) data_in in
-    let data_prev = map (\<lambda> (t, table). (t, table \<union> relL)) data_prev in
-    let tuple_sat_count = Finite_Set.fold (\<lambda> tuple mapping.
-      \<comment> \<open>simply set the entries for which \<phi> holds to data_in_count \<close>
-      Mapping.update tuple data_in_count mapping
-    ) tuple_sat_count relL in
-    (nt, maskL, maskR, data_in, data_prev, data_in_count, tuple_sat_count)
-  )"
-
-fun update_mmtaux :: "targs \<Rightarrow> ts \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> event_data mmtaux \<Rightarrow> event_data mmtaux" where
-  "update_mmtaux args t relL relR aux = (
-    let aux = remove_old_entries_mmtaux args t aux in
-    let aux = add_new_table args relL relR aux in
-    aux
-  )"
 
 
-
-lemma valid_update_mmtaux:
-  assumes "nt \<ge> cur"
-  assumes "table (args_n args) (args_L args) relL"
-  assumes "table (args_n args) (args_R args) relR"
-  assumes aux_def:  "aux = (nt, maskL, maskR, data_in, data_prev, data_in_count, tuple_sat_count)"
-  assumes aux'_def: "aux' = (nt', maskL', maskR', data_in', data_prev', data_in_count', tuple_sat_count')"
-                    "aux' = (update_mmtaux args nt relL relR aux)"
-  assumes IH: "result_mmtaux args aux = trigger_results (targs_ivl args) cur auxset"
-  shows "result_mmtaux args aux' =
-      trigger_results
-        (targs_ivl args)
-        nt
-        ({(t, relL, relR) \<in> auxset. memR (targs_ivl args) (nt - t)} \<union> {(nt, relL, relR)})"
-proof -
-  define I where "I = targs_ivl args"
-  define auxset' where "auxset' = {(t, relL, relR) \<in> auxset. memR I (nt - t)} \<union> {(nt, relL, relR)}"
-  {
-    fix tuple
-    assume "tuple \<in> result_mmtaux args aux'"
-    then have tuple_props: "tuple \<in> (Mapping.keys tuple_sat_count')"
-      "(case (Mapping.lookup tuple_sat_count' tuple) of
-        (Some n) \<Rightarrow> n = data_in_count'
-        | _ \<Rightarrow> False)"
-      using aux'_def by auto
-    then obtain n where n_props: "Mapping.lookup tuple_sat_count' tuple = Some n" "n = data_in_count'"
-      using case_optionE
-      by blast
-    then have "tuple \<in> (trigger_results (targs_ivl args) nt auxset')"
-    proof (cases "tuple \<in> result_mmtaux args aux")
-      case True
-      then have "tuple \<in> trigger_results (targs_ivl args) cur auxset" using IH by auto
-      then have "\<exists>t relL relR. (t, relL, relR) \<in> auxset \<and> mem I (cur - t) \<and> 
-        (tuple \<in> relR \<or> (\<exists>t' relL' relR'. (t', relL', relR') \<in> auxset \<and> t < t' \<and> tuple \<in> relL'))"
-        using I_def
-        by (auto simp add: trigger_results_def)
-      then obtain t relL relR where rel_props: "(t, relL, relR) \<in> auxset" "mem I (cur - t)"
-        "tuple \<in> relR \<or> (\<exists>t' relL' relR'. (t', relL', relR') \<in> auxset \<and> t < t' \<and> tuple \<in> relL')"
-        by blast
-      show ?thesis
-      proof (cases "memR I (nt - t)")
-        case True
-        then have "memR I (nt - t)" by auto
-        then have mem: "mem I (nt - t)" using assms(1) rel_props(2) by auto
-        then have set: "(t, relL, relR) \<in> auxset'" using rel_props(1) auxset'_def by auto
-        {
-          assume "tuple \<in> relR"
-          then have "\<exists>t relL relR. (t, relL, relR) \<in> auxset' \<and> memL I (nt - t) \<and> memR I (nt - t) \<and> 
-          (tuple \<in> relR \<or> (\<exists>t' relL' relR'. (t', relL', relR') \<in> auxset' \<and> t < t' \<and> tuple \<in> relL'))"
-            using mem set
-            by auto
-        }
-        moreover {
-          assume "\<exists>t' relL' relR'. (t', relL', relR') \<in> auxset \<and> t < t' \<and> tuple \<in> relL'"
-          then obtain t' relL' relR' where rel'_props: "(t', relL', relR') \<in> auxset \<and> t < t' \<and> tuple \<in> relL'" by blast
-          then have "memR I (nt - t')" using mem assms(1) by auto
-          then have "(t', relL', relR') \<in> auxset'" using rel'_props(1) auxset'_def by auto
-          then have "\<exists>t relL relR. (t, relL, relR) \<in> auxset' \<and> memL I (nt - t) \<and> memR I (nt - t) \<and> 
-          (tuple \<in> relR \<or> (\<exists>t' relL' relR'. (t', relL', relR') \<in> auxset' \<and> t < t' \<and> tuple \<in> relL'))"
-            using set mem rel'_props by blast
-        }
-        ultimately have "\<exists>t relL relR. (t, relL, relR) \<in> auxset' \<and> memL I (nt - t) \<and> memR I (nt - t) \<and> 
-        (tuple \<in> relR \<or> (\<exists>t' relL' relR'. (t', relL', relR') \<in> auxset' \<and> t < t' \<and> tuple \<in> relL'))"
-          using rel_props(3)
-          by blast
-        then show ?thesis using I_def by (auto simp add: trigger_results_def)
-      next
-        case notMem: False
-        have "mem I (cur - t)" using rel_props by auto
-        then show ?thesis sorry
-      qed
-    next
-      case False
-      then show ?thesis sorry
-    qed
-  }
-  moreover {
-    fix t
-    assume "t \<in> (trigger_results (targs_ivl args) nt auxset')"
-    then have "t \<in> result_mmtaux args (update_mmtaux args nt relL relR aux)"
-      sorry
-  }
-  ultimately show ?thesis
-    using assms auxset'_def I_def
-    by blast
-qed
 
 (*
 fun valid_mmsaux :: "targs \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mtaux \<Rightarrow> bool" where
