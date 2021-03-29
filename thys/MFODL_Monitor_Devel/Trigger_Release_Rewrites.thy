@@ -1949,14 +1949,24 @@ next
 qed (auto split: nat.split)
 
 fun rewrite_historically :: "Formula.formula \<Rightarrow> Formula.formula" where
-  "rewrite_historically (Formula.Historically I \<phi>) = (
+  "rewrite_historically (Formula.And (once I1 \<phi>) (Formula.Historically I2 \<psi>)) = (
+    if (\<phi> = \<psi> \<and> I1 = I2) then
+      if (mem I1 0) then
+        Formula.And (once I1 \<phi>) (rewrite_historically (Formula.Historically I2 \<psi>))
+      else (
+        if (bounded I1) then
+          Formula.And (once I1 \<phi>) (historically_safe_bounded I1 (rewrite_historically \<phi>))
+        else
+          Formula.And (once I1 \<phi>) (historically_safe_unbounded I1 (rewrite_historically \<phi>))
+      )
+    else
+      (Formula.And (Formula.Since Formula.TT I1 \<phi>) (Formula.Historically I2 \<psi>))
+  )"
+| "rewrite_historically (Formula.Historically I \<phi>) = (
     if (mem I 0) then
       historically_safe_0 I (rewrite_historically \<phi>)
     else (
-      if (bounded I) then
-        historically_safe_bounded I (rewrite_historically \<phi>)
-      else
-        historically_safe_unbounded I (rewrite_historically \<phi>)
+      undefined
     )
   )"
 | "rewrite_historically f = f"

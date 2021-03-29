@@ -906,6 +906,7 @@ fun safe_formula :: "formula \<Rightarrow> bool" where
       fv \<psi> \<subseteq> fv \<phi> \<and> (is_constraint \<psi> \<or> (case \<psi> of Neg \<psi>' \<Rightarrow> safe_formula \<psi>' | _ \<Rightarrow> False))))"
 | "safe_formula (Ands l) = (let (pos, neg) = partition safe_formula l in pos \<noteq> [] \<and>
     list_all safe_formula (map remove_neg neg) \<and> \<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos)))"
+  (* OR once & historically / eventually & always *)
 | "safe_formula (Exists \<phi>) = (safe_formula \<phi>)"
 | "safe_formula (Agg y \<omega> b f \<phi>) = (safe_formula \<phi> \<and> y + b \<notin> fv \<phi> \<and> {0..<b} \<subseteq> fv \<phi> \<and> fv_trm f \<subseteq> fv \<phi>)"
 | "safe_formula (Prev I \<phi>) = (safe_formula \<phi>)"
@@ -920,10 +921,12 @@ fun safe_formula :: "formula \<Rightarrow> bool" where
     (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> restricted_formula \<phi> (fv \<psi>)))
       else
     (safe_formula \<phi> \<and> safe_formula \<psi> \<and> fv \<phi> = fv \<psi>))"
+  (* TODO: once *)
 | "safe_formula (Release \<phi> I \<psi>) = (if (mem I 0) then
     (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> restricted_formula \<phi> (fv \<psi>)))
       else
     (safe_formula \<phi> \<and> safe_formula \<psi> \<and> fv \<phi> = fv \<psi>))"
+  (* TODO: once *)
 | "safe_formula (MatchP I r) = Regex.safe_regex fv (\<lambda>g \<phi>. safe_formula \<phi> \<or>
      (g = Lax \<and> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))) Past Strict r"
 | "safe_formula (MatchF I r) = Regex.safe_regex fv (\<lambda>g \<phi>. safe_formula \<phi> \<or>
@@ -1001,13 +1004,13 @@ lemma historically_safe_bounded_fv[simp]: "fv (historically_safe_bounded I \<phi
 lemma historically_safe_bounded_future_bounded[simp]: "future_bounded (historically_safe_bounded I \<phi>) = (future_bounded \<phi> \<and> bounded I)"
   by (auto simp add: historically_safe_bounded_def bounded.rep_eq int_remove_lower_bound.rep_eq)
 
-lemma "safe_formula (Historically I \<phi>) = safe_formula (historically_safe_0 I \<phi>)"
+lemma "mem I 0 \<Longrightarrow> safe_formula (Historically I \<phi>) = safe_formula (historically_safe_0 I \<phi>)"
   by auto
 
-lemma "safe_formula (Historically I \<phi>) = safe_formula (historically_safe_unbounded I \<phi>)"
+lemma "\<not>mem I 0 \<Longrightarrow> \<not>bounded I \<Longrightarrow> safe_formula (Historically I \<phi>) = safe_formula (historically_safe_unbounded I \<phi>)"
   by auto
 
-lemma "safe_formula (Historically I \<phi>) = safe_formula (historically_safe_bounded I \<phi>)"
+lemma "\<not>mem I 0 \<Longrightarrow> bounded I \<Longrightarrow>safe_formula (Historically I \<phi>) = safe_formula (historically_safe_bounded I \<phi>)"
   by auto
 
 (* always *)
@@ -1034,11 +1037,11 @@ lemma always_safe_bounded_fv[simp]: "fv (always_safe_bounded I \<phi>) = fv \<ph
 lemma always_safe_bounded_future_bounded[simp]: "future_bounded (always_safe_bounded I \<phi>) = (future_bounded \<phi> \<and> bounded I)"
   by (auto simp add: always_safe_bounded_def bounded.rep_eq int_remove_lower_bound.rep_eq)
 
-lemma "safe_formula (Always I \<phi>) = safe_formula (always_safe_0 I \<phi>)"
+lemma "mem I 0 \<Longrightarrow> safe_formula (Always I \<phi>) = safe_formula (always_safe_0 I \<phi>)"
   by auto
 
-lemma "safe_formula (Always I \<phi>) = safe_formula (always_safe_bounded I \<phi>)"
-  by auto
+lemma "\<not>mem I 0 \<Longrightarrow> bounded I \<Longrightarrow> safe_formula (Always I \<phi>) = safe_formula (always_safe_bounded I \<phi>)"
+  by auto                            
   
 
 abbreviation "safe_regex \<equiv> Regex.safe_regex fv (\<lambda>g \<phi>. safe_formula \<phi> \<or>

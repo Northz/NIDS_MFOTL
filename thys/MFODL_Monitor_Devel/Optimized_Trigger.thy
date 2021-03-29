@@ -1,7 +1,6 @@
 theory Optimized_Trigger
   imports
-    Optimized_Join
-    Formula
+    Optimized_MTL_TEMP
 begin
 
 type_synonym ts = nat
@@ -13,23 +12,19 @@ record targs =
   targs_R :: "nat set" (* free variables of the rhs *)
 
 (* simply stores all tables for \<phi> and \<psi> in [0, b] *)
-type_synonym 'a mtaux = "(ts \<times> 'a table \<times> 'a table) set"
+type_synonym 'a mtaux = "(ts \<times> 'a table \<times> 'a table) list"
 
 definition init_targs :: "\<I> \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> targs" where
   "init_targs I n L R = \<lparr>targs_ivl = I, targs_n = n, targs_L = L, targs_R = R\<rparr>"
 
 
-fun first :: "('a \<Rightarrow> bool) \<Rightarrow> 'a list \<Rightarrow> 'a option" where
-  "first p []     = None"
-| "first p (x#xs) = (if (p x) then (Some x) else (first p xs))"
-
 definition trigger_results :: "\<I> \<Rightarrow> ts \<Rightarrow> 'a mtaux \<Rightarrow> 'a table" where
-  "trigger_results I cur auxset = {
+  "trigger_results I cur auxlist = {
     tuple.
       \<comment> \<open>pretty much the definition of trigger\<close>
-      (\<exists>t relL relR. (t, relL, relR) \<in> auxset \<and> mem I (cur - t) \<and> 
+      (\<exists>t relL relR. (t, relL, relR) \<in> (set auxlist) \<and> mem I (cur - t) \<and> 
         \<comment> \<open>either \<psi> holds or there is a later database where the same tuple satisfies \<phi>\<close>
-        (tuple \<in> relR \<or> (\<exists>t' relL' relR'. (t', relL', relR') \<in> auxset \<and> t < t' \<and> tuple \<in> relL'))
+        (tuple \<in> relR \<or> (\<exists>t' relL' relR'. (t', relL', relR') \<in> (set auxlist) \<and> t < t' \<and> tuple \<in> relL'))
       )
 }"
 
@@ -39,20 +34,22 @@ locale mtaux =
     and result_mtaux :: "targs \<Rightarrow> ts \<Rightarrow> 'mtaux \<Rightarrow> event_data table"
 
   (* the initial state should be valid *)
+  (* TODO: safe_formula definition *)
   assumes valid_init_mtaux: "L \<subseteq> R \<Longrightarrow>
-    result_mtaux (init_targs I n L R) 0 (init_mtaux (init_targs I n L R)) = trigger_results I 0 {}"
+    let args = init_targs I n L R in
+    result_mtaux args 0 (init_mtaux args) = trigger_results I 0 []"
 
   (* assuming the previous state outputted the same result, the next will as well *)
   assumes valid_update_mtaux: "
     nt \<ge> cur \<Longrightarrow>
-    table (args_n args) (targs_L args) relL \<Longrightarrow>
-    table (args_n args) (targs_R args) relR \<Longrightarrow>
-    result_mtaux args cur aux = trigger_results (targs_ivl args) cur auxset \<Longrightarrow>
+    table (targs_n args) (targs_L args) relL \<Longrightarrow>
+    table (targs_n args) (targs_R args) relR \<Longrightarrow>
+    result_mtaux args cur aux = trigger_results (targs_ivl args) cur auxlist \<Longrightarrow>
     result_mtaux args cur (update_mtaux args nt relL relR aux) =
       trigger_results
         (targs_ivl args)
         cur
-        ({(t, relL, relR) \<in> auxset. memR (targs_ivl args) (nt - t)} \<union> {(nt, relL, relR)})
+        ((filter (\<lambda> (t, relL, relR). memR (targs_ivl args) (nt - t)) auxlist) @ [(nt, relL, relR)])
   "
 
 type_synonym 'a mmtaux = "
@@ -65,18 +62,7 @@ type_synonym 'a mmtaux = "
   (('a tuple, nat) mapping)          \<comment> \<open>for every tuple the number of databases inside the interval satisfying the trigger condition\<close>
 "
 
-(* TODO: use definition from Optimized_MTL.thy *)
-definition ts_tuple_rel :: "(ts \<times> 'a table) set \<Rightarrow> (ts \<times> 'a tuple) set" where
-  "ts_tuple_rel ys = {(t, as). \<exists>X. as \<in> X \<and> (t, X) \<in> ys}"
 
-(* TODO: use definition from Optimized_MTL.thy *)
-definition valid_tuple :: "(('a tuple, ts) mapping) \<Rightarrow> (ts \<times> 'a tuple) \<Rightarrow> bool" where
-  "valid_tuple tuple_since = (\<lambda>(t, as). case Mapping.lookup tuple_since as of None \<Rightarrow> False
-  | Some t' \<Rightarrow> t \<ge> t')"
-
-(* TODO: use definition from Optimized_MTL.thy *)
-definition safe_max :: "'a :: linorder set \<Rightarrow> 'a option" where
-  "safe_max X = (if X = {} then None else Some (Max X))"
 
 fun init_mmtaux :: "targs \<Rightarrow> event_data mmtaux" where
   "init_mmtaux args = (0, [], [], [], [], 0, Mapping.empty)"
@@ -92,7 +78,7 @@ fun result_mmtaux :: "targs \<Rightarrow> event_data mmtaux \<Rightarrow> event_
 "
 
 lemma valid_init_mtaux: "L \<subseteq> R \<Longrightarrow>
-    (result_mmtaux (init_targs I n L R) (init_mmtaux (init_targs I n L R))) = (trigger_results I 0 {})"
+    (result_mmtaux (init_targs I n L R) (init_mmtaux (init_targs I n L R))) = (trigger_results I 0 [])"
   by (auto simp add: trigger_results_def)
 
 (* tail recursive function to split a list into two based on a predicate while maintaining the order *)
@@ -223,13 +209,7 @@ fun update_mmtaux :: "targs \<Rightarrow> ts \<Rightarrow> event_data table \<Ri
     aux
   )"
 
-lemma x:
-  assumes "nt \<ge> cur"
-  assumes aux_def:  "aux = (nt, maskL, maskR, data_in, data_prev, data_in_count, tuple_sat_count)"
-  assumes aux'_def: "aux' = (nt', maskL', maskR', data_in', data_prev', data_in_count', tuple_sat_count')"
-                    "aux' = (update_mmtaux args nt relL relR aux)"
-  assumes IH: "result_mmtaux args aux = trigger_results (targs_ivl args) cur auxset"
-  shows: "\<forall>tuple \<in> result_mmtaux args aux. "
+
 
 lemma valid_update_mmtaux:
   assumes "nt \<ge> cur"
@@ -299,6 +279,7 @@ proof -
       next
         case notMem: False
         have "mem I (cur - t)" using rel_props by auto
+        then show ?thesis sorry
       qed
     next
       case False
@@ -311,7 +292,9 @@ proof -
     then have "t \<in> result_mmtaux args (update_mmtaux args nt relL relR aux)"
       sorry
   }
-  ultimately show ?thesis using aux'_def auxset'_def sorry
+  ultimately show ?thesis
+    using assms auxset'_def I_def
+    by blast
 qed
 
 (*
