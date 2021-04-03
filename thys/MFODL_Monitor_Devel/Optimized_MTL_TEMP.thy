@@ -587,7 +587,7 @@ lemma takeWhile_filter':
 
 lemma fold_Mapping_filter_None: "Mapping.lookup ts as = None \<Longrightarrow>
   Mapping.lookup (fold (\<lambda>(t, X) ts. Mapping.filter
-  (filter_cond X ts t) ts) ds ts) as = None"
+  (filter_cond (f X) ts t) ts) ds ts) as = None"
   by (induction ds arbitrary: ts) (auto simp add: Mapping.lookup_filter)
 
 lemma Mapping_lookup_filter_Some_P: "Mapping.lookup (Mapping.filter P m) k = Some v \<Longrightarrow> P k v"
@@ -606,18 +606,18 @@ lemma Mapping_lookup_filter_not_None: "Mapping.lookup (Mapping.filter P m) k \<n
   by (auto simp add: Mapping.lookup_filter split: option.splits)
 
 lemma fold_Mapping_filter_Some_None: "Mapping.lookup ts as = Some t \<Longrightarrow>
-  as \<in> X \<Longrightarrow> (t, X) \<in> set ds \<Longrightarrow>
-  Mapping.lookup (fold (\<lambda>(t, X) ts. Mapping.filter (filter_cond X ts t) ts) ds ts) as = None"
+  as \<in> (f X) \<Longrightarrow> (t, X) \<in> set ds \<Longrightarrow>
+  Mapping.lookup (fold (\<lambda>(t, X) ts. Mapping.filter (filter_cond (f X) ts t) ts) ds ts) as = None"
 proof (induction ds arbitrary: ts)
   case (Cons a ds)
   show ?case
   proof (cases a)
     case (Pair t' X')
     with Cons show ?thesis
-      using fold_Mapping_filter_None[of "Mapping.filter (filter_cond X' ts t') ts" as ds]
-        Mapping_lookup_filter_not_None[of "filter_cond X' ts t'" ts as]
-        fold_Mapping_filter_None[OF Mapping_lookup_filter_None, of _ as ds ts]
-      by (cases "Mapping.lookup (Mapping.filter (filter_cond X' ts t') ts) as = None") auto
+      using fold_Mapping_filter_None[of "Mapping.filter (filter_cond (f X') ts t') ts" as f ds]
+        Mapping_lookup_filter_not_None[of "filter_cond (f X') ts t'" ts as]
+        fold_Mapping_filter_None[OF Mapping_lookup_filter_None, of _ as f ds ts]
+      by (cases "Mapping.lookup (Mapping.filter (filter_cond (f X') ts t') ts) as = None") auto
   qed
 qed simp
 
@@ -698,7 +698,7 @@ proof -
     using shift_end_appl
     by (auto simp only: shift_end.simps Let_def I_def split: prod.splits)
   have tuple_in'_def: "tuple_in' = fold (\<lambda>(t, X) tuple_in. Mapping.filter
-    (\<lambda>as _. \<not>(as \<in> X \<and> Mapping.lookup tuple_in as = Some t)) tuple_in) discard tuple_in"
+    (filter_cond X tuple_in t) tuple_in) discard tuple_in"
     using shift_end_appl
     by (auto simp only: shift_end.simps Let_def snd_def I_def discard_def split: prod.splits) (simp)
   
