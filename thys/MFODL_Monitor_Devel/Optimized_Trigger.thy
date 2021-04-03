@@ -5,17 +5,8 @@ begin
 
 type_synonym ts = nat
 
-record targs =
-  targs_ivl :: \<I>
-  targs_n :: nat (* max|L|, |R|), number of free variables *)
-  targs_L :: "nat set" (* free variables of the lhs *)
-  targs_R :: "nat set" (* free variables of the rhs *)
-
 (* simply stores all tables for \<phi> and \<psi> in [0, b] *)
 type_synonym 'a mtaux = "(ts \<times> 'a table \<times> 'a table) list"
-
-definition init_targs :: "\<I> \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> targs" where
-  "init_targs I n L R = \<lparr>targs_ivl = I, targs_n = n, targs_L = L, targs_R = R\<rparr>"
 
 fun trigger_results :: "\<I> \<Rightarrow> ts \<Rightarrow> 'a mtaux \<Rightarrow> 'a table" where
   "trigger_results I cur auxlist = {
@@ -37,10 +28,10 @@ fun trigger_results :: "\<I> \<Rightarrow> ts \<Rightarrow> 'a mtaux \<Rightarro
 }"
 
 locale mtaux =
-  fixes valid_mtaux :: "targs \<Rightarrow> ts \<Rightarrow> 'mtaux \<Rightarrow> event_data mtaux \<Rightarrow> bool"
-    and init_mtaux :: "targs \<Rightarrow> 'mtaux"
-    and update_mtaux :: "targs \<Rightarrow> ts \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> 'mtaux \<Rightarrow> 'mtaux"
-    and result_mtaux :: "targs \<Rightarrow> 'mtaux \<Rightarrow> event_data table"
+  fixes valid_mtaux :: "args \<Rightarrow> ts \<Rightarrow> 'mtaux \<Rightarrow> event_data mtaux \<Rightarrow> bool"
+    and init_mtaux :: "args \<Rightarrow> 'mtaux"
+    and update_mtaux :: "args \<Rightarrow> ts \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> 'mtaux \<Rightarrow> 'mtaux"
+    and result_mtaux :: "args \<Rightarrow> 'mtaux \<Rightarrow> event_data table"
 
   (* the initial state should be valid *)
   assumes valid_init_mtaux: "(
@@ -50,25 +41,25 @@ locale mtaux =
       else 
         L = R
     ) \<Longrightarrow>
-    let args = init_targs I n L R in
+    let args = init_args I n L R false in
     valid_mtaux args 0 (init_mtaux args) []"
 
   (* assuming the previous state outputted the same result, the next will as well *)
   assumes valid_update_mtaux: "
     nt \<ge> cur \<Longrightarrow>
-    table (targs_n args) (targs_L args) relL \<Longrightarrow>
-    table (targs_n args) (targs_R args) relR \<Longrightarrow>
+    table (args_n args) (args_L args) l \<Longrightarrow>
+    table (args_n args) (args_R args) r \<Longrightarrow>
     valid_mtaux args cur aux auxlist \<Longrightarrow>
     valid_mtaux
       args
-      cur
-      (update_mtaux args nt relL relR aux)
-      ((filter (\<lambda> (t, relL, relR). memR (targs_ivl args) (nt - t)) auxlist) @ [(nt, relL, relR)])
+      nt
+      (update_mtaux args nt l r aux)
+      ((filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist) @ [(nt, l, r)])
   "
 
   and valid_result_mtaux: "
     valid_mtaux args cur aux auxlist \<Longrightarrow>
-    result_mtaux args aux = trigger_results (targs_ivl args) cur auxlist
+    result_mtaux args aux = trigger_results (args_ivl args) cur auxlist
   "
 
 type_synonym 'a mmtaux = "
@@ -82,6 +73,12 @@ type_synonym 'a mmtaux = "
   (('a tuple, ts) mapping) \<times>           \<comment> \<open>tuple_since for \<psi> S (\<psi> \<and> \<phi>)\<close>
   ('a table)                            \<comment> \<open>the set of tuples currently satisfying trigger\<close>
 "
+
+fun mmtaux_data_prev :: "'a mmtaux \<Rightarrow> (ts \<times> 'a table \<times> 'a table) queue" where
+  "mmtaux_data_prev (_, _, _, data_prev, _) = data_prev"
+
+fun mmtaux_data_in :: "'a mmtaux \<Rightarrow> (ts \<times> 'a table \<times> 'a table) queue" where
+  "mmtaux_data_in (_, _, _, _, data_in, _) = data_in"
 
 fun time :: "(ts \<times> 'a table \<times> 'a table) \<Rightarrow> ts" where
   "time db = fst db"
@@ -101,39 +98,45 @@ definition ts_tuple_rel_binary_lhs :: "(ts \<times> 'a table \<times> 'a table) 
 definition ts_tuple_rel_binary_rhs :: "(ts \<times> 'a table \<times> 'a table) set \<Rightarrow> (ts \<times> 'a tuple) set" where
   "ts_tuple_rel_binary_rhs ys = {(t, bs). \<exists>X Y. bs \<in> Y \<and> (t, X, Y) \<in> ys}"
 
-fun valid_mmtaux :: "targs \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow> 'a mtaux \<Rightarrow> bool" where
-  "valid_mmtaux args cur (nt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since, sat) ys \<longleftrightarrow>
-    (if mem (targs_ivl args) 0 then (targs_L args) \<subseteq> (targs_R args) else (targs_L args) = (targs_R args)) \<and>
-    maskL = join_mask (targs_n args) (targs_L args) \<and>
-    maskR = join_mask (targs_n args) (targs_R args) \<and>
-    (\<forall>(t, X, Y) \<in> set ys. table (targs_n args) (targs_R args) X \<and> table (targs_n args) (targs_L args) Y) \<and>
-    table (targs_n args) (targs_R args) (Mapping.keys tuple_in_once) \<and>
-    table (targs_n args) (targs_R args) (Mapping.keys tuple_since_hist) \<and>
-    table (targs_n args) (targs_R args) (Mapping.keys tuple_since_since) \<and>
-    (\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev))). wf_tuple (targs_n args) (targs_R args) as) \<and>
-    (\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev))). wf_tuple (targs_n args) (targs_R args) as) \<and>
-    cur = nt \<and>
+definition auxlist_data_prev :: "args \<Rightarrow> (ts \<times> 'a table \<times> 'a table) list \<Rightarrow> (ts \<times> 'a table \<times> 'a table) list" where
+  "auxlist_data_prev args auxlist = filter (\<lambda>(t, _, _). \<not>memL (args_ivl args) t) auxlist"
+
+definition auxlist_data_in :: "args \<Rightarrow> (ts \<times> 'a table \<times> 'a table) list \<Rightarrow> (ts \<times> 'a table \<times> 'a table) list" where
+  "auxlist_data_in args auxlist = filter (\<lambda>(t, _, _). mem (args_ivl args) t) auxlist"
+
+fun valid_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow> 'a mtaux \<Rightarrow> bool" where
+  "valid_mmtaux args cur (mt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since, sat) auxlist \<longleftrightarrow>
+    (if mem (args_ivl args) 0 then (args_L args) \<subseteq> (args_R args) else (args_L args) = (args_R args)) \<and>
+    maskL = join_mask (args_n args) (args_L args) \<and>
+    maskR = join_mask (args_n args) (args_R args) \<and>
+    (\<forall>(t, X, Y) \<in> set auxlist. table (args_n args) (args_R args) X \<and> table (args_n args) (args_L args) Y) \<and>
+    table (args_n args) (args_R args) (Mapping.keys tuple_in_once) \<and>
+    table (args_n args) (args_R args) (Mapping.keys tuple_since_hist) \<and>
+    table (args_n args) (args_R args) (Mapping.keys tuple_since_since) \<and>
+    (\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_R args) as) \<and>
+    (\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_R args) as) \<and>
+    cur = mt \<and>
     \<comment> \<open>all valid lhs/\<phi> tuples in data_prev should have a valid entry in tuple_in_once, as it is shifted\<close>
-    ts_tuple_rel_binary_lhs (set (filter (\<lambda>(t, _, _). \<not>memL (targs_ivl args) t) ys)) =
+    ts_tuple_rel_binary_lhs (set (auxlist_data_prev args auxlist)) =
     {(t, l). \<exists>r. (t, l, r) \<in> ts_tuple_rel_binary (set (linearize data_prev)) \<and>
     valid_tuple tuple_in_once (t, l)} \<and>
     \<comment> \<open>all valid rhs/\<psi> tuples in data_in should have a valid entry in tuple_since_hist, as it is shifted\<close>
-    ts_tuple_rel_binary_rhs (set (filter (\<lambda>(t, _, _). mem (targs_ivl args) t) ys)) =
+    ts_tuple_rel_binary_rhs (set (auxlist_data_in args auxlist)) =
     {(t, r). \<exists>l. (t, l, r) \<in> ts_tuple_rel_binary (set (linearize data_in)) \<and>
     valid_tuple tuple_since_hist (t, r)} \<and>
     \<comment> \<open>all valid \<phi>\<and>\<psi> tuples in data_in should have a valid entry in tuple_since_since, as it is shifted\<close>
-    ts_tuple_rel_binary (set (filter (\<lambda>(t, _, _). mem (targs_ivl args) t) ys)) =
+    ts_tuple_rel_binary (set (auxlist_data_in args auxlist)) =
     {(t, l, r) \<in> ts_tuple_rel_binary (set (linearize data_in)).
     valid_tuple tuple_since_since (t, l) \<and> valid_tuple tuple_since_since (t, r)} \<and>
     \<comment> \<open>the entries stored should be the same, hence they're sorted as well\<close>
-    sorted (map fst ys) \<and>
-    ys = (linearize data_in) @ (linearize data_prev) \<and>
-    (\<forall>t \<in> fst ` set (linearize data_prev). t \<le> nt \<and> \<not> memL (targs_ivl args) (nt - t)) \<and>
-    (\<forall>t \<in> fst ` set (linearize data_in). t \<le> nt \<and> mem (targs_ivl args) (nt - t)) \<and>
+    sorted (map fst auxlist) \<and>
+    auxlist = (linearize data_in) @ (linearize data_prev) \<and>
+    (\<forall>t \<in> fst ` set (linearize data_prev). t \<le> mt \<and> \<not> memL (args_ivl args) (mt - t)) \<and>
+    (\<forall>t \<in> fst ` set (linearize data_in). t \<le> mt \<and> mem (args_ivl args) (mt - t)) \<and>
      \<comment> \<open>check whether tuple_in once contains the newest occurence of the tuple satisfying the lhs\<close>
     newest_tuple_in_mapping ts_tuple_rel_binary_lhs data_in tuple_in_once (\<lambda>x. True) \<and>
-    (\<forall>as \<in> Mapping.keys tuple_since_hist. case Mapping.lookup tuple_since_hist as of Some t \<Rightarrow> t \<le> nt) \<and>
-    (\<forall>as \<in> Mapping.keys tuple_since_since. case Mapping.lookup tuple_since_since as of Some t \<Rightarrow> t \<le> nt) \<and>
+    (\<forall>as \<in> Mapping.keys tuple_since_hist. case Mapping.lookup tuple_since_hist as of Some t \<Rightarrow> t \<le> mt) \<and>
+    (\<forall>as \<in> Mapping.keys tuple_since_since. case Mapping.lookup tuple_since_since as of Some t \<Rightarrow> t \<le> mt) \<and>
      \<comment> \<open>conditions for sat / trigger conditions\<close>
     (\<forall>tuple. tuple \<in> sat \<longleftrightarrow>
       (set (linearize data_in) \<noteq> {}) \<and> ( \<comment> \<open>with an empty data_in, all tuples satisfy trigger\<close>
@@ -152,9 +155,9 @@ fun valid_mmtaux :: "targs \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow
     )
   "
 
-definition init_mmtaux :: "targs \<Rightarrow> 'a mmtaux" where
-  "init_mmtaux args = (0, join_mask (targs_n args) (targs_L args),
-  join_mask (targs_n args) (targs_R args), empty_queue, empty_queue, Mapping.empty, Mapping.empty, Mapping.empty, {})"
+definition init_mmtaux :: "args \<Rightarrow> 'a mmtaux" where
+  "init_mmtaux args = (0, join_mask (args_n args) (args_L args),
+  join_mask (args_n args) (args_R args), empty_queue, empty_queue, Mapping.empty, Mapping.empty, Mapping.empty, {})"
 
 lemma valid_init_mtaux: "(
     if (mem I 0)
@@ -163,16 +166,17 @@ lemma valid_init_mtaux: "(
       else 
         L = R
     ) \<Longrightarrow>
-    let args = init_targs I n L R in
+    let args = init_args I n L R false in
     valid_mmtaux args 0 (init_mmtaux args) []"
   unfolding init_mmtaux_def
-  by (auto simp add: init_targs_def empty_queue_rep
+  by (auto simp add: init_args_def empty_queue_rep
       Mapping.lookup_empty safe_max_def table_def newest_tuple_in_mapping_def
-      ts_tuple_rel_binary_def ts_tuple_rel_binary_lhs_def ts_tuple_rel_binary_rhs_def)
+      ts_tuple_rel_binary_def ts_tuple_rel_binary_lhs_def ts_tuple_rel_binary_rhs_def
+      auxlist_data_prev_def auxlist_data_in_def)
 
-(* analogous to add_new_ts_mmsaux' *)
-fun add_new_ts_mmtaux' :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow> 'a mmtaux" where
-  "add_new_ts_mmtaux' args nt (t, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since, sat) = (
+(* analogous to add_new_ts_mmsaux' except that tuple_in doesn't exist / isn't updated *)
+fun add_new_ts_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow> 'a mmtaux" where
+  "add_new_ts_mmtaux args nt (mt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since, sat) = (
     let I = args_ivl args;
      \<comment> \<open>split into the part that still is data_prev and the dbs that are no longer before I\<close>
     (data_prev, move) = takedropWhile_queue (\<lambda>(t, _). memL I (nt - t)) data_prev;
@@ -189,14 +193,78 @@ fun add_new_ts_mmtaux' :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Right
       data_in,             \<comment> \<open>updated according to I\<close>
       tuple_in_once,       \<comment> \<open>kept as we only do operations regarding the new ts here and 
                               this mapping should only be updated for the new db\<close>
-      tuple_since_hist,    \<comment> \<open>kept as\<close>
-      tuple_since_since,
-      sat
+      tuple_since_hist,    \<comment> \<open>kept\<close>
+      tuple_since_since,   \<comment> \<open>kept\<close>
+      sat                  \<comment> \<open>kept\<close>
     )
   )"
 
+lemma valid_add_new_ts_mmtaux:
+  assumes "nt \<ge> cur"
+  assumes "valid_mmtaux args cur (mt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since, sat) auxlist"
+  shows "valid_mmtaux
+      args
+      nt
+      (add_new_ts_mmtaux args nt (mt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since, sat))
+      (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist)
+  "
+proof -
+  define I where "I = args_ivl args"
+  
+  have aux_valid: "(if mem (args_ivl args) 0 then (args_L args) \<subseteq> (args_R args) else (args_L args) = (args_R args))"
+    "maskL = join_mask (args_n args) (args_L args)"
+    "maskR = join_mask (args_n args) (args_R args)"
+    "(\<forall>(t, X, Y) \<in> set auxlist. table (args_n args) (args_R args) X \<and> table (args_n args) (args_L args) Y)"
+    "table (args_n args) (args_R args) (Mapping.keys tuple_in_once)"
+    "table (args_n args) (args_R args) (Mapping.keys tuple_since_hist)"
+    "table (args_n args) (args_R args) (Mapping.keys tuple_since_since)"
+    "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_R args) as)"
+    "(\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_R args) as)"
+    "cur = mt"
+    "ts_tuple_rel_binary_lhs (set (auxlist_data_prev args auxlist)) =
+    {(t, l). \<exists>r. (t, l, r) \<in> ts_tuple_rel_binary (set (linearize data_prev)) \<and>
+    valid_tuple tuple_in_once (t, l)}"
+    "ts_tuple_rel_binary_rhs (set (auxlist_data_in args auxlist)) =
+    {(t, r). \<exists>l. (t, l, r) \<in> ts_tuple_rel_binary (set (linearize data_in)) \<and>
+    valid_tuple tuple_since_hist (t, r)}"
+    "ts_tuple_rel_binary (set (auxlist_data_in args auxlist)) =
+    {(t, l, r) \<in> ts_tuple_rel_binary (set (linearize data_in)).
+    valid_tuple tuple_since_since (t, l) \<and> valid_tuple tuple_since_since (t, r)}"
+    "sorted (map fst auxlist)"
+    "auxlist = (linearize data_in) @ (linearize data_prev)"
+    "(\<forall>t \<in> fst ` set (linearize data_prev). t \<le> mt \<and> \<not> memL (args_ivl args) (mt - t))"
+    "(\<forall>t \<in> fst ` set (linearize data_in). t \<le> mt \<and> mem (args_ivl args) (mt - t))"
+    "newest_tuple_in_mapping ts_tuple_rel_binary_lhs data_in tuple_in_once (\<lambda>x. True)"
+    "(\<forall>as \<in> Mapping.keys tuple_since_hist. case Mapping.lookup tuple_since_hist as of Some t \<Rightarrow> t \<le> mt)"
+    "(\<forall>as \<in> Mapping.keys tuple_since_since. case Mapping.lookup tuple_since_since as of Some t \<Rightarrow> t \<le> mt)"
+    "(\<forall>tuple. tuple \<in> sat \<longleftrightarrow>
+      (set (linearize data_in) \<noteq> {}) \<and> (
+        (\<forall>i \<in> {0..<(length (linearize data_in))}.
+          let (t, l, r) = (linearize data_in)!i in
+          tuple \<in> r \<or>
+          (\<exists>j \<in> {i<..<(length (linearize data_in))}.
+            let (t', l', r') = (linearize data_in)!j in
+            tuple \<in> l'
+          )
+        ) \<or>
+        (\<exists>(t, l, r) \<in> set (linearize data_prev).
+          tuple \<in> l
+        )
+      )
+    )" using assms(2) by auto
+  (*define aux' where "aux' = (add_new_ts_mmtaux args nt aux)"
+  define data_prev' where "data_prev' = mmtaux_data_prev aux'"
+  define data_in' where "data_in' = mmtaux_data_prev aux'"
 
-fun update_mmtaux :: "targs \<Rightarrow> ts \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> 'a mmtaux \<Rightarrow> 'a mmtaux" where
+  define auxlist' where "auxlist' = filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist"
+
+
+  then have "valid_mmtaux args nt aux' auxlist'" by auto*)
+  then show ?thesis by auto
+qed
+
+
+fun update_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> 'a mmtaux \<Rightarrow> 'a mmtaux" where
   "update_mmtaux args nt l r (cur, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since, sat) =
 
 
@@ -212,7 +280,20 @@ fun update_mmtaux :: "targs \<Rightarrow> ts \<Rightarrow> event_data table \<Ri
     sat
   )"
 
-fun result_mmtaux :: "targs \<Rightarrow> event_data mmtaux \<Rightarrow> event_data table" where
+lemma valid_update_mmtaux: "
+    nt \<ge> cur \<Longrightarrow>
+    table (args_n args) (args_L args) l \<Longrightarrow>
+    table (args_n args) (args_R args) r \<Longrightarrow>
+    valid_mmtaux args cur aux auxlist \<Longrightarrow>
+    valid_mmtaux
+      args
+      nt
+      (update_mmtaux args nt l r aux)
+      ((filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist) @ [(nt, l, r)])
+  "
+  by auto
+
+fun result_mmtaux :: "args \<Rightarrow> event_data mmtaux \<Rightarrow> event_data table" where
   "result_mmtaux args (nt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since, sat) = 
   sat
 "
@@ -220,19 +301,19 @@ fun result_mmtaux :: "targs \<Rightarrow> event_data mmtaux \<Rightarrow> event_
 lemma data_in_mem:
   assumes "valid_mmtaux args cur (nt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since, sat) auxlist"
   assumes "db \<in> set (linearize data_in)"
-  shows "mem (targs_ivl args) (nt - (time db))"
+  shows "mem (args_ivl args) (nt - (time db))"
   using assms by auto
 
 lemma data_prev_mem:
   assumes "valid_mmtaux args cur (nt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since, sat) auxlist"
   assumes "db \<in> set (linearize data_prev)"
-  shows "\<not>memL (targs_ivl args) (nt - (time db))"
+  shows "\<not>memL (args_ivl args) (nt - (time db))"
   using assms by auto
 
 lemma auxlist_mem_data_in:
   assumes "valid_mmtaux args cur (nt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since, sat) auxlist"
   assumes "db \<in> (set auxlist)"
-  assumes "mem (targs_ivl args) (nt - (time db))"
+  assumes "mem (args_ivl args) (nt - (time db))"
   shows "db \<in> set (linearize data_in)"
 proof -
   have "db \<in> set (linearize data_in) \<or> db \<in> set (linearize data_prev)"
@@ -340,56 +421,47 @@ qed
 
 lemma data_in_auxlist_nonempty:
   assumes "valid_mmtaux args cur (nt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since, sat) auxlist"
-  shows "(length (filter (\<lambda> (t, _, _). mem (targs_ivl args) (nt - t)) auxlist) > 0) = (set (linearize data_in) \<noteq> {})"
+  shows "(length (filter (\<lambda> (t, _, _). mem (args_ivl args) (nt - t)) auxlist) > 0) = (set (linearize data_in) \<noteq> {})"
 proof (rule iffI)
-  assume assm: "length (filter (\<lambda> (t, _, _). mem (targs_ivl args) (nt - t)) auxlist) > 0"
+  assume assm: "length (filter (\<lambda> (t, _, _). mem (args_ivl args) (nt - t)) auxlist) > 0"
   {
-    assume empty: "set (filter (\<lambda> (t, _, _). mem (targs_ivl args) (nt - t)) auxlist) = {}"
+    assume empty: "set (filter (\<lambda> (t, _, _). mem (args_ivl args) (nt - t)) auxlist) = {}"
     {
-      assume "length (filter (\<lambda> (t, _, _). mem (targs_ivl args) (nt - t)) auxlist) > 0"
-      then have "\<exists>x. x \<in> set (filter (\<lambda> (t, _, _). mem (targs_ivl args) (nt - t)) auxlist)"
+      assume "length (filter (\<lambda> (t, _, _). mem (args_ivl args) (nt - t)) auxlist) > 0"
+      then have "\<exists>x. x \<in> set (filter (\<lambda> (t, _, _). mem (args_ivl args) (nt - t)) auxlist)"
         using nth_mem by blast
       then have "False" using empty by auto
     }
-    then have "length (filter (\<lambda> (t, _, _). mem (targs_ivl args) (nt - t)) auxlist) = 0"
+    then have "length (filter (\<lambda> (t, _, _). mem (args_ivl args) (nt - t)) auxlist) = 0"
       by auto
     then have "False" using assm by auto
   }
-  then obtain db where db_props: "db \<in> set (filter (\<lambda> (t, _, _). mem (targs_ivl args) (nt - t)) auxlist)"
+  then obtain db where db_props: "db \<in> set (filter (\<lambda> (t, _, _). mem (args_ivl args) (nt - t)) auxlist)"
     by auto
-  then have "db \<in> set auxlist" "mem (targs_ivl args) (nt - fst db)" by auto
+  then have "db \<in> set auxlist" "mem (args_ivl args) (nt - fst db)" by auto
   then have "db \<in> set (linearize data_in)" using auxlist_mem_data_in[OF assms(1)] by auto
   then show "set (linearize data_in) \<noteq> {}" by auto
   next
     assume "set (linearize data_in) \<noteq> {}"
     then obtain db where db_props: "db \<in> set (linearize data_in)" by (meson nonemptyE)
     then have db_mem: "db \<in> set auxlist" using assms(1) by auto
-    then have "mem (targs_ivl args) (nt - fst db)"
+    then have "mem (args_ivl args) (nt - fst db)"
       using data_in_mem[OF assms(1)] db_props
       by auto
-    then have "db \<in> set (filter (\<lambda> (t, _, _). mem (targs_ivl args) (nt - t)) auxlist)"
+    then have "db \<in> set (filter (\<lambda> (t, _, _). mem (args_ivl args) (nt - t)) auxlist)"
       using db_mem
       by auto
-    then show auxlist_nonempty: "(length (filter (\<lambda> (t, _, _). mem (targs_ivl args) (nt - t)) auxlist) > 0)"
-      using length_pos_if_in_set[of db "filter (\<lambda> (t, _, _). mem (targs_ivl args) (nt - t)) auxlist"]
+    then show auxlist_nonempty: "(length (filter (\<lambda> (t, _, _). mem (args_ivl args) (nt - t)) auxlist) > 0)"
+      using length_pos_if_in_set[of db "filter (\<lambda> (t, _, _). mem (args_ivl args) (nt - t)) auxlist"]
       by auto
-qed
-
-(*lemma data_prev_auxlist_index:
-  assumes "valid_mmtaux args cur (nt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since, sat) auxlist"
-  assumes "i \<in> {length (linearize data_prev)..<(length auxlist)}"
-  shows "auxlist!i = (linearize data_in)!(i - length (linearize data_prev))"
-proof -
-  from assms(1) have "auxlist = (linearize data_prev) @ (linearize data_in)" by auto
-  then show ?thesis using assms(2) by (simp add: nth_append)
-qed*)
+  qed
 
 lemma valid_result_mmtaux: 
   assumes "valid_mmtaux args cur (nt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since, sat) auxlist"
-  shows "result_mmtaux args (nt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since, sat) = trigger_results (targs_ivl args) cur auxlist"
+  shows "result_mmtaux args (nt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since, sat) = trigger_results (args_ivl args) cur auxlist"
 proof -
   define aux where "aux = (nt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, tuple_since_since, sat)"
-  define I where "I = targs_ivl args"
+  define I where "I = args_ivl args"
   from assms(1) have time: "nt = cur" by auto
   {
     fix tuple
@@ -587,15 +659,15 @@ proof -
         by blast
     }
     ultimately have "tuple \<in> trigger_results I nt auxlist" by blast
-    then have "tuple \<in> trigger_results (targs_ivl args) cur auxlist"
+    then have "tuple \<in> trigger_results (args_ivl args) cur auxlist"
       using I_def time
       by auto
   }
-  then have subset: "result_mmtaux args aux \<subseteq> trigger_results (targs_ivl args) cur auxlist"
+  then have subset: "result_mmtaux args aux \<subseteq> trigger_results (args_ivl args) cur auxlist"
     by blast
   {
     fix tuple
-    assume "tuple \<in> trigger_results (targs_ivl args) cur auxlist"
+    assume "tuple \<in> trigger_results (args_ivl args) cur auxlist"
     then have el: "tuple \<in> trigger_results I cur auxlist"
       by (simp add: I_def)
     then have data_in_nonempty: "(set (linearize data_in) \<noteq> {})"
@@ -751,9 +823,9 @@ proof -
     ultimately have "tuple \<in> sat" by blast
     then have "tuple \<in> result_mmtaux args aux" using aux_def by auto
   }
-  then have "trigger_results (targs_ivl args) cur auxlist \<subseteq> result_mmtaux args aux"
+  then have "trigger_results (args_ivl args) cur auxlist \<subseteq> result_mmtaux args aux"
     by auto
-  then have "trigger_results (targs_ivl args) cur auxlist = result_mmtaux args aux"
+  then have "trigger_results (args_ivl args) cur auxlist = result_mmtaux args aux"
     using subset
     by blast
   then show ?thesis using aux_def by auto
@@ -761,26 +833,26 @@ qed
 
 
 (*
-fun valid_mmsaux :: "targs \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mtaux \<Rightarrow> bool" where
+fun valid_mmsaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mtaux \<Rightarrow> bool" where
   "valid_mmsaux args cur (nt, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) ys \<longleftrightarrow>
-    (targs_L args) \<subseteq> (targs_R args) \<and> \<comment> \<open>free variables of the lhs are a subset of the rhs\<close>
-    maskL = join_mask (targs_n args) (targs_L args) \<and> \<comment> \<open>check if maskL & masR were computed correctly\<close>
-    maskR = join_mask (targs_n args) (targs_R args) \<and>
-    (\<forall>(t, X) \<in> set ys. table (targs_n args) (targs_R args) X) \<and> \<comment> \<open>check whether all tuples in ys are well-formed using the free variables of the rhs\<close>
-    table (targs_n args) (targs_R args) (Mapping.keys tuple_in) \<and> \<comment> \<open>check if all tuples in tuple_in\<close>
-    table (targs_n args) (targs_R args) (Mapping.keys tuple_since) \<and> \<comment> \<open>and tuple_since are well-formed\<close>
+    (args_L args) \<subseteq> (args_R args) \<and> \<comment> \<open>free variables of the lhs are a subset of the rhs\<close>
+    maskL = join_mask (args_n args) (args_L args) \<and> \<comment> \<open>check if maskL & masR were computed correctly\<close>
+    maskR = join_mask (args_n args) (args_R args) \<and>
+    (\<forall>(t, X) \<in> set ys. table (args_n args) (args_R args) X) \<and> \<comment> \<open>check whether all tuples in ys are well-formed using the free variables of the rhs\<close>
+    table (args_n args) (args_R args) (Mapping.keys tuple_in) \<and> \<comment> \<open>check if all tuples in tuple_in\<close>
+    table (args_n args) (args_R args) (Mapping.keys tuple_since) \<and> \<comment> \<open>and tuple_since are well-formed\<close>
     \<comment> \<open> (\<forall>x\<in>X. wf_tuple n V x) \<close>
-    (table (targs_n args) (targs_R args) (\<Union>(snd ` (set data_prev)))) \<and> \<comment> \<open>union all tables and check whether it's tuples are valid\<close>
-    \<comment> \<open>(\<forall>as \<in> \<Union>(snd ` (set data_prev)). wf_tuple (targs_n args) (targs_R args) as) \<and> \<close>
+    (table (args_n args) (args_R args) (\<Union>(snd ` (set data_prev)))) \<and> \<comment> \<open>union all tables and check whether it's tuples are valid\<close>
+    \<comment> \<open>(\<forall>as \<in> \<Union>(snd ` (set data_prev)). wf_tuple (args_n args) (args_R args) as) \<and> \<close>
     cur = nt \<and> \<comment> \<open>???\<close>
     ts_tuple_rel (set ys) = \<comment> \<open>all tuples with timestamp in ys = all tuples in data_prev and data_in\<close>
     {tas \<in> ts_tuple_rel (set data_prev \<union> set data_in). valid_tuple tuple_since tas} \<and>
 
     sorted (map fst data_prev) \<and> \<comment> \<open>data_prev should be sorted by timestamp\<close>
-    (\<forall>t \<in> fst ` set data_prev. t \<le> nt \<and> \<not> memL (targs_ivl args) (nt - t)) \<and>
+    (\<forall>t \<in> fst ` set data_prev. t \<le> nt \<and> \<not> memL (args_ivl args) (nt - t)) \<and>
     \<comment> \<open>the ts cannot be in the future and by definition of data_prev, the timestamps shouldn't be in the interval yet\<close>
     sorted (map fst data_in) \<and> \<comment> \<open>data_prev should be sorted by timestamp\<close>
-    (\<forall>t \<in> fst ` set data_in. t \<le> nt \<and> memL (targs_ivl args) (nt - t)) \<and>
+    (\<forall>t \<in> fst ` set data_in. t \<le> nt \<and> memL (args_ivl args) (nt - t)) \<and>
     \<comment> \<open>the ts cannot be in the future and by definition of data_in, the timestamps should be in the interval\<close>
 
     \<comment> \<open>tuple_in should point to the latest entry of a given tuple in data_in (which aren't in the future)\<close>
