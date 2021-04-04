@@ -92,11 +92,8 @@ fun relR :: "(ts \<times> 'a table \<times> 'a table) \<Rightarrow> 'a table" wh
 definition ts_tuple_rel_binary :: "(ts \<times> 'a table \<times> 'a table) set \<Rightarrow> (ts \<times> 'a tuple \<times> 'a tuple) set" where
   "ts_tuple_rel_binary ys = {(t, as, bs). \<exists>X Y. as \<in> X \<and> bs \<in> Y \<and> (t, X, Y) \<in> ys}"
 
-definition ts_tuple_rel_binary_lhs :: "(ts \<times> 'a table \<times> 'a table) set \<Rightarrow> (ts \<times> 'a tuple) set" where
-  "ts_tuple_rel_binary_lhs ys = {(t, as). \<exists>X Y. as \<in> X \<and> (t, X, Y) \<in> ys}"
-
-definition ts_tuple_rel_binary_rhs :: "(ts \<times> 'a table \<times> 'a table) set \<Rightarrow> (ts \<times> 'a tuple) set" where
-  "ts_tuple_rel_binary_rhs ys = {(t, bs). \<exists>X Y. bs \<in> Y \<and> (t, X, Y) \<in> ys}"
+abbreviation "ts_tuple_rel_binary_lhs ys \<equiv> ts_tuple_rel_f ys fst"
+abbreviation "ts_tuple_rel_binary_rhs ys \<equiv> ts_tuple_rel_f ys snd"
 
 definition auxlist_data_prev :: "args \<Rightarrow> (ts \<times> 'a table \<times> 'a table) list \<Rightarrow> (ts \<times> 'a table \<times> 'a table) list" where
   "auxlist_data_prev args auxlist = filter (\<lambda>(t, _, _). \<not>memL (args_ivl args) t) auxlist"
@@ -134,7 +131,7 @@ fun valid_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow>
     (\<forall>t \<in> fst ` set (linearize data_prev). t \<le> mt \<and> \<not> memL (args_ivl args) (mt - t)) \<and>
     (\<forall>t \<in> fst ` set (linearize data_in). t \<le> mt \<and> mem (args_ivl args) (mt - t)) \<and>
      \<comment> \<open>check whether tuple_in once contains the newest occurence of the tuple satisfying the lhs\<close>
-    newest_tuple_in_mapping ts_tuple_rel_binary_lhs data_in tuple_in_once (\<lambda>x. True) \<and>
+    newest_tuple_in_mapping fst data_in tuple_in_once (\<lambda>x. True) \<and>
     (\<forall>as \<in> Mapping.keys tuple_since_hist. case Mapping.lookup tuple_since_hist as of Some t \<Rightarrow> t \<le> mt) \<and>
     (\<forall>as \<in> Mapping.keys tuple_since_since. case Mapping.lookup tuple_since_since as of Some t \<Rightarrow> t \<le> mt) \<and>
      \<comment> \<open>conditions for sat / trigger conditions\<close>
@@ -171,7 +168,7 @@ lemma valid_init_mtaux: "(
   unfolding init_mmtaux_def
   by (auto simp add: init_args_def empty_queue_rep
       Mapping.lookup_empty safe_max_def table_def newest_tuple_in_mapping_def
-      ts_tuple_rel_binary_def ts_tuple_rel_binary_lhs_def ts_tuple_rel_binary_rhs_def
+      ts_tuple_rel_binary_def ts_tuple_rel_f_def
       auxlist_data_prev_def auxlist_data_in_def)
 
 (* analogous to add_new_ts_mmsaux' except that tuple_in doesn't exist / isn't updated *)
@@ -234,7 +231,7 @@ proof -
     "auxlist = (linearize data_in) @ (linearize data_prev)"
     "(\<forall>t \<in> fst ` set (linearize data_prev). t \<le> mt \<and> \<not> memL (args_ivl args) (mt - t))"
     "(\<forall>t \<in> fst ` set (linearize data_in). t \<le> mt \<and> mem (args_ivl args) (mt - t))"
-    "newest_tuple_in_mapping ts_tuple_rel_binary_lhs data_in tuple_in_once (\<lambda>x. True)"
+    "newest_tuple_in_mapping fst data_in tuple_in_once (\<lambda>x. True)"
     "(\<forall>as \<in> Mapping.keys tuple_since_hist. case Mapping.lookup tuple_since_hist as of Some t \<Rightarrow> t \<le> mt)"
     "(\<forall>as \<in> Mapping.keys tuple_since_since. case Mapping.lookup tuple_since_since as of Some t \<Rightarrow> t \<le> mt)"
     "(\<forall>tuple. tuple \<in> sat \<longleftrightarrow>
