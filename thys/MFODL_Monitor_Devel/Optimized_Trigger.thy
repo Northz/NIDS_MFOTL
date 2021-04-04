@@ -92,8 +92,8 @@ fun relR :: "(ts \<times> 'a table \<times> 'a table) \<Rightarrow> 'a table" wh
 definition ts_tuple_rel_binary :: "(ts \<times> 'a table \<times> 'a table) set \<Rightarrow> (ts \<times> 'a tuple \<times> 'a tuple) set" where
   "ts_tuple_rel_binary ys = {(t, as, bs). \<exists>X Y. as \<in> X \<and> bs \<in> Y \<and> (t, X, Y) \<in> ys}"
 
-abbreviation "ts_tuple_rel_binary_lhs ys \<equiv> ts_tuple_rel_f ys fst"
-abbreviation "ts_tuple_rel_binary_rhs ys \<equiv> ts_tuple_rel_f ys snd"
+abbreviation "ts_tuple_rel_binary_lhs \<equiv> ts_tuple_rel_f fst"
+abbreviation "ts_tuple_rel_binary_rhs \<equiv> ts_tuple_rel_f snd"
 
 definition auxlist_data_prev :: "args \<Rightarrow> (ts \<times> 'a table \<times> 'a table) list \<Rightarrow> (ts \<times> 'a table \<times> 'a table) list" where
   "auxlist_data_prev args auxlist = filter (\<lambda>(t, _, _). \<not>memL (args_ivl args) t) auxlist"
