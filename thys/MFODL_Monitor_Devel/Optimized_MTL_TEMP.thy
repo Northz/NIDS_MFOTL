@@ -382,78 +382,84 @@ type_synonym 'a mmsaux = "ts \<times> ts \<times> bool list \<times> bool list \
 fun time_mmsaux :: "'a mmsaux \<Rightarrow> ts" where
   "time_mmsaux aux = (case aux of (nt, _) \<Rightarrow> nt)"
 
-definition ts_tuple_rel :: "(ts \<times> 'a table) set \<Rightarrow> (ts \<times> 'a tuple) set" where
-  "ts_tuple_rel ys = {(t, as). \<exists>X. as \<in> X \<and> (t, X) \<in> ys}"
+definition ts_tuple_rel_f :: "(ts \<times> 'b) set \<Rightarrow> ('b \<Rightarrow> 'a table) \<Rightarrow> (ts \<times> 'a tuple) set" where
+  "ts_tuple_rel_f ys f = {(t, as). \<exists>X. as \<in> (f X) \<and> (t, X) \<in> ys}"
 
-lemma finite_fst_ts_tuple_rel: "finite (fst ` {tas \<in> ts_tuple_rel (set xs). P tas})"
+abbreviation "ts_tuple_rel ys \<equiv> ts_tuple_rel_f ys id"
+
+lemma finite_fst_ts_tuple_rel: "finite (fst ` {tas \<in> ts_tuple_rel_f (set xs) f. P tas})"
 proof -
-  have "fst ` {tas \<in> ts_tuple_rel (set xs). P tas} \<subseteq> fst ` ts_tuple_rel (set xs)"
+  have "fst ` {tas \<in> ts_tuple_rel_f (set xs) f. P tas} \<subseteq> fst ` ts_tuple_rel_f (set xs) f"
     by auto
   moreover have "\<dots> \<subseteq> set (map fst xs)"
-    by (force simp add: ts_tuple_rel_def)
+    by (force simp add: ts_tuple_rel_f_def)
   finally show ?thesis
     using finite_subset by blast
 qed
 
-lemma ts_tuple_rel_ext_Cons: "tas \<in> ts_tuple_rel {(nt, X)} \<Longrightarrow>
-  tas \<in> ts_tuple_rel (set ((nt, X) # tass))"
-  by (auto simp add: ts_tuple_rel_def)
+lemma ts_tuple_rel_ext_Cons: "tas \<in> ts_tuple_rel_f {(nt, X)} f \<Longrightarrow>
+  tas \<in> ts_tuple_rel_f (set ((nt, X) # tass)) f"
+  by (auto simp add: ts_tuple_rel_f_def)
 
-lemma ts_tuple_rel_ext_Cons': "tas \<in> ts_tuple_rel (set tass) \<Longrightarrow>
-  tas \<in> ts_tuple_rel (set ((nt, X) # tass))"
-  by (auto simp add: ts_tuple_rel_def)
+lemma ts_tuple_rel_ext_Cons': "tas \<in> ts_tuple_rel_f (set tass) f \<Longrightarrow>
+  tas \<in> ts_tuple_rel_f (set ((nt, X) # tass)) f"
+  by (auto simp add: ts_tuple_rel_f_def)
 
-lemma ts_tuple_rel_intro: "as \<in> X \<Longrightarrow> (t, X) \<in> ys \<Longrightarrow> (t, as) \<in> ts_tuple_rel ys"
-  by (auto simp add: ts_tuple_rel_def)
+lemma ts_tuple_rel_intro: "as \<in> f X \<Longrightarrow> (t, X) \<in> ys \<Longrightarrow> (t, as) \<in> ts_tuple_rel_f ys f"
+  by (auto simp add: ts_tuple_rel_f_def)
 
-lemma ts_tuple_rel_dest: "(t, as) \<in> ts_tuple_rel ys \<Longrightarrow> \<exists>X. (t, X) \<in> ys \<and> as \<in> X"
-  by (auto simp add: ts_tuple_rel_def)
+lemma ts_tuple_rel_dest: "(t, as) \<in> ts_tuple_rel_f ys f \<Longrightarrow> \<exists>X. (t, X) \<in> ys \<and> as \<in> f X"
+  by (auto simp add: ts_tuple_rel_f_def)
 
-lemma ts_tuple_rel_Un: "ts_tuple_rel (ys \<union> zs) = ts_tuple_rel ys \<union> ts_tuple_rel zs"
-  by (auto simp add: ts_tuple_rel_def)
+lemma ts_tuple_rel_Un: "ts_tuple_rel_f (ys \<union> zs) f = ts_tuple_rel_f ys f \<union> ts_tuple_rel_f zs f"
+  by (auto simp add: ts_tuple_rel_f_def)
 
-lemma ts_tuple_rel_ext: "tas \<in> ts_tuple_rel {(nt, X)} \<Longrightarrow>
-  tas \<in> ts_tuple_rel (set ((nt, Y \<union> X) # tass))"
+lemma ts_tuple_rel_ext: "tas \<in> ts_tuple_rel_f {(nt, X)} f \<Longrightarrow>
+  \<forall> A B. f A \<union> f B = f (A \<union> B) \<Longrightarrow>
+  tas \<in> ts_tuple_rel_f (set ((nt, Y \<union> X) # tass)) f"
 proof -
-  assume assm: "tas \<in> ts_tuple_rel {(nt, X)}"
-  then obtain as where tas_def: "tas = (nt, as)" "as \<in> X"
-    by (cases tas) (auto simp add: ts_tuple_rel_def)
-  then have "as \<in> Y \<union> X"
+  assume assm: "tas \<in> ts_tuple_rel_f {(nt, X)} f" "\<forall> A B. f A \<union> f B = f (A \<union> B)"
+  then obtain as where tas_def: "tas = (nt, as)" "as \<in> f X"
+    by (cases tas) (auto simp add: ts_tuple_rel_f_def)
+  then have "as \<in> f (Y \<union> X)"
+    using assm(2)
     by auto
-  then show "tas \<in> ts_tuple_rel (set ((nt, Y \<union> X) # tass))"
+  then show "tas \<in> ts_tuple_rel_f (set ((nt, Y \<union> X) # tass)) f"
     unfolding tas_def(1)
     by (rule ts_tuple_rel_intro) auto
 qed
 
-lemma ts_tuple_rel_ext': "tas \<in> ts_tuple_rel (set ((nt, X) # tass)) \<Longrightarrow>
-  tas \<in> ts_tuple_rel (set ((nt, X \<union> Y) # tass))"
+lemma ts_tuple_rel_ext': "tas \<in> ts_tuple_rel_f (set ((nt, X) # tass)) f \<Longrightarrow>
+  \<forall> A B. f A \<union> f B = f (A \<union> B) \<Longrightarrow>
+  tas \<in> ts_tuple_rel_f (set ((nt, X \<union> Y) # tass)) f"
 proof -
-  assume assm: "tas \<in> ts_tuple_rel (set ((nt, X) # tass))"
-  then have "tas \<in> ts_tuple_rel {(nt, X)} \<union> ts_tuple_rel (set tass)"
+  assume assm: "tas \<in> ts_tuple_rel_f (set ((nt, X) # tass)) f" "\<forall> A B. f A \<union> f B = f (A \<union> B)"
+  then have "tas \<in> ts_tuple_rel_f {(nt, X)} f \<union> ts_tuple_rel_f (set tass) f"
     using ts_tuple_rel_Un by force
-  then show "tas \<in> ts_tuple_rel (set ((nt, X \<union> Y) # tass))"
+  then show "tas \<in> ts_tuple_rel_f (set ((nt, X \<union> Y) # tass)) f"
   proof
-    assume "tas \<in> ts_tuple_rel {(nt, X)}"
+    assume "tas \<in> ts_tuple_rel_f {(nt, X)} f"
     then show ?thesis
+      using assm(2)
       by (auto simp: Un_commute dest!: ts_tuple_rel_ext)
   next
-    assume "tas \<in> ts_tuple_rel (set tass)"
-    then have "tas \<in> ts_tuple_rel (set ((nt, X \<union> Y) # tass))"
+    assume "tas \<in> ts_tuple_rel_f (set tass) f"
+    then have "tas \<in> ts_tuple_rel_f (set ((nt, X \<union> Y) # tass)) f"
       by (rule ts_tuple_rel_ext_Cons')
     then show ?thesis by simp
   qed
 qed
 
-lemma ts_tuple_rel_mono: "ys \<subseteq> zs \<Longrightarrow> ts_tuple_rel ys \<subseteq> ts_tuple_rel zs"
-  by (auto simp add: ts_tuple_rel_def)
+lemma ts_tuple_rel_mono: "ys \<subseteq> zs \<Longrightarrow> ts_tuple_rel_f ys f \<subseteq> ts_tuple_rel_f zs f"
+  by (auto simp add: ts_tuple_rel_f_def)
 
-lemma ts_tuple_rel_filter: "ts_tuple_rel (set (filter (\<lambda>(t, X). P t) xs)) =
-  {(t, X) \<in> ts_tuple_rel (set xs). P t}"
-  by (auto simp add: ts_tuple_rel_def)
+lemma ts_tuple_rel_filter: "ts_tuple_rel_f (set (filter (\<lambda>(t, X). P t) xs)) f =
+  {(t, X) \<in> ts_tuple_rel_f (set xs) f. P t}"
+  by (auto simp add: ts_tuple_rel_f_def)
 
-lemma ts_tuple_rel_set_filter: "x \<in> ts_tuple_rel (set (filter P xs)) \<Longrightarrow>
-  x \<in> ts_tuple_rel (set xs)"
-  by (auto simp add: ts_tuple_rel_def)
+lemma ts_tuple_rel_set_filter: "x \<in> ts_tuple_rel_f (set (filter P xs)) f \<Longrightarrow>
+  x \<in> ts_tuple_rel_f (set xs) f"
+  by (auto simp add: ts_tuple_rel_f_def)
 
 definition valid_tuple :: "(('a tuple, ts) mapping) \<Rightarrow> (ts \<times> 'a tuple) \<Rightarrow> bool" where
   "valid_tuple tuple_since = (\<lambda>(t, as). case Mapping.lookup tuple_since as of None \<Rightarrow> False
@@ -480,27 +486,27 @@ lemma safe_max_Some_dest_le: "finite X \<Longrightarrow> safe_max X = Some x \<L
 (* START: COMMON DEFINITIONS*)
 
 definition newest_tuple_in_mapping :: "
-  ((ts \<times> 'a) set \<Rightarrow> (ts \<times> 'b) set) \<Rightarrow>
-  (ts \<times> 'a) queue \<Rightarrow>
-  (('b, ts) mapping) \<Rightarrow>
-  ((ts \<times> 'b) \<Rightarrow> bool) \<Rightarrow>
+  ('b \<Rightarrow> 'a table) \<Rightarrow>
+  (ts \<times> 'b) queue \<Rightarrow>
+  (('a tuple, ts) mapping) \<Rightarrow>
+  ((ts \<times> 'a tuple) \<Rightarrow> bool) \<Rightarrow>
   bool"
   where
-  "newest_tuple_in_mapping table_set_to_tuple_set data_in tuple_in P = (\<forall>tuple.
+  "newest_tuple_in_mapping f data_in tuple_in P = (\<forall>tuple.
     \<comment> \<open>iff something is present in the mapping then the value corresponds
        to the maximum timestamp of a db containing the tuple\<close>
     Mapping.lookup tuple_in tuple =
     safe_max (
       fst ` {
-       tas \<in> table_set_to_tuple_set (set (linearize data_in)).
+       tas \<in> ts_tuple_rel_f (set (linearize data_in)) f.
        P tas \<and> tuple = snd tas
       }
     )
   )"
 
-lemma "newest_tuple_in_mapping ts_tuple_rel data_in tuple_in (\<lambda>x. valid_tuple tuple_since x) =
+lemma "newest_tuple_in_mapping f data_in tuple_in (\<lambda>x. valid_tuple tuple_since x) =
   (\<forall>as. Mapping.lookup tuple_in as = safe_max (fst `
-    {tas \<in> ts_tuple_rel (set (linearize data_in)). valid_tuple tuple_since tas \<and> as = snd tas}))"
+    {tas \<in> ts_tuple_rel_f (set (linearize data_in)) f. valid_tuple tuple_since tas \<and> as = snd tas}))"
   by (auto simp add: newest_tuple_in_mapping_def)
 
 (* END: COMMON DEFINITIONS*)
@@ -523,7 +529,7 @@ fun valid_mmsaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Rightarrow>
     (\<forall>t \<in> fst ` set (linearize data_prev). t \<le> nt \<and> \<not> memL (args_ivl args) (nt - t)) \<and>
     sorted (map fst (linearize data_in)) \<and>
     (\<forall>t \<in> fst ` set (linearize data_in). t \<le> nt \<and> memL (args_ivl args) (nt - t)) \<and>
-    newest_tuple_in_mapping ts_tuple_rel data_in tuple_in (\<lambda>x. valid_tuple tuple_since x)
+    newest_tuple_in_mapping id data_in tuple_in (\<lambda>x. valid_tuple tuple_since x)
   "
 
 lemma Mapping_lookup_filter_keys: "k \<in> Mapping.keys (Mapping.filter f m) \<Longrightarrow>
@@ -558,7 +564,7 @@ fun init_mmsaux :: "args \<Rightarrow> 'a mmsaux" where
 
 lemma valid_init_mmsaux: "L \<subseteq> R \<Longrightarrow> valid_mmsaux (init_args I n L R b) 0
   (init_mmsaux (init_args I n L R b)) []"
-  by (auto simp add: init_args_def empty_queue_rep ts_tuple_rel_def join_mask_def
+  by (auto simp add: init_args_def empty_queue_rep ts_tuple_rel_f_def join_mask_def
       Mapping.lookup_empty safe_max_def table_def newest_tuple_in_mapping_def)
 
 abbreviation "filter_cond X' ts t' \<equiv> (\<lambda>as _. \<not> (as \<in> X' \<and> Mapping.lookup ts as = Some t'))"
@@ -622,15 +628,15 @@ proof (induction ds arbitrary: ts)
 qed simp
 
 lemma fold_Mapping_filter_Some_Some: "Mapping.lookup ts as = Some t \<Longrightarrow>
-  (\<And>X. (t, X) \<in> set ds \<Longrightarrow> as \<notin> X) \<Longrightarrow>
-  Mapping.lookup (fold (\<lambda>(t, X) ts. Mapping.filter (filter_cond X ts t) ts) ds ts) as = Some t"
+  (\<And>X. (t, X) \<in> set ds \<Longrightarrow> as \<notin> f X) \<Longrightarrow>
+  Mapping.lookup (fold (\<lambda>(t, X) ts. Mapping.filter (filter_cond (f X) ts t) ts) ds ts) as = Some t"
 proof (induction ds arbitrary: ts)
   case (Cons a ds)
   then show ?case
   proof (cases a)
     case (Pair t' X')
     with Cons show ?thesis
-      using Mapping_lookup_filter_Some[of "filter_cond X' ts t'" as ts] by auto
+      using Mapping_lookup_filter_Some[of "filter_cond (f X') ts t'" as ts] by auto
   qed
 qed simp
 
@@ -662,8 +668,8 @@ fun shift_end_mmsaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Rightar
 (* since shift_end only affects data_prev, data_in & tuple_in, explicitly write the conditions out *)
 lemma valid_shift_end_unfolded:
   assumes table_tuple_in: "table (args_n args) (args_R args) (Mapping.keys tuple_in)"
-  assumes auxlist_tuples: "ts_tuple_rel (set auxlist) =
-    {tas \<in> ts_tuple_rel (set (linearize data_prev) \<union> set (linearize data_in)).
+  assumes auxlist_tuples: "ts_tuple_rel_f (set auxlist) f =
+    {tas \<in> ts_tuple_rel_f (set (linearize data_prev) \<union> set (linearize data_in)) f.
     valid_tuple tuple_since tas}"
   assumes data_prev_props:
     "(\<forall>as \<in> \<Union>(snd ` (set (linearize data_prev))). wf_tuple (args_n args) (args_R args) as)"
@@ -672,20 +678,20 @@ lemma valid_shift_end_unfolded:
   assumes data_in_props:
     "sorted (map fst (linearize data_in))"
     "(\<forall>t \<in> fst ` set (linearize data_in). t \<le> cur \<and> memL (args_ivl args) (cur - t))"
-  assumes max_ts_tuple_in: "newest_tuple_in_mapping ts_tuple_rel data_in tuple_in (\<lambda>x. valid_tuple tuple_since x)"
+  assumes max_ts_tuple_in: "newest_tuple_in_mapping f data_in tuple_in (\<lambda>x. valid_tuple tuple_since x)"
   assumes nt_mono: "nt \<ge> cur"
-  assumes shift_end_appl: "(data_prev', data_in', tuple_in') = shift_end (args_ivl args) nt id (data_prev, data_in, tuple_in)"
+  assumes shift_end_appl: "(data_prev', data_in', tuple_in') = shift_end (args_ivl args) nt f (data_prev, data_in, tuple_in)"
   shows
     "table (args_n args) (args_R args) (Mapping.keys tuple_in')"
     "(\<forall>as \<in> \<Union>(snd ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_R args) as)"
-    "ts_tuple_rel (set (filter (\<lambda>(t, rel). memR (args_ivl args) (nt - t)) auxlist)) =
-    {tas \<in> ts_tuple_rel (set (linearize data_prev') \<union> set (linearize data_in')).
+    "ts_tuple_rel_f (set (filter (\<lambda>(t, rel). memR (args_ivl args) (nt - t)) auxlist)) f =
+    {tas \<in> ts_tuple_rel_f (set (linearize data_prev') \<union> set (linearize data_in')) f.
     valid_tuple tuple_since tas}"
     "sorted (map fst (linearize data_prev'))"
     "(\<forall>t \<in> fst ` set (linearize data_prev'). t \<le> cur \<and> \<not> memL (args_ivl args) (cur - t))"
     "sorted (map fst (linearize data_in'))"
     "(\<forall>t \<in> fst ` set (linearize data_in'). t \<le> cur \<and> memL (args_ivl args) (cur - t))"
-    "newest_tuple_in_mapping ts_tuple_rel data_in' tuple_in' (\<lambda>x. valid_tuple tuple_since x)"
+    "newest_tuple_in_mapping f data_in' tuple_in' (\<lambda>x. valid_tuple tuple_since x)"
 proof -
   define I where "I = args_ivl args"
   define discard where "discard \<equiv>
@@ -698,16 +704,16 @@ proof -
     using shift_end_appl
     by (auto simp only: shift_end.simps Let_def I_def split: prod.splits)
   have tuple_in'_def: "tuple_in' = fold (\<lambda>(t, X) tuple_in. Mapping.filter
-    (filter_cond X tuple_in t) tuple_in) discard tuple_in"
+    (filter_cond (f X) tuple_in t) tuple_in) discard tuple_in"
     using shift_end_appl
-    by (auto simp only: shift_end.simps Let_def snd_def I_def discard_def split: prod.splits) (simp)
+    by (auto simp only: shift_end.simps Let_def snd_def I_def discard_def split: prod.splits)
   
   have tuple_in_Some_None: "\<And>as t X. Mapping.lookup tuple_in as = Some t \<Longrightarrow>
-    as \<in> X \<Longrightarrow> (t, X) \<in> set discard \<Longrightarrow> Mapping.lookup tuple_in' as = None"
+    as \<in> (f X) \<Longrightarrow> (t, X) \<in> set discard \<Longrightarrow> Mapping.lookup tuple_in' as = None"
     using fold_Mapping_filter_Some_None unfolding tuple_in'_def by fastforce
   have tuple_in_Some_Some: "\<And>as t. Mapping.lookup tuple_in as = Some t \<Longrightarrow>
-    (\<And>X. (t, X) \<in> set discard \<Longrightarrow> as \<notin> X) \<Longrightarrow> Mapping.lookup tuple_in' as = Some t"
-    using fold_Mapping_filter_Some_Some unfolding tuple_in'_def by fastforce
+    (\<And>X. (t, X) \<in> set discard \<Longrightarrow> as \<notin> f X) \<Longrightarrow> Mapping.lookup tuple_in' as = Some t"
+    using fold_Mapping_filter_Some_Some unfolding tuple_in'_def by force
   have tuple_in_None_None: "\<And>as. Mapping.lookup tuple_in as = None \<Longrightarrow>
     Mapping.lookup tuple_in' as = None"
     using fold_Mapping_filter_None unfolding tuple_in'_def by fastforce
@@ -739,18 +745,18 @@ proof -
 
 
   have lookup_tuple_in': "\<And>as. Mapping.lookup tuple_in' as = safe_max (fst `
-    {tas \<in> ts_tuple_rel (set (linearize data_in')). valid_tuple tuple_since tas \<and> as = snd tas})"
+    {tas \<in> ts_tuple_rel_f (set (linearize data_in')) f. valid_tuple tuple_since tas \<and> as = snd tas})"
   proof -
     fix as
     show "Mapping.lookup tuple_in' as = safe_max (fst `
-    {tas \<in> ts_tuple_rel (set (linearize data_in')). valid_tuple tuple_since tas \<and> as = snd tas})"
+    {tas \<in> ts_tuple_rel_f (set (linearize data_in')) f. valid_tuple tuple_since tas \<and> as = snd tas})"
     proof (cases "Mapping.lookup tuple_in as")
       case None
-      then have "{tas \<in> ts_tuple_rel (set (linearize data_in)).
+      then have "{tas \<in> ts_tuple_rel_f (set (linearize data_in)) f.
         valid_tuple tuple_since tas \<and> as = snd tas} = {}"
         using max_ts_tuple_in
         by (auto simp add: newest_tuple_in_mapping_def dest!: safe_max_empty_dest)
-      then have "{tas \<in> ts_tuple_rel (set (linearize data_in')).
+      then have "{tas \<in> ts_tuple_rel_f (set (linearize data_in')) f.
         valid_tuple tuple_since tas \<and> as = snd tas} = {}"
         using ts_tuple_rel_mono[OF set_lin_data_in'] by auto
       then show ?thesis
@@ -758,20 +764,20 @@ proof -
     next
       case (Some t)
       show ?thesis
-      proof (cases "\<exists>X. (t, X) \<in> set discard \<and> as \<in> X")
+      proof (cases "\<exists>X. (t, X) \<in> set discard \<and> as \<in> f X")
         case True
-        then obtain X where X_def: "(t, X) \<in> set discard" "as \<in> X"
+        then obtain X where X_def: "(t, X) \<in> set discard" "as \<in> f X"
           by auto
         have "\<not> memR I (nt - t)"
           using X_def(1) unfolding discard_alt by simp
-        moreover have "\<And>t'. (t', as) \<in> ts_tuple_rel (set (linearize data_in)) \<Longrightarrow>
+        moreover have "\<And>t'. (t', as) \<in> ts_tuple_rel_f (set (linearize data_in)) f \<Longrightarrow>
           valid_tuple tuple_since (t', as) \<Longrightarrow> t' \<le> t"
           using max_ts_tuple_in Some safe_max_Some_dest_le[OF finite_fst_ts_tuple_rel]
           by (fastforce simp add: image_iff newest_tuple_in_mapping_def)
-        ultimately have "{tas \<in> ts_tuple_rel (set (linearize data_in')).
+        ultimately have "{tas \<in> ts_tuple_rel_f (set (linearize data_in')) f.
           valid_tuple tuple_since tas \<and> as = snd tas} = {}"
           unfolding lin_data_in' using ts_tuple_rel_set_filter
-          by (fastforce simp add: ts_tuple_rel_def memR_antimono)
+          by (fastforce simp add: ts_tuple_rel_f_def memR_antimono)
         then show ?thesis
           unfolding tuple_in_Some_None[OF Some X_def(2,1)]
           using iffD2[OF safe_max_empty, symmetric] by blast
@@ -779,22 +785,22 @@ proof -
         case False
         then have lookup_Some: "Mapping.lookup tuple_in' as = Some t"
           using tuple_in_Some_Some[OF Some] by auto
-        have t_as: "(t, as) \<in> ts_tuple_rel (set (linearize data_in))"
+        have t_as: "(t, as) \<in> ts_tuple_rel_f (set (linearize data_in)) f"
           "valid_tuple tuple_since (t, as)"
           using max_ts_tuple_in Some
           by (auto simp add: newest_tuple_in_mapping_def dest: safe_max_Some_dest_in[OF finite_fst_ts_tuple_rel])
-        then obtain X where X_def: "as \<in> X" "(t, X) \<in> set (linearize data_in)"
-          by (auto simp add: ts_tuple_rel_def)
+        then obtain X where X_def: "as \<in> f X" "(t, X) \<in> set (linearize data_in)"
+          by (auto simp add: ts_tuple_rel_f_def)
         have "(t, X) \<in> set (linearize data_in')"
           using X_def False unfolding discard_alt lin_data_in' by auto
-        then have t_in_fst: "t \<in> fst ` {tas \<in> ts_tuple_rel (set (linearize data_in')).
+        then have t_in_fst: "t \<in> fst ` {tas \<in> ts_tuple_rel_f (set (linearize data_in')) f.
           valid_tuple tuple_since tas \<and> as = snd tas}"
-          using t_as(2) X_def(1) by (auto simp add: ts_tuple_rel_def image_iff)
-        have "\<And>t'. (t', as) \<in> ts_tuple_rel (set (linearize data_in)) \<Longrightarrow>
+          using t_as(2) X_def(1) by (auto simp add: ts_tuple_rel_f_def image_iff)
+        have "\<And>t'. (t', as) \<in> ts_tuple_rel_f (set (linearize data_in)) f \<Longrightarrow>
           valid_tuple tuple_since (t', as) \<Longrightarrow> t' \<le> t"
           using max_ts_tuple_in Some safe_max_Some_dest_le[OF finite_fst_ts_tuple_rel]
           by (fastforce simp add: image_iff newest_tuple_in_mapping_def)
-        then have "Max (fst ` {tas \<in> ts_tuple_rel (set (linearize data_in')).
+        then have "Max (fst ` {tas \<in> ts_tuple_rel_f (set (linearize data_in')) f.
           valid_tuple tuple_since tas \<and> as = snd tas}) = t"
           using Max_eqI[OF finite_fst_ts_tuple_rel, OF _ t_in_fst]
             ts_tuple_rel_mono[OF set_lin_data_in'] by fastforce
@@ -804,7 +810,7 @@ proof -
     qed
   qed
 
-  then show "newest_tuple_in_mapping ts_tuple_rel data_in' tuple_in' (\<lambda>x. valid_tuple tuple_since x)"
+  then show "newest_tuple_in_mapping f data_in' tuple_in' (\<lambda>x. valid_tuple tuple_since x)"
     by (auto simp only: newest_tuple_in_mapping_def)
   show table_in: "table (args_n args) (args_R args) (Mapping.keys tuple_in')"
     using tuple_in'_keys table_tuple_in
@@ -826,8 +832,8 @@ proof -
     unfolding I_def
     by auto
 
-  show "ts_tuple_rel (set (filter (\<lambda>(t, rel). memR I (nt - t)) auxlist)) =
-    {as \<in> ts_tuple_rel (set (linearize data_prev') \<union> set (linearize data_in')).
+  show "ts_tuple_rel_f (set (filter (\<lambda>(t, rel). memR I (nt - t)) auxlist)) f =
+    {as \<in> ts_tuple_rel_f (set (linearize data_prev') \<union> set (linearize data_in')) f.
     valid_tuple tuple_since as}"
     using auxlist_tuples
     unfolding lin_data_prev' lin_data_in' ts_tuple_rel_Un ts_tuple_rel_filter
@@ -871,7 +877,7 @@ proof -
     "(\<forall>t \<in> fst ` set (linearize data_in). t \<le> cur \<and> memL (args_ivl args) (cur - t))"
     by auto
 
-  from assms(1) have max_ts_tuple_in: "newest_tuple_in_mapping ts_tuple_rel data_in tuple_in (\<lambda>x. valid_tuple tuple_since x)"
+  from assms(1) have max_ts_tuple_in: "newest_tuple_in_mapping id data_in tuple_in (\<lambda>x. valid_tuple tuple_since x)"
     by auto
 
   then have "valid_mmsaux args cur
@@ -1052,7 +1058,7 @@ proof -
     using F1(3) by (meson le_diff_iff' memL_mono nat_le_linear)
   then have fst_ts_tuple_rel_before: "\<forall>t\<in>fst ` ts_tuple_rel (set (linearize data_in)).
     \<forall>t'\<in>fst ` ts_tuple_rel (set move). t \<le> t'"
-    by (fastforce simp add: ts_tuple_rel_def)
+    by (fastforce simp add: ts_tuple_rel_f_def)
   have sorted_lin_data_prev': "sorted (map fst (linearize data_prev'))"
     unfolding lin_data_prev' using sorted_filter F2 by auto
   have lin_data_in': "linearize data_in' = linearize data_in @ move"
@@ -1080,7 +1086,7 @@ proof -
         valid_tuple tuple_since tas \<and> as = snd tas} =
         {tas \<in> ts_tuple_rel (set (linearize data_in @ move)).
         valid_tuple tuple_since tas \<and> as = snd tas}"
-        using True by (auto simp add: ts_tuple_rel_def)
+        using True by (auto simp add: ts_tuple_rel_f_def)
       have "Mapping.lookup tuple_in as =
         safe_max (fst ` {tas \<in> ts_tuple_rel (set (linearize data_in)).
         valid_tuple tuple_since tas \<and> as = snd tas})"
@@ -1106,19 +1112,19 @@ proof -
         Max (fst ` {tas \<in> ts_tuple_rel (set (linearize data_in')).
         valid_tuple tuple_since tas \<and> as = snd tas})"
         unfolding split using False fst_ts_tuple_rel_before
-        by (fastforce simp add: ts_tuple_rel_def
+        by (fastforce simp add: ts_tuple_rel_f_def
             intro!: Max_Un_absorb[OF finite_fst_ts_tuple_rel _ finite_fst_ts_tuple_rel, symmetric])
       have "fst ` {(t, X). (t, X) \<in> set move \<and> as \<in> {as \<in> X. valid_tuple tuple_since (t, as)}} =
         fst ` {tas \<in> ts_tuple_rel (set move). valid_tuple tuple_since tas \<and> as = snd tas}"
-        by (auto simp add: ts_tuple_rel_def image_iff)
+        by (auto simp add: ts_tuple_rel_f_def image_iff)
       then have "Mapping.lookup tuple_in' as = Some (Max (fst ` {tas \<in> ts_tuple_rel (set move).
         valid_tuple tuple_since tas \<and> as = snd tas}))"
         using Mapping_lookup_fold_upd_set_max[of "move" as
           "\<lambda>X t. {as \<in> X. valid_tuple tuple_since (t, as)}", OF _ sorted_move] False
-        unfolding tuple_in'_def by (auto simp add: ts_tuple_rel_def)
+        unfolding tuple_in'_def by (auto simp add: ts_tuple_rel_f_def)
       then show ?thesis
         unfolding max_eq using False
-        by (auto simp add: safe_max_def lin_data_in' ts_tuple_rel_def)
+        by (auto simp add: safe_max_def lin_data_in' ts_tuple_rel_f_def)
     qed
   qed
   have table_in': "table n R (Mapping.keys tuple_in')"
@@ -1310,14 +1316,14 @@ proof -
     assume assm: "tas \<in> ts_tuple_rel (set (map (\<lambda>(t, rel). (t, join rel pos X)) auxlist))"
     then obtain t as Z where tas_def: "tas = (t, as)" "as \<in> join Z pos X" "(t, Z) \<in> set auxlist"
       "(t, join Z pos X) \<in> set (map (\<lambda>(t, rel). (t, join rel pos X)) auxlist)"
-      by (fastforce simp add: ts_tuple_rel_def)
+      by (fastforce simp add: ts_tuple_rel_f_def)
     from tas_def(3) have table_Z: "table n R Z"
       using valid_before by (auto simp add: n_def R_def)
     have proj: "as \<in> Z" "proj_tuple_in_join pos maskL as X"
       using tas_def(2) join_sub[OF _ table_left table_Z] valid_before
       by (auto simp add: n_def L_def R_def pos_def)
     then have "(t, as) \<in> ts_tuple_rel (set (auxlist))"
-      using tas_def(3) by (auto simp add: ts_tuple_rel_def)
+      using tas_def(3) by (auto simp add: ts_tuple_rel_f_def)
     then have tas_in: "(t, as) \<in> ts_tuple_rel
       (set (linearize data_prev) \<union> set (linearize data_in))" "valid_tuple tuple_since (t, as)"
       using valid_before by auto
@@ -1334,14 +1340,14 @@ proof -
     assume assm: "tas \<in> {tas \<in> ts_tuple_rel
       (set (linearize data_prev) \<union> set (linearize data_in)). valid_tuple tuple_since' tas}"
     then obtain t as where tas_def: "tas = (t, as)" "valid_tuple tuple_since' (t, as)"
-      by (auto simp add: ts_tuple_rel_def)
+      by (auto simp add: ts_tuple_rel_f_def)
     from tas_def(2) have "valid_tuple tuple_since (t, as)"
       unfolding tuple_since'_def using Mapping_lookup_filter_not_None
       by (force simp add: valid_tuple_def split: option.splits)
     then have "(t, as) \<in> ts_tuple_rel (set auxlist)"
       using valid_before assm tas_def(1) by auto
     then obtain Z where Z_def: "as \<in> Z" "(t, Z) \<in> set auxlist"
-      by (auto simp add: ts_tuple_rel_def)
+      by (auto simp add: ts_tuple_rel_f_def)
     then have table_Z: "table n R Z"
       using valid_before by (auto simp add: n_def R_def)
     from tas_def(2) have "proj_tuple_in_join pos maskL as X"
@@ -1351,7 +1357,7 @@ proof -
       using join_sub[OF _ table_left table_Z] Z_def(1) valid_before
       by (auto simp add: n_def L_def R_def pos_def)
     then show "tas \<in> ts_tuple_rel (set (map (\<lambda>(t, rel). (t, join rel pos X)) auxlist))"
-      using Z_def unfolding tas_def(1) by (auto simp add: ts_tuple_rel_def)
+      using Z_def unfolding tas_def(1) by (auto simp add: ts_tuple_rel_f_def)
   qed
   have lookup_tuple_in': "\<And>as. Mapping.lookup tuple_in' as = safe_max (fst `
     {tas \<in> ts_tuple_rel (set (linearize data_in)). valid_tuple tuple_since' tas \<and> as = snd tas})"
@@ -1478,7 +1484,7 @@ proof -
     define t where "t \<equiv> fst tas"
     define as where "as \<equiv> snd tas"
     have "as \<in> all_tuples"
-      using assm by (force simp add: as_def all_tuples_def ts_tuple_rel_def)
+      using assm by (force simp add: as_def all_tuples_def ts_tuple_rel_f_def)
     then have "Mapping.lookup tuple_since' as = Mapping.lookup tuple_since as"
       by (auto simp add: tuple_since'_def Mapping.lookup_filter split: option.splits)
     then show "valid_tuple tuple_since' tas = valid_tuple tuple_since tas"
@@ -1583,10 +1589,11 @@ proof -
   have ts_tuple_rel_auxlist': "ts_tuple_rel (set auxlist') =
     ts_tuple_rel (set auxlist) \<union> ts_tuple_rel {(nt, X)}"
     unfolding auxlist'_def
-    using ts_tuple_rel_ext ts_tuple_rel_ext' ts_tuple_rel_ext_Cons ts_tuple_rel_ext_Cons'
-    by (fastforce simp: ts_tuple_rel_def split: list.splits if_splits)
+    using ts_tuple_rel_ext[of _ _ _ id] ts_tuple_rel_ext'[of _ _ _ _ id]
+      ts_tuple_rel_ext_Cons ts_tuple_rel_ext_Cons'
+    by (fastforce simp: ts_tuple_rel_f_def split: list.splits if_splits)
   have valid_tuple_nt_X: "\<And>tas. tas \<in> ts_tuple_rel {(nt, X)} \<Longrightarrow> valid_tuple tuple_since' tas"
-    using valid_before by (auto simp add: ts_tuple_rel_def valid_tuple_def tuple_since'_def
+    using valid_before by (auto simp add: ts_tuple_rel_f_def valid_tuple_def tuple_since'_def
         Mapping_lookup_upd_set dest: Mapping_keys_dest split: option.splits)
   have valid_tuple_mono: "\<And>tas. valid_tuple tuple_since tas \<Longrightarrow> valid_tuple tuple_since' tas"
     by (auto simp add: valid_tuple_def tuple_since'_def Mapping_lookup_upd_set
@@ -1613,7 +1620,7 @@ proof -
       show "tas \<in> {tas \<in> ts_tuple_rel (set (linearize data_prev) \<union>
         set (linearize data_in) \<union> {(nt, X)}). valid_tuple tuple_since' tas}"
         using assm valid_before by (auto simp add: ts_tuple_rel_Un tuple_since'_def
-            valid_tuple_def Mapping_lookup_upd_set ts_tuple_rel_def dest: Mapping_keys_dest
+            valid_tuple_def Mapping_lookup_upd_set ts_tuple_rel_f_def dest: Mapping_keys_dest
             split: option.splits if_splits)
     qed
   next
@@ -1629,11 +1636,11 @@ proof -
         set (linearize data_in)) - ts_tuple_rel {(nt, X)}"
       then have tas_in: "tas \<in> ts_tuple_rel (set (linearize data_prev) \<union>
         set (linearize data_in))"
-        by (auto simp only: ts_tuple_rel_def)
+        by (auto simp only: ts_tuple_rel_f_def)
       obtain t as where tas_def: "tas = (t, as)"
         by (cases tas) auto
       have "t \<in> fst ` (set (linearize data_prev) \<union> set (linearize data_in))"
-        using assm' unfolding tas_def by (force simp add: ts_tuple_rel_def)
+        using assm' unfolding tas_def by (force simp add: ts_tuple_rel_f_def)
       then have t_le_nt: "t \<le> nt"
         using valid_before by auto
       have valid_tas: "valid_tuple tuple_since' tas"
@@ -1651,7 +1658,7 @@ proof -
           by (auto simp add: valid_tuple_def tuple_since'_def Mapping_lookup_upd_set
               intro: Mapping_keys_intro split: option.splits if_splits)
         then have "False"
-          using assm' unfolding tas_def ts_tuple_rel_def by (auto simp only: ts_tuple_rel_def)
+          using assm' unfolding tas_def ts_tuple_rel_f_def by (auto simp only: ts_tuple_rel_f_def id_def)
         then show ?thesis
           by simp
       qed
@@ -1682,7 +1689,7 @@ proof -
           using True valid_before by (auto simp add: valid_tuple_def tuple_since'_def
               Mapping_lookup_upd_set dest: Mapping_keys_dest split: option.splits)
         moreover have "(nt, as) \<in> ts_tuple_rel (insert (nt, X) (set (linearize data_in)))"
-          using True by (auto simp add: ts_tuple_rel_def)
+          using True by (auto simp add: ts_tuple_rel_f_def)
         ultimately have nt_in: "nt \<in> fst ` {tas \<in> ts_tuple_rel (insert (nt, X)
           (set (linearize data_in))). valid_tuple tuple_since' tas \<and> as = snd tas}"
         proof -
@@ -1702,7 +1709,8 @@ proof -
         ultimately have "Max (fst ` {tas \<in> ts_tuple_rel (set (linearize data_in)
           \<union> set [(nt, X)]). valid_tuple tuple_since' tas \<and> as = snd tas}) = nt"
           using Max_eqI[OF finite_fst_ts_tuple_rel[of "linearize data_in'"],
-              unfolded lin_data_in' set_append] by auto
+              unfolded lin_data_in' set_append]
+          by (metis (mono_tags) Un_empty_right Un_insert_right empty_set list.simps(15))
         then show ?thesis
           using nt_in True
           by (auto simp add: tuple_in'_def Mapping_lookup_upd_set safe_max_def lin_data_in')
@@ -1712,7 +1720,7 @@ proof -
           valid_tuple tuple_since tas \<and> as = snd tas} =
           {tas \<in> ts_tuple_rel (set (linearize data_in')).
           valid_tuple tuple_since' tas \<and> as = snd tas}"
-          using False by (fastforce simp add: lin_data_in' ts_tuple_rel_def valid_tuple_def
+          using False by (fastforce simp add: lin_data_in' ts_tuple_rel_f_def valid_tuple_def
               tuple_since'_def Mapping_lookup_upd_set intro: Mapping_keys_intro
               split: option.splits if_splits)
         then show ?thesis
@@ -1744,7 +1752,7 @@ proof -
         valid_tuple tuple_since' tas \<and> as = snd tas}"
       then obtain t Z where Z_def: "tas = (t, as)" "as \<in> Z" "(t, Z) \<in> set (linearize data_in)"
         "valid_tuple tuple_since' (t, as)"
-        by (auto simp add: ts_tuple_rel_def)
+        by (auto simp add: ts_tuple_rel_f_def)
       show "tas \<in> {tas \<in> ts_tuple_rel (set (linearize data_in)).
         valid_tuple tuple_since tas \<and> as = snd tas}"
       using assm
@@ -1787,11 +1795,11 @@ proof (rule iffI)
   then obtain t X where tX_def: "P t" "as \<in> X" "(t, X) \<in> set auxlist"
     by (auto elim!: in_foldr_UnE)
   then show "\<exists>t. (t, as) \<in> ts_tuple_rel (set auxlist) \<and> P t"
-    by (auto simp add: ts_tuple_rel_def)
+    by (auto simp add: ts_tuple_rel_f_def)
 next
   assume assm: "\<exists>t. (t, as) \<in> ts_tuple_rel (set auxlist) \<and> P t"
   then obtain t X where tX_def: "P t" "as \<in> X" "(t, X) \<in> set auxlist"
-    by (auto simp add: ts_tuple_rel_def)
+    by (auto simp add: ts_tuple_rel_f_def)
   show "as \<in> foldr (\<union>) (concat (map (\<lambda>(t, rel). if P t then [rel] else []) auxlist)) {}"
     using in_foldr_UnI[OF tX_def(2)] tX_def assm by (induction auxlist) force+
 qed
