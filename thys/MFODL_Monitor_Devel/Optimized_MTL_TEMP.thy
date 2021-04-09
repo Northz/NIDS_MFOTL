@@ -492,21 +492,21 @@ definition newest_tuple_in_mapping :: "
   ((ts \<times> 'a tuple) \<Rightarrow> bool) \<Rightarrow>
   bool"
   where
-  "newest_tuple_in_mapping f data_in tuple_in P = (\<forall>tuple.
+  "newest_tuple_in_mapping entry_to_db data_in tuple_in P = (\<forall>tuple.
     \<comment> \<open>iff something is present in the mapping then the value corresponds
        to the maximum timestamp of a db containing the tuple\<close>
     Mapping.lookup tuple_in tuple =
     safe_max (
       fst ` {
-       tas \<in> ts_tuple_rel_f f (set (linearize data_in)).
+       tas \<in> ts_tuple_rel_f entry_to_db (set (linearize data_in)).
        P tas \<and> tuple = snd tas
       }
     )
   )"
 
-lemma "newest_tuple_in_mapping f data_in tuple_in (\<lambda>x. valid_tuple tuple_since x) =
+lemma "newest_tuple_in_mapping entry_to_db data_in tuple_in (\<lambda>x. valid_tuple tuple_since x) =
   (\<forall>as. Mapping.lookup tuple_in as = safe_max (fst `
-    {tas \<in> ts_tuple_rel_f f (set (linearize data_in)). valid_tuple tuple_since tas \<and> as = snd tas}))"
+    {tas \<in> ts_tuple_rel_f entry_to_db (set (linearize data_in)). valid_tuple tuple_since tas \<and> as = snd tas}))"
   by (auto simp add: newest_tuple_in_mapping_def)
 
 (* END: COMMON DEFINITIONS*)
@@ -1217,36 +1217,23 @@ proof -
     using takedropWhile_queue_fst takedropWhile_queue_snd data_prev'_def move_def
     by (metis surjective_pairing)
 
+  have "(\<forall>as \<in> \<Union>((f o snd) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_R args) as)"
+    using data_prev_props
+    by auto
+
   show "\<forall>as \<in> \<Union>((f o snd) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_R args) as"
-    using lin_data_prev' sorted_lin_data_prev' lin_data_in' move_filter sorted_lin_data_in'
-      nt_mono data_prev_props ts_tuple_rel' lookup' table_in' unfolding I_def
-    by (auto simp only: valid_mmsaux.simps Let_def n_def R_def newest_tuple_in_mapping_def
-        split: option.splits)
-      (auto, auto simp: memL_mono)
+    using data_prev_props lin_data_prev'
+    by auto
 
   show "(\<forall>t \<in> fst ` set (linearize data_prev'). t \<le> nt \<and> \<not> memL (args_ivl args) (nt - t))"
-    using lin_data_prev' sorted_lin_data_prev' lin_data_in' move_filter sorted_lin_data_in'
-      nt_mono data_prev_props ts_tuple_rel' lookup' table_in' unfolding I_def
-    by (auto simp only: valid_mmsaux.simps Let_def n_def R_def newest_tuple_in_mapping_def
-        split: option.splits)
-      (auto, auto simp: memL_mono)
+    using data_prev_props lin_data_prev' nt_mono
+    unfolding I_def
+    by auto
 
   show "(\<forall>t \<in> fst ` set (linearize data_in'). t \<le> nt \<and> memL (args_ivl args) (nt - t))"
     using lin_data_in' move_filter nt_mono data_in_props data_prev_props unfolding I_def
     (* by (auto simp add: memL_mono) is slower *)
     by (smt I_def Un_iff case_prod_beta' diff_commute diff_diff_cancel diff_le_self imageE image_eqI le_trans memL_mono move_def set_append set_takeWhileD takedropWhile_queue_snd)
-  
-  (*moreover have "valid_mmsaux args nt (nt, gc, maskL, maskR, data_prev', data_in',
-    tuple_in', tuple_since) auxlist"
-    using lin_data_prev' sorted_lin_data_prev' lin_data_in' move_filter sorted_lin_data_in'
-      nt_mono valid_before ts_tuple_rel' lookup' table_in' unfolding I_def
-    by (auto simp only: valid_mmsaux.simps Let_def n_def R_def newest_tuple_in_mapping_def
-        split: option.splits)
-      (auto, auto simp: memL_mono)
-      (* takes long *)
-  ultimately show ?thesis
-    by (auto simp only: add_new_ts_mmsaux'.simps Let_def data_in'_def tuple_in'_def I_def
-        split: prod.splits)*)
 qed
 
 lemma valid_add_new_ts_mmsaux'_unfolded:
@@ -1256,148 +1243,77 @@ lemma valid_add_new_ts_mmsaux'_unfolded:
   shows "valid_mmsaux args nt (add_new_ts_mmsaux' args nt
     (ot, gc, maskL, maskR, data_prev, data_in, tuple_in, tuple_since)) auxlist"
 proof -
-  define I where "I = args_ivl args"
-  define n where "n = args_n args"
-  define L where "L = args_L args"
-  define R where "R = args_R args"
-  define pos where "pos = args_pos args"
-  define data_prev' where "data_prev' \<equiv> dropWhile_queue (\<lambda>(t, X). memL I (nt - t)) data_prev"
-  define move where "move \<equiv> takeWhile (\<lambda>(t, X). memL I (nt - t)) (linearize data_prev)"
-  define data_in' where "data_in' \<equiv> fold (\<lambda>(t, X) data_in. append_queue (t, X) data_in)
-    move data_in"
-  define tuple_in' where "tuple_in' \<equiv> fold (\<lambda>(t, X) tuple_in. upd_set tuple_in (\<lambda>_. t)
-      {as \<in> X. valid_tuple tuple_since (t, as)}) move tuple_in"
-  have tuple_in'_keys: "\<And>as. as \<in> Mapping.keys tuple_in' \<Longrightarrow> as \<in> Mapping.keys tuple_in \<or>
-    (\<exists>(t, X)\<in>set move. as \<in> {as \<in> X. valid_tuple tuple_since (t, as)})"
-    using Mapping_keys_fold_upd_set[of _ "\<lambda>t X. {as \<in> X. valid_tuple tuple_since (t, as)}"]
-    by (auto simp add: tuple_in'_def)
-  have F1: "sorted (map fst (linearize data_in))" "\<forall>t \<in> fst ` set (linearize data_in). t \<le> nt"
-    "\<forall>t \<in> fst ` set (linearize data_in). t \<le> ot \<and> memL I (ot - t)"
-    using valid_before nt_mono unfolding I_def by auto
-  have F2: "sorted (map fst (linearize data_prev))" "\<forall>t \<in> fst ` set (linearize data_prev). t \<le> nt"
-    "\<forall>t \<in> fst ` set (linearize data_prev). t \<le> ot \<and> \<not> memL I (ot - t)"
-    using valid_before nt_mono unfolding I_def by auto
-  have lin_data_prev': "linearize data_prev' =
-    filter (\<lambda>(t, X). \<not> memL I (nt - t)) (linearize data_prev)"
-    unfolding data_prev'_def dropWhile_queue_rep dropWhile_filter'[OF F2(1,2)] ..
-  have move_filter: "move = filter (\<lambda>(t, X). memL I (nt - t)) (linearize data_prev)"
-    unfolding move_def takeWhile_filter'[OF F2(1,2)] ..
-  then have sorted_move: "sorted (map fst move)"
-    using sorted_filter F2 by auto
-  have "\<forall>t\<in>fst ` set move. t \<le> ot \<and> \<not> memL I (ot - t)"
-    using move_filter F2(3) set_filter by auto
-  then have fst_set_before: "\<forall>t\<in>fst ` set (linearize data_in). \<forall>t'\<in>fst ` set move. t \<le> t'"
-    using F1(3) by (meson le_diff_iff' memL_mono nat_le_linear)
-  then have fst_ts_tuple_rel_before: "\<forall>t\<in>fst ` ts_tuple_rel (set (linearize data_in)).
-    \<forall>t'\<in>fst ` ts_tuple_rel (set move). t \<le> t'"
-    by (fastforce simp add: ts_tuple_rel_f_def)
-  have sorted_lin_data_prev': "sorted (map fst (linearize data_prev'))"
-    unfolding lin_data_prev' using sorted_filter F2 by auto
-  have lin_data_in': "linearize data_in' = linearize data_in @ move"
-    unfolding data_in'_def using fold_append_queue_rep by fastforce
-  have sorted_lin_data_in': "sorted (map fst (linearize data_in'))"
-    unfolding lin_data_in' using F1(1) sorted_move fst_set_before by (simp add: sorted_append)
-  have set_lin_prev'_in': "set (linearize data_prev') \<union> set (linearize data_in') =
-    set (linearize data_prev) \<union> set (linearize data_in)"
-    using lin_data_prev' lin_data_in' move_filter by auto
-  have ts_tuple_rel': "ts_tuple_rel (set auxlist) =
-    {tas \<in> ts_tuple_rel (set (linearize data_prev') \<union> set (linearize data_in')).
+  define res where "res = add_new_ts_past (args_ivl args) nt id (data_prev, data_in, tuple_in, tuple_since)"
+  define data_prev' where "data_prev' = fst res"
+  define data_in' where "data_in' = (fst o snd) res"
+  define tuple_in' where "tuple_in' = (snd o snd) res"
+  have t: "cur = ot" using assms(1) by auto
+
+  have shift_end_res: "(data_prev', data_in', tuple_in') = add_new_ts_past (args_ivl args) nt id (data_prev, data_in, tuple_in, tuple_since)"
+    using data_prev'_def data_in'_def tuple_in'_def res_def
+    by auto
+
+  have table_tuple_in: "table (args_n args) (args_R args) (Mapping.keys tuple_in)"
+    using assms(1)
+    by auto
+  have auxlist_tuples: "ts_tuple_rel_f id (set auxlist) =
+    {tas \<in> ts_tuple_rel_f id (set (linearize data_prev) \<union> set (linearize data_in)).
     valid_tuple tuple_since tas}"
-    unfolding set_lin_prev'_in' using valid_before by auto
-  have lookup': "\<And>as. Mapping.lookup tuple_in' as = safe_max (fst `
-    {tas \<in> ts_tuple_rel (set (linearize data_in')).
-    valid_tuple tuple_since tas \<and> as = snd tas})"
-  proof -
+    using assms(1)
+    by auto
+
+  have data_prev_props:
+    "(\<forall>as \<in> \<Union>((id o snd) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_R args) as)"
+    "sorted (map fst (linearize data_prev))"
+    "(\<forall>t \<in> fst ` set (linearize data_prev). t \<le> cur \<and> \<not> memL (args_ivl args) (cur - t))"
+    using assms(1)
+    by auto
+
+  have data_in_props:
+    "sorted (map fst (linearize data_in))"
+    "(\<forall>t \<in> fst ` set (linearize data_in). t \<le> cur \<and> memL (args_ivl args) (cur - t))"
+    using assms(1)
+    by auto
+
+  have max_ts_tuple_in: "newest_tuple_in_mapping id data_in tuple_in (\<lambda>x. valid_tuple tuple_since x)"
+    using assms(1)
+    by auto
+
+  have since_map: "\<forall>as \<in> Mapping.keys tuple_since. case Mapping.lookup tuple_since as of Some t \<Rightarrow> t \<le> ot"
+    using assms(1)
+    by auto
+  {
     fix as
-    show "Mapping.lookup tuple_in' as = safe_max (fst `
-      {tas \<in> ts_tuple_rel (set (linearize data_in')).
-      valid_tuple tuple_since tas \<and> as = snd tas})"
-    proof (cases "{(t, X) \<in> set move. as \<in> X \<and> valid_tuple tuple_since (t, as)} = {}")
-      case True
-      have move_absorb: "{tas \<in> ts_tuple_rel (set (linearize data_in)).
-        valid_tuple tuple_since tas \<and> as = snd tas} =
-        {tas \<in> ts_tuple_rel (set (linearize data_in @ move)).
-        valid_tuple tuple_since tas \<and> as = snd tas}"
-        using True by (auto simp add: ts_tuple_rel_f_def)
-      have "Mapping.lookup tuple_in as =
-        safe_max (fst ` {tas \<in> ts_tuple_rel (set (linearize data_in)).
-        valid_tuple tuple_since tas \<and> as = snd tas})"
-        using valid_before by (auto simp add: newest_tuple_in_mapping_def)
-      then have "Mapping.lookup tuple_in as =
-        safe_max (fst ` {tas \<in> ts_tuple_rel (set (linearize data_in')).
-        valid_tuple tuple_since tas \<and> as = snd tas})"
-        unfolding lin_data_in' move_absorb .
-      then show ?thesis
-        using Mapping_lookup_fold_upd_set_idle[of "move" as
-          "\<lambda>X t. {as \<in> X. valid_tuple tuple_since (t, as)}"] True
-        unfolding tuple_in'_def by auto
+    assume assm: "as \<in> Mapping.keys tuple_since" "case Mapping.lookup tuple_since as of Some t \<Rightarrow> True"
+    then have "case Mapping.lookup tuple_since as of Some t \<Rightarrow> t \<le> nt"
+    proof (cases "Mapping.lookup tuple_since as")
+      case None
+      then show ?thesis using since_map assm by auto
     next
-      case False
-      have split: "fst ` {tas \<in> ts_tuple_rel (set (linearize data_in')).
-        valid_tuple tuple_since tas \<and> as = snd tas} =
-        fst ` {tas \<in> ts_tuple_rel (set move). valid_tuple tuple_since tas \<and> as = snd tas} \<union>
-        fst ` {tas \<in> ts_tuple_rel (set (linearize data_in)).
-        valid_tuple tuple_since tas \<and> as = snd tas}"
-        unfolding lin_data_in' set_append ts_tuple_rel_Un by auto
-      have max_eq: "Max (fst ` {tas \<in> ts_tuple_rel (set move).
-        valid_tuple tuple_since tas \<and> as = snd tas}) =
-        Max (fst ` {tas \<in> ts_tuple_rel (set (linearize data_in')).
-        valid_tuple tuple_since tas \<and> as = snd tas})"
-        unfolding split using False fst_ts_tuple_rel_before
-        by (fastforce simp add: ts_tuple_rel_f_def
-            intro!: Max_Un_absorb[OF finite_fst_ts_tuple_rel _ finite_fst_ts_tuple_rel, symmetric])
-      have "fst ` {(t, X). (t, X) \<in> set move \<and> as \<in> {as \<in> X. valid_tuple tuple_since (t, as)}} =
-        fst ` {tas \<in> ts_tuple_rel (set move). valid_tuple tuple_since tas \<and> as = snd tas}"
-        by (auto simp add: ts_tuple_rel_f_def image_iff)
-      then have "Mapping.lookup tuple_in' as = Some (Max (fst ` {tas \<in> ts_tuple_rel (set move).
-        valid_tuple tuple_since tas \<and> as = snd tas}))"
-        using Mapping_lookup_fold_upd_set_max[of "move" as
-          "\<lambda>X t. {as \<in> X. valid_tuple tuple_since (t, as)}", OF _ sorted_move] False
-        unfolding tuple_in'_def by (auto simp add: ts_tuple_rel_f_def)
-      then show ?thesis
-        unfolding max_eq using False
-        by (auto simp add: safe_max_def lin_data_in' ts_tuple_rel_f_def)
+      case (Some t)
+      then have "t \<le> ot" using since_map assm by auto
+      then have "t \<le> nt" using nt_mono t by auto
+      then show ?thesis using Some by auto
     qed
-  qed
-  have table_in': "table n R (Mapping.keys tuple_in')"
-  proof -
-    {
-      fix as
-      assume assm: "as \<in> Mapping.keys tuple_in'"
-      have "wf_tuple n R as"
-        using tuple_in'_keys[OF assm]
-      proof (rule disjE)
-        assume "as \<in> Mapping.keys tuple_in"
-        then show "wf_tuple n R as"
-          using valid_before by (auto simp add: table_def n_def R_def)
-      next
-        assume "\<exists>(t, X)\<in>set move. as \<in> {as \<in> X. valid_tuple tuple_since (t, as)}"
-        then obtain t X where tX_def: "(t, X) \<in> set move" "as \<in> X"
-          by auto
-        then have "as \<in> \<Union>(snd ` set (linearize data_prev))"
-          unfolding move_def using set_takeWhileD by force
-        then show "wf_tuple n R as"
-          using valid_before by (auto simp add: n_def R_def)
-      qed
-    }
-    then show ?thesis
-      by (auto simp add: table_def)
-  qed
-  have data_prev'_move: "(data_prev', move) =
-    takedropWhile_queue (\<lambda>(t, X). memL I (nt - t)) data_prev"
-    using takedropWhile_queue_fst takedropWhile_queue_snd data_prev'_def move_def
-    by (metis surjective_pairing)
-  moreover have "valid_mmsaux args nt (nt, gc, maskL, maskR, data_prev', data_in',
-    tuple_in', tuple_since) auxlist"
-    using lin_data_prev' sorted_lin_data_prev' lin_data_in' move_filter sorted_lin_data_in'
-      nt_mono valid_before ts_tuple_rel' lookup' table_in' unfolding I_def
-    by (auto simp only: valid_mmsaux.simps Let_def n_def R_def newest_tuple_in_mapping_def
-        split: option.splits)
-      (auto, auto simp: memL_mono)
-      (* takes long *)
-  ultimately show ?thesis
-    by (auto simp only: add_new_ts_mmsaux'.simps Let_def data_in'_def tuple_in'_def I_def
-        split: prod.splits)
+  }
+  then have "\<forall>as \<in> Mapping.keys tuple_since. case Mapping.lookup tuple_since as of Some t \<Rightarrow> t \<le> nt"
+    using Mapping_keys_dest by fastforce
+
+
+  then have "valid_mmsaux args nt (nt, gc, maskL, maskR, data_prev', data_in', tuple_in', tuple_since) auxlist"
+    using valid_add_new_ts_past_unfolded[OF table_tuple_in auxlist_tuples data_prev_props
+          data_in_props max_ts_tuple_in nt_mono shift_end_res] assms(1)
+    by (auto simp only: valid_mmsaux.simps) (auto)
+    (* is slow *)
+
+  moreover have "(nt, gc, maskL, maskR, data_prev', data_in', tuple_in', tuple_since) =
+    add_new_ts_mmsaux' args nt (ot, gc, maskL, maskR, data_prev, data_in, tuple_in, tuple_since)"
+    by (auto simp only:
+        add_new_ts_mmsaux'.simps Let_def data_prev'_def data_in'_def tuple_in'_def res_def fst_def snd_def o_def
+        split: prod.splits
+    )
+
+  ultimately show ?thesis by auto 
 qed
 
 lemma valid_add_new_ts_mmsaux': "valid_mmsaux args cur aux auxlist \<Longrightarrow> nt \<ge> cur \<Longrightarrow>
