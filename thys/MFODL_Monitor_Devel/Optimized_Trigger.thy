@@ -8,6 +8,15 @@ type_synonym ts = nat
 (* simply stores all tables for \<phi> and \<psi> in [0, b] *)
 type_synonym 'a mtaux = "(ts \<times> 'a table \<times> 'a table) list"
 
+definition time :: "(ts \<times> 'a table \<times> 'a table) \<Rightarrow> ts" where
+  "time db = fst db"
+
+definition relL :: "(ts \<times> 'a table \<times> 'a table) \<Rightarrow> 'a table" where
+  "relL db = (fst o snd) db"
+
+definition relR :: "(ts \<times> 'a table \<times> 'a table) \<Rightarrow> 'a table" where
+  "relR db = (snd o snd) db"
+
 fun trigger_results :: "args \<Rightarrow> ts \<Rightarrow> 'a mtaux \<Rightarrow> 'a table" where
   "trigger_results args cur auxlist = {
     tuple.
@@ -20,8 +29,7 @@ fun trigger_results :: "args \<Rightarrow> ts \<Rightarrow> 'a mtaux \<Rightarro
         (
           tuple \<in> r \<or>
           (\<exists>j \<in> {i<..<(length auxlist)}.
-            let (t', l', r') = auxlist!j in
-            (restrict (args_L args) tuple) \<in> l' \<comment> \<open>t < t' is given as the list is sorted\<close>
+            (restrict (args_L args) tuple) \<in> relL (auxlist!j) \<comment> \<open>t < t' is given as the list is sorted\<close>
           )
         )
       )
@@ -80,15 +88,6 @@ fun mmtaux_data_prev :: "'a mmtaux \<Rightarrow> (ts \<times> 'a table \<times> 
 fun mmtaux_data_in :: "'a mmtaux \<Rightarrow> (ts \<times> 'a table) queue" where
   "mmtaux_data_in (_, _, _, _, data_in, _) = data_in"
 
-definition time :: "(ts \<times> 'a table \<times> 'a table) \<Rightarrow> ts" where
-  "time db = fst db"
-
-definition relL :: "(ts \<times> 'a table \<times> 'a table) \<Rightarrow> 'a table" where
-  "relL db = (fst o snd) db"
-
-definition relR :: "(ts \<times> 'a table \<times> 'a table) \<Rightarrow> 'a table" where
-  "relR db = (snd o snd) db"
-
 definition ts_tuple_rel_binary :: "(ts \<times> 'a table \<times> 'a table) set \<Rightarrow> (ts \<times> 'a tuple \<times> 'a tuple) set" where
   "ts_tuple_rel_binary ys = {(t, as, bs). \<exists>X Y. as \<in> X \<and> bs \<in> Y \<and> (t, X, Y) \<in> ys}"
 
@@ -129,7 +128,7 @@ fun valid_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow>
     \<comment> \<open>also all tuples in auxlist (and hence data_prev/data_in) satisfy memR \<close>
     (\<forall>db \<in> set auxlist. memR (args_ivl args) (mt - time db)) \<and>
      \<comment> \<open>check whether tuple_in once contains the newest occurence of the tuple satisfying the lhs\<close>
-    newest_tuple_in_mapping fst data_prev tuple_in_once (\<lambda>x. True) \<and>
+    newest_tuple_in_mapping fst (restrict (args_L args)) data_prev tuple_in_once (\<lambda>x. True) \<and>
     (\<forall>as \<in> Mapping.keys tuple_in_once. case Mapping.lookup tuple_in_once as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> (restrict (args_L args) as) \<in> l) \<and>
     (\<forall>as \<in> Mapping.keys tuple_since_hist. case Mapping.lookup tuple_since_hist as of Some t \<Rightarrow> t \<le> mt) \<and>
      \<comment> \<open>conditions for sat / trigger conditions\<close>
@@ -140,12 +139,12 @@ fun valid_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow>
     ) \<and>
     (\<forall>tuple. tuple \<in> since_sat \<longleftrightarrow>
       (\<not>is_empty data_in) \<and> ( \<comment> \<open>with an empty data_in, all tuples satisfy trigger\<close>
-        \<exists>n \<in> {0..<length (auxlist_data_in args mt auxlist)-1}.
+        \<exists>n \<in> {0..<length (auxlist_data_in args mt auxlist)}. \<comment> \<open>dropping less then length guarantees length suffix > 0\<close>
           let suffix = drop n (auxlist_data_in args mt auxlist) in (
             (\<forall>(t, l, r) \<in> set suffix.
               tuple \<in> r
             ) \<and>
-            (case (suffix!0) of (t', l', r') \<Rightarrow> (restrict (args_L args) tuple) \<in> l')
+            (restrict (args_L args) tuple) \<in> relL (suffix!0)
         )
       )
     )
@@ -390,7 +389,7 @@ proof -
 
 lemma data_in_auxlist_nonempty:
   assumes "valid_mmtaux args cur (mt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat) auxlist"
-  shows "(length (filter (\<lambda> (t, _, _). mem (args_ivl args) (mt - t)) auxlist) > 0) = (set (linearize data_in) \<noteq> {})"
+  shows "(length (filter (\<lambda> (t, _, _). mem (args_ivl args) (mt - t)) auxlist) > 0) = (\<not> is_empty (data_in))"
 proof (rule iffI)
   assume assm: "length (filter (\<lambda> (t, _, _). mem (args_ivl args) (mt - t)) auxlist) > 0"
   {
@@ -412,14 +411,18 @@ proof (rule iffI)
     using auxlist_mem_data_in[OF assms(1), of db]
     unfolding time_def
     by blast
-  then show "set (linearize data_in) \<noteq> {}" by auto
+  then have "set (linearize data_in) \<noteq> {}" by auto
+  then show "\<not> is_empty (data_in)"
+    using is_empty_alt
+    by auto
 next
     from assms(1) have data_props:
     "auxlist_data_prev args mt auxlist = linearize data_prev"
     "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = linearize data_in"
       by auto
-  
-    assume "set (linearize data_in) \<noteq> {}"
+
+    assume "\<not> is_empty (data_in)"
+    then have "set (linearize data_in) \<noteq> {}" using is_empty_alt by auto
     then obtain db where db_props: "db \<in> set (linearize data_in)" by (meson nonemptyE)
     then have db_mem: "db \<in> set (map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _, _). mem (args_ivl args) (mt - t)) auxlist))"
       using data_props(2)
@@ -636,14 +639,14 @@ proof -
       by (simp add: aux_def split: if_splits)
     moreover {
       assume assm: "tuple \<in> (Mapping.keys tuple_in_once)"
-      then have "newest_tuple_in_mapping fst data_prev tuple_in_once (\<lambda>x. True)"
+      then have "newest_tuple_in_mapping fst (restrict (args_L args)) data_prev tuple_in_once (\<lambda>x. True)"
         using assms(1)
         by auto
       then have "Mapping.lookup tuple_in_once tuple =
         safe_max (
           fst ` {
            tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev)).
-           tuple = snd tas
+           restrict (args_L args) tuple = snd tas
           }
         )"
         unfolding newest_tuple_in_mapping_def
@@ -694,17 +697,15 @@ proof -
           using db_props j_props(1)
           by auto
         ultimately have "(\<exists>j \<in> {i<..<(length auxlist)}.
-            let (t', l', r') = auxlist!j in
-            (restrict (args_L args) tuple) \<in> l'
+            (restrict (args_L args) tuple) \<in> relL (auxlist!j)
           )"
-          by force
+        using relL_def by blast
       }
       then have "(\<forall>i \<in> {0..<(length auxlist)}.
         let (t, l, r) = auxlist!i in
         mem (args_ivl args) (mt - t) \<longrightarrow>
           (\<exists>j \<in> {i<..<(length auxlist)}.
-            let (t', l', r') = auxlist!j in
-            (restrict (args_L args) tuple) \<in> l'
+            (restrict (args_L args) tuple) \<in> relL (auxlist!j)
           )
       )"
         by (simp add: case_prod_beta' time_def)
@@ -737,22 +738,22 @@ proof -
     moreover {
       assume "tuple \<in> since_sat"
       then have "(
-        \<exists>n \<in> {0..<length (auxlist_data_in args mt auxlist)-1}.
+        \<exists>n \<in> {0..<length (auxlist_data_in args mt auxlist)}.
           let suffix = drop n (auxlist_data_in args mt auxlist) in (
             (\<forall>(t, l, r) \<in> set suffix.
               tuple \<in> r
             ) \<and>
-            (case (suffix!0) of (t', l', r') \<Rightarrow> (restrict (args_L args) tuple) \<in> l')
+            (restrict (args_L args) tuple) \<in> relL (suffix!0)
         )
       )" using assms(1)
         by (simp only: valid_mmtaux.simps)
       then obtain n where n_def:
-        "n \<in> {0..<length (auxlist_data_in args mt auxlist)-1}"
+        "n \<in> {0..<length (auxlist_data_in args mt auxlist)}"
         "let suffix = drop n (auxlist_data_in args mt auxlist) in (
             (\<forall>(t, l, r) \<in> set suffix.
               tuple \<in> r
             ) \<and>
-            (case (suffix!0) of (t', l', r') \<Rightarrow> (restrict (args_L args) tuple) \<in> l')
+            (restrict (args_L args) tuple) \<in> relL (suffix!0)
         )"
         by blast
       define suffix where "suffix = drop n (auxlist_data_in args mt auxlist)"
@@ -765,7 +766,7 @@ proof -
       have idx_shift: "\<forall>i\<in>{0..<length suffix}. suffix!i = (auxlist_data_in args mt auxlist)!(i+n)"
         using suffix_def n_def(1)
         by (simp add: add.commute)
-      have suffix_lhs: "(case (suffix!0) of (t', l', r') \<Rightarrow> (restrict (args_L args) tuple) \<in> l')"
+      have suffix_lhs: "(restrict (args_L args) tuple) \<in> relL (suffix!0)"
         using suffix_def n_def(2)
         by meson
       moreover have data_in_equiv: "auxlist_data_in args mt auxlist = take (length (linearize data_in)) auxlist"
@@ -774,7 +775,7 @@ proof -
       moreover have "(auxlist_data_in args mt auxlist)!n = auxlist!n"
         using n_def(1)
         by (simp add: calculation(2))
-      ultimately have since: "(case (auxlist!n) of (t', l', r') \<Rightarrow> (restrict (args_L args) tuple) \<in> l')"
+      ultimately have since: "(restrict (args_L args) tuple) \<in> relL (auxlist!n)"
         using idx_shift suffix_length
         by auto
       
@@ -789,23 +790,19 @@ proof -
           using n_le_auxlist
           by auto
         moreover have
-          "(let (t', l', r') = auxlist!n in
-            (restrict (args_L args) tuple) \<in> l'
-          )"
+          "(restrict (args_L args) tuple) \<in> relL (auxlist!n)"
           using since
           by auto
         ultimately have "(\<exists>j \<in> {i<..<(length auxlist)}.
-            let (t', l', r') = auxlist!j in
-            (restrict (args_L args) tuple) \<in> l'
+            (restrict (args_L args) tuple) \<in> relL (auxlist!j)
           )"
-          by force
+          using relL_def by blast
       }
       then have "(\<forall>i \<in> {0..<n}.
         let (t, l, r) = auxlist!i in
         mem (args_ivl args) (mt - t) \<longrightarrow> 
           (\<exists>j \<in> {i<..<(length auxlist)}.
-            let (t', l', r') = auxlist!j in
-            (restrict (args_L args) tuple) \<in> l'
+            (restrict (args_L args) tuple) \<in> relL (auxlist!j)
           )
       )"
         by (simp add: case_prod_beta')
@@ -815,8 +812,7 @@ proof -
         (
           tuple \<in> r \<or>
           (\<exists>j \<in> {i<..<(length auxlist)}.
-            let (t', l', r') = auxlist!j in
-            (restrict (args_L args) tuple) \<in> l'
+            (restrict (args_L args) tuple) \<in> relL (auxlist!j)
           )
         )
       )" by auto
@@ -886,8 +882,7 @@ proof -
         (
           tuple \<in> r \<or>
           (\<exists>j \<in> {i<..<(length auxlist)}.
-            let (t', l', r') = auxlist!j in
-            (restrict (args_L args) tuple) \<in> l'
+            (restrict (args_L args) tuple) \<in> relL (auxlist!j)
           )
         )
       )"
@@ -898,13 +893,12 @@ proof -
         (
           tuple \<in> r \<or>
           (\<exists>j \<in> {i<..<(length auxlist)}.
-            let (t', l', r') = auxlist!j in
-            (restrict (args_L args) tuple) \<in> l'
+            (restrict (args_L args) tuple) \<in> relL (auxlist!j)
           )
         )
       )"
         using trigger_res_1
-        by (meson atLeastLessThan_iff leI)
+        by (meson atLeastLessThan_iff le_def)
       then have "tuple \<in> trigger_results args mt auxlist"
         using non_empty
         by auto
@@ -918,13 +912,270 @@ proof -
     by blast
   {
     fix tuple
-    assume "tuple \<in> trigger_results args cur auxlist"
-    then have el: "tuple \<in> trigger_results args cur auxlist"
-      by (simp add: I_def)
-    then have data_in_nonempty: "(set (linearize data_in) \<noteq> {})"
+    assume el: "tuple \<in> trigger_results args cur auxlist"
+    then have data_in_nonempty: "\<not> is_empty (data_in)"
       using data_in_auxlist_nonempty[OF assms(1)] I_def time
       by auto
-    then have "tuple \<in> result_mmtaux args aux" using aux_def by auto
+    
+    from el have tuple_props: "(\<forall>i \<in> {0..<(length auxlist)}.
+        mem (args_ivl args) (cur - time (auxlist!i)) \<longrightarrow> 
+        (
+          tuple \<in> relR (auxlist!i) \<or>
+          (\<exists>j \<in> {i<..<(length auxlist)}.
+            (restrict (args_L args) tuple) \<in> relL (auxlist!j)
+          )
+        )
+      )"
+      unfolding time_def relR_def
+      by auto
+    {
+      assume hist: "\<forall>i \<in> {0..<(length auxlist)}.
+        mem (args_ivl args) (cur - time (auxlist!i)) \<longrightarrow> tuple \<in> relR (auxlist!i)"
+      {
+        fix db
+        assume "db \<in> set (auxlist_data_in args mt auxlist)"
+        then have db_props: "mem (args_ivl args) (cur - time db)" "db \<in> set auxlist"
+          using time
+          unfolding auxlist_data_in_def time_def
+          by auto
+        from db_props(2) obtain j where j_props:
+            "j \<in> {0..<(length auxlist)}"
+            "db = auxlist!j"
+          by (metis atLeastLessThan_iff in_set_conv_nth leI not_less0)
+        then have "tuple \<in> relR db"
+          using hist db_props j_props
+          by auto
+      }
+      then have "\<forall>db \<in> set (auxlist_data_in args mt auxlist). tuple \<in> relR db"
+        by auto
+      then have "tuple \<in> hist_sat"
+        using data_in_nonempty assms(1)
+        unfolding relR_def
+        by auto
+      then have "tuple \<in> result_mmtaux args aux"
+        using data_in_nonempty
+        unfolding aux_def
+        by auto
+    }
+    moreover {
+      assume "\<exists>i \<in> {0..<(length auxlist)}.
+        mem (args_ivl args) (cur - time (auxlist!i)) \<and> tuple \<notin> relR (auxlist!i)"      
+      then obtain i where i_props:
+        "i \<in> {0..<(length auxlist)}"
+        "mem (args_ivl args) (cur - time (auxlist!i))"
+        "tuple \<notin> relR (auxlist!i)"
+        by auto
+
+      define A where "A = {j \<in> {i<..<(length auxlist)}. (restrict (args_L args) tuple) \<in> relL (auxlist!j)}"
+      define j where "j = Max A"
+
+      have "\<exists>j \<in> {i<..<(length auxlist)}.
+        (restrict (args_L args) tuple) \<in> relL (auxlist!j)
+      "
+        using i_props el tuple_props
+        unfolding time_def relR_def
+        by auto
+      then have A_props: "A \<noteq> {}" "finite A" unfolding A_def by auto
+      then have "j \<in> A" unfolding j_def by auto
+      then have j_props:
+        "j \<in> {i<..<(length auxlist)}"
+        "(restrict (args_L args) tuple) \<in> relL (auxlist!j)"
+        using A_def
+        by auto
+
+      {
+        define suffix where "suffix = drop j (auxlist_data_in args mt auxlist)"
+        assume j_le: "j < length (linearize data_in)"
+        (* length (auxlist_data_in args mt auxlist)-1 *)
+        moreover have data_in_props: "auxlist_data_in args mt auxlist = take (length (linearize data_in)) auxlist"
+          using assms(1)
+          by auto
+        ultimately have "suffix!0 = auxlist!j"
+          using data_props(2)
+          unfolding suffix_def
+          by (metis (no_types, lifting) Cons_nth_drop_Suc length_map nth_Cons_0 nth_take)
+        
+
+        then have suffix_first: "(restrict (args_L args) tuple) \<in> relL (suffix!0)"
+          using j_props
+          by auto
+
+        have "length (auxlist_data_in args mt auxlist) = length (linearize data_in)"
+          using data_props(2)
+          by (metis length_map)
+        then have j_le: "j < length (auxlist_data_in args mt auxlist)"
+          using j_le
+          by auto
+
+        {
+          fix db
+          assume suffix_mem: "db \<in> set suffix"
+          then obtain k where k_props:
+            "k \<in> {0..<length suffix}"
+            "suffix!k = db"
+            by (meson atLeastLessThan_iff less_eq_nat.simps(1) nth_the_index the_index_bounded)
+          then have kj_props:
+            "(k+j) \<in> {0..<length (auxlist_data_in args mt auxlist)}"
+            "(auxlist_data_in args mt auxlist)!(k+j) = db"
+            using suffix_def
+            by (auto simp add: add.commute)
+          then have "(k+j) \<in> {0..<length auxlist}"
+            unfolding auxlist_data_in_def
+            by (simp add: less_le_trans)
+
+          moreover have "\<forall>i \<in> {0..<(length auxlist)}.
+            mem (args_ivl args) (cur - time (auxlist!i)) \<longrightarrow> 
+            (
+              tuple \<in> relR (auxlist!i) \<or>
+              (\<exists>j \<in> {i<..<(length auxlist)}.
+                (restrict (args_L args) tuple) \<in> relL (auxlist!j)
+              )
+            )"
+            using el
+            unfolding relR_def time_def
+            by auto
+          ultimately have cond: "
+            mem (args_ivl args) (cur - time (auxlist!(k+j))) \<longrightarrow> 
+            (
+              tuple \<in> relR (auxlist!(k+j)) \<or>
+              (\<exists>j \<in> {(k+j)<..<(length auxlist)}.
+                (restrict (args_L args) tuple) \<in> relL (auxlist!j)
+              )
+            )" by auto
+
+
+          have "db \<in> set (auxlist_data_in args mt auxlist)"
+            using kj_props
+            by auto
+          then have "mem (args_ivl args) (cur - time db)"
+            using time
+            unfolding auxlist_data_in_def time_def
+            by auto
+          moreover have auxlist_idx: "(auxlist_data_in args mt auxlist)!(k+j) = auxlist!(k+j)"
+            using data_in_props kj_props(1)
+            by auto
+          ultimately have "mem (args_ivl args) (cur - time (auxlist!(k+j)))"
+            using kj_props(2)
+            by auto
+          
+          then have "tuple \<in> relR (auxlist!(k+j)) \<or>
+              (\<exists>j \<in> {(k+j)<..<(length auxlist)}.
+                (restrict (args_L args) tuple) \<in> relL (auxlist!j)
+              )"
+            using cond
+            by auto
+
+          moreover {
+            assume "(\<exists>j \<in> {(k+j)<..<(length auxlist)}.
+                (restrict (args_L args) tuple) \<in> relL (auxlist!j)
+              )"
+            then obtain j' where j'_props:
+              "j' \<in> {(k+j)<..<(length auxlist)}"
+              "(restrict (args_L args) tuple) \<in> relL (auxlist!j')"
+              by blast
+
+            then have "j' \<in> A" using A_def j_props by auto
+            then have "j' \<le> j" using A_props j_def by auto
+            then have "False" using j'_props by auto
+          }
+
+          ultimately have "tuple \<in> relR (auxlist!(k+j))" by blast
+          then have "tuple \<in> relR db" using kj_props auxlist_idx by auto
+        }
+        then have "(\<forall>(t, l, r) \<in> set suffix.
+              tuple \<in> r
+            )"
+            "(restrict (args_L args) tuple) \<in> relL (suffix!0)"
+          using suffix_first
+          unfolding relR_def
+          by (auto simp add: relR_def case_prod_beta')
+        then have "\<exists>n \<in> {0..<length (auxlist_data_in args mt auxlist)}.
+          let suffix = drop n (auxlist_data_in args mt auxlist) in (
+            (\<forall>(t, l, r) \<in> set suffix.
+              tuple \<in> r
+            ) \<and>
+            (restrict (args_L args) tuple) \<in> relL (suffix!0)
+        )"
+          using j_le suffix_def
+          by auto
+        
+        then have "tuple \<in> since_sat" using data_in_nonempty assms(1) by auto
+        then have "tuple \<in> result_mmtaux args aux"
+          using data_in_nonempty
+          unfolding aux_def
+          by auto
+      }
+      moreover {
+        define j' where "j' = j - length (linearize data_in)"
+        assume j_geq: "j \<ge> length (linearize data_in)"
+        moreover have data_prev_props: "auxlist_data_prev args mt auxlist = drop (length (linearize data_in)) auxlist"
+          using assms(1)
+          by auto
+        ultimately have "auxlist!j = (auxlist_data_prev args mt auxlist)!j'"
+          using j_props(1)
+          unfolding j'_def
+          by auto
+        then have idx_shift: "auxlist!j = (linearize data_prev)!j'"
+          using data_props(1)
+          by auto
+        have data_in_props: "auxlist_data_in args mt auxlist = take (length (linearize data_in)) auxlist"
+          using assms(1)
+          by auto
+        have "length (linearize data_prev) + length (linearize data_in) = length auxlist"
+          using data_in_props data_prev_props data_props
+          by (smt add.commute append_take_drop_id length_append length_map)
+        then have j'_le: "j' < length (linearize data_prev)"
+          using j_geq j_props(1)
+          unfolding j'_def
+          by auto
+        define r_tuple where "r_tuple = restrict (args_L args) tuple"
+        define B where "B = fst ` {
+          tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev)).
+          r_tuple = snd tas
+        }"
+        (* "A = {j \<in> {i<..<(length auxlist)}. (restrict (args_L args) tuple) \<in> relL (auxlist!j)}"*)
+        from assms(1) have "newest_tuple_in_mapping fst (restrict (args_L args)) data_prev tuple_in_once (\<lambda>x. True)"
+          by auto
+        then have mapping_val: "Mapping.lookup tuple_in_once tuple = safe_max B"
+          unfolding newest_tuple_in_mapping_def B_def r_tuple_def
+          by auto
+
+        define t where "t = fst ((linearize data_prev) ! j')"
+        define X where "X = snd ((linearize data_prev) ! j')"
+        have "restrict (args_L args) tuple \<in> fst X"
+          using j_props idx_shift
+          unfolding relL_def X_def
+          by auto
+        moreover have
+          "(t, X) \<in> (set (linearize data_prev))"
+          using j'_le
+          unfolding t_def X_def
+          by auto
+        ultimately have "(t, r_tuple) \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev))"
+          unfolding r_tuple_def ts_tuple_rel_f_def
+          by blast
+        then have t_mem_B: "t \<in> B"
+          unfolding B_def
+          by (simp add: image_iff)
+        then have B_props: "B \<noteq> {}" "finite B"
+          using B_def
+          by (auto simp add: finite_fst_ts_tuple_rel)
+        then have "safe_max B = Some (Max B)"
+          unfolding safe_max_def
+          by auto
+        then have "Mapping.lookup tuple_in_once tuple = Some (Max B)"
+          using mapping_val
+          by auto
+        then have "tuple \<in> Mapping.keys tuple_in_once"
+          by (simp add: Mapping_keys_intro)
+        then have "tuple \<in> result_mmtaux args aux"
+          using data_in_nonempty
+          unfolding aux_def r_tuple_def
+          by auto
+      }
+      ultimately have "tuple \<in> result_mmtaux args aux" using le_def by blast
+    }
+    ultimately have "tuple \<in> result_mmtaux args aux" by blast
   }
   then have "trigger_results args cur auxlist \<subseteq> result_mmtaux args aux"
     by auto
@@ -933,7 +1184,6 @@ proof -
     by blast
   then show ?thesis using aux_def by auto
 qed
-
 
 
 lemma valid_add_new_ts_mmtaux:
