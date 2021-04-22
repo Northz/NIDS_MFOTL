@@ -637,7 +637,53 @@ lift_definition int_remove_lower_bound :: "\<I> \<Rightarrow> \<I>" is
   "\<lambda>I. ((\<lambda>i. True), (\<lambda>i. memR I i), bounded I)"
   by transfer (auto simp: upclosed_def downclosed_def)
 
+lemma flip_int_props:
+  assumes "bounded I"
+  assumes "I' = flip_int I"
+  shows "\<not>bounded I' \<and> \<not>mem I' 0"
+  using assms by (transfer') (auto split: if_splits)
 
+lemma flip_int_less_lower_props:
+  assumes "\<not>memL I 0" (* [a, b] *)
+  assumes "I' = flip_int_less_lower I" (* [0, a-1] *)
+  shows "mem I' 0 \<and> bounded I'"
+  using assms by (transfer') (auto split: if_splits)
+
+lemma flip_int_less_lower_memL:
+  assumes "\<not>memL I x" (* [a, b], x < a *)
+  shows "memL (flip_int_less_lower I) x" (* x \<in> [0, a-1] *)
+  using assms
+  by (transfer') (simp)
+
+lemma flip_int_less_lower_memR:
+  assumes "\<not>memL I 0" (* I = [a, b], I' = [0, a-1]. x \<le> a-1 *)
+  shows "(memR (flip_int_less_lower I) x) = (\<not>memL I x)" (* x \<notin> [a, b] *)
+  using assms
+  by (transfer') (simp)
+
+lemma flip_int_less_lower_mem:
+  assumes "\<not>bounded I" "\<not>mem I x" (* [a, \<infinity>], x < a *)
+  shows "mem (flip_int_less_lower I) x" (* x \<in> [0, a-1] *)
+  using assms
+  by (transfer') (simp add: bounded_memR)
+
+lemma int_flip_mem:
+  assumes "bounded I" "mem I 0" "\<not>mem I x" (* [0, a], a<x *)
+  shows "mem (flip_int I) x" (* [a, \<infinity>] *)
+  using assms memL_mono
+  by (transfer') (auto split: if_splits)
+
+lemma flip_int_double_upper_leq:
+  assumes "mem (flip_int_double_upper I) x" (* x \<in> [b+1, 2b] *)
+  assumes "\<not> mem (flip_int_double_upper I) y" "y\<le>x" (* y \<notin> [b+1, 2b] and y \<le> x *)
+  assumes "mem I 0"
+  shows "mem I y"
+proof -
+  from assms(2) have "\<not>memL (flip_int_double_upper I) y \<or> \<not>memR (flip_int_double_upper I) y" by auto
+  moreover have "\<forall>m. m \<le> x \<longrightarrow> memR (flip_int_double_upper I) m" using assms(1) by auto
+  ultimately have "\<not>memL (flip_int_double_upper I) y" using assms(3) by auto
+  then show "mem I y" using assms(4) by (transfer') (auto split: if_splits)
+qed
 
 lemma int_remove_lower_bound_bounded: "bounded I \<Longrightarrow> bounded (int_remove_lower_bound I)"
   by (transfer') (auto)
@@ -911,8 +957,8 @@ fun safe_formula :: "formula \<Rightarrow> bool" where
 | "safe_formula (Agg y \<omega> b f \<phi>) = (safe_formula \<phi> \<and> y + b \<notin> fv \<phi> \<and> {0..<b} \<subseteq> fv \<phi> \<and> fv_trm f \<subseteq> fv \<phi>)"
 | "safe_formula (Prev I \<phi>) = (safe_formula \<phi>)"
 | "safe_formula (Next I \<phi>) = (safe_formula \<phi>)"
-| "safe_formula (Historically I \<phi>) = (mem I 0 \<and> safe_formula \<phi>)"
-| "safe_formula (Always I \<phi>) = (mem I 0 \<and> safe_formula \<phi>)"
+| "safe_formula (Historically I \<phi>) = (mem I 0 \<and> safe_formula \<phi>)" (* TODO: currently mem I 0 is required but in general we want a once *)
+| "safe_formula (Always I \<phi>) = (mem I 0 \<and> safe_formula \<phi>)" (* TODO: currently mem I 0 is required but in general we want a once *)
 | "safe_formula (Since \<phi> I \<psi>) = (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and>
     (safe_formula \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False)))"
 | "safe_formula (Until \<phi> I \<psi>) = (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and>
@@ -1800,6 +1846,14 @@ case assms: (Release_0 \<phi> I \<psi>)
     ultimately have ?case using restricted_formula_def by blast
   }
   ultimately show ?case by blast
+next
+  case (Always I \<phi>)
+  (* TODO: currently mem I 0 is required but in general we want a once *)
+  then show ?case sorry
+next
+  case (Historically I \<phi>)
+  (* TODO: currently mem I 0 is required but in general we want a once *)
+  then show ?case sorry
 next
   case (MatchP I r)
   then show ?case

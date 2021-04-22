@@ -49,41 +49,6 @@ proof -
   ultimately show ?thesis by auto
 qed
 
-lemma flip_int_props:
-  assumes "bounded I"
-  assumes "I' = flip_int I"
-  shows "\<not>bounded I' \<and> \<not>mem I' 0"
-  using assms by (transfer') (auto split: if_splits)
-
-lemma flip_int_less_lower_props:
-  assumes "\<not>memL I 0" (* [a, b] *)
-  assumes "I' = flip_int_less_lower I" (* [0, a] *)
-  shows "mem I' 0 \<and> bounded I'"
-  using assms by (transfer') (auto split: if_splits)
-
-lemma flip_int_less_lower_mem:
-  assumes "\<not>bounded I" "\<not>mem I x" (* [a, \<infinity>], x < a *)
-  shows "mem (flip_int_less_lower I) x" (* x \<in> [0, a] *)
-  using assms
-  by (transfer') (simp add: bounded_memR)
-
-lemma int_flip_mem:
-  assumes "bounded I" "mem I 0" "\<not>mem I x" (* [0, a], a<x *)
-  shows "mem (flip_int I) x" (* [a, \<infinity>] *)
-  using assms memL_mono
-  by (transfer') (auto split: if_splits)
-
-lemma flip_int_double_upper_leq:
-  assumes "mem (flip_int_double_upper I) x" (* x \<in> [b+1, 2b] *)
-  assumes "\<not> mem (flip_int_double_upper I) y" "y\<le>x" (* y \<notin> [b+1, 2b] and y \<le> x *)
-  assumes "mem I 0"
-  shows "mem I y"
-proof -
-  from assms(2) have "\<not>memL (flip_int_double_upper I) y \<or> \<not>memR (flip_int_double_upper I) y" by auto
-  moreover have "\<forall>m. m \<le> x \<longrightarrow> memR (flip_int_double_upper I) m" using assms(1) by auto
-  ultimately have "\<not>memL (flip_int_double_upper I) y" using assms(3) by auto
-  then show "mem I y" using assms(4) by (transfer') (auto split: if_splits)
-qed
 
 lemma historically_rewrite_0:
   fixes I1 :: \<I>
