@@ -1345,22 +1345,25 @@ fun shift_end_queues_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> nat \<Righta
       fst \<comment> \<open>here we look at the lhs tuples / \<phi>\<close>
       (restrict (args_L args)) \<comment> \<open>we have to restrict the tuples of the lhs to the respective cols\<close>
       (empty_queue::(ts \<times> nat) queue, data_prev, tuple_in_once); \<comment> \<open>add type\<close>
-    \<comment> \<open>pass empty_queue as the first argument as it would filter out all: [0, a-1] \<inter> [a, b] = {}\<close>
-    \<comment> \<open>in a next step, we drop all entries from data_in that are no longer relevant. here we have to update idx_oldest.
-       the new idx_oldest is equal to idx_oldest + the length of the dropped data \<close>
-    idx_mid = idx_mid + length move;
+    \<comment> \<open>pass empty_queue as the first argument as it would filter out all: [0, a-1] \<inter> [a, b] = {}.
+       idx_mid can be moved forward by the number of all tuples dropped from data_prev (move)\<close>
+    move_len = length move;
+    idx_mid = idx_mid + move_len;
+    \<comment> \<open>in a next step, we drop all entries from data_in that are no longer relevant \<close>
     (data_in, drop) = takedropWhile_queue (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) data_in;
-    move' = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) move;
-    drop_prev_len = length move - length move';
-    idx_oldest = idx_oldest + length drop + drop_prev_len;
-    \<comment> \<open>instead of first appending and then filtering, we filter move separately. this saves us the append
+     \<comment> \<open>instead of first appending and then filtering, we filter move separately. this saves us the append
        operation for all entries in move\<close>
+    move' = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) move;
+    \<comment> \<open>idx_ildest has to be moved forward by the number of dbs dropped from data_in and the ones
+        dropped from data_prev because they don't satisfy memR anymore (move')\<close>
+    drop_prev_len = move_len - length move';
+    idx_oldest = idx_oldest + length drop + drop_prev_len;
     
     \<comment> \<open>next, the right hand side of entries in move have to be appended to data_in. these all already
        satisfy memR as we just filtered them for it\<close>
     data_in = fold (\<lambda>(t, l, r) data_in. append_queue (t, r) data_in) move' data_in
     in
-    (idx_mid, idx_oldest, data_prev, move', data_in, tuple_in_once)
+    (idx_mid, idx_oldest, data_prev, move, data_in, tuple_in_once)
   )"
 
 
@@ -1470,7 +1473,7 @@ lemma valid_shift_end_queues_mmtaux:
   assumes valid_before: "valid_mmtaux args cur
     (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat) auxlist"
   assumes nt_mono: "nt \<ge> cur"
-  assumes "(idx_mid', idx_oldest', data_prev', move', data_in'', tuple_in_once') = shift_end_queues_mmtaux args nt idx_mid idx_oldest data_prev data_in tuple_in_once"
+  assumes "(idx_mid', idx_oldest', data_prev', move, data_in'', tuple_in_once') = shift_end_queues_mmtaux args nt idx_mid idx_oldest data_prev data_in tuple_in_once"
   shows
     "table (args_n args) (args_L args) (Mapping.keys tuple_in_once')"
     "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_L args) as)"
@@ -1483,8 +1486,8 @@ lemma valid_shift_end_queues_mmtaux:
     "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> (restrict (args_L args) as) \<in> l)"
     "length (linearize data_prev') = idx_next - idx_mid'"
     "length (linearize data_in'') = idx_mid' - idx_oldest'"
-    "move' = filter (\<lambda>(t,_). memL (args_ivl args) (nt - t) \<and> memR (args_ivl args) (nt - t)) (linearize data_prev)"
-    "data_in'' = fold (\<lambda>(t, l, r) data_in. append_queue (t, r) data_in) move' (dropWhile_queue (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) data_in)"
+    "move = filter (\<lambda>(t, X). memL (args_ivl args) (nt - t)) (linearize data_prev)"
+    "data_in'' = fold (\<lambda>(t, l, r) data_in. append_queue (t, r) data_in) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) move) (dropWhile_queue (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) data_in)"
 proof - 
   define shift_res where "shift_res = shift_end
       (flip_int_less_lower (args_ivl args))
@@ -1498,12 +1501,13 @@ proof -
     using assms(3)
     unfolding shift_res_def
     by (auto simp add: Let_def split: prod.splits) 
-    
-  define move where "move = (fst o snd o snd) shift_res"
-  have move'_def: "move' = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) move"
+  
+  have move_def: "move = (fst o snd o snd) shift_res"
     using assms(3)
-    unfolding move_def shift_res_def
-    by (auto simp add: Let_def split: prod.splits)
+    unfolding shift_res_def
+    by (auto simp add: Let_def split: prod.splits) 
+  
+  define move' where "move' = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) move"
 
   have tuple_in_once'_def: "tuple_in_once' = (snd o snd o snd) shift_res"
     using assms(3)
@@ -1514,11 +1518,11 @@ proof -
   define drop where "drop = snd (takedropWhile_queue (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) data_in)"
   have data_in''_def: "data_in'' = fold (\<lambda>(t, l, r) data_in. append_queue (t, r) data_in) move' data_in'"
     using assms(3)
-    unfolding shift_res_def data_in'_def data_in'_def
+    unfolding shift_res_def data_in'_def data_in'_def move'_def
     by (auto simp only: shift_end_queues_mmtaux.simps Let_def fst_def split: prod.splits)
 
   then show "data_in'' = fold (\<lambda>(t, l, r) data_in. append_queue (t, r) data_in) move' (dropWhile_queue (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) data_in)"
-    unfolding data_in'_def
+    unfolding data_in'_def move'_def
     using takedropWhile_queue_fst[of "(\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t))" data_in]
     by auto
 
@@ -1530,7 +1534,7 @@ proof -
     by (auto simp add: Let_def split: prod.splits)
 
   have idx_oldest'_def: "idx_oldest' = idx_oldest + length drop + drop_prev_len"
-    unfolding shift_res_def drop_def drop_prev_len_def move_def
+    unfolding shift_res_def drop_def drop_prev_len_def move'_def
     using assms(3) takedropWhile_queue_snd[of "(\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t))" data_in]
     by (auto simp add: Let_def split: prod.splits)
 
@@ -1690,12 +1694,12 @@ proof -
   then have move_takeWhile: "move = takeWhile (\<lambda>(t, X). memL (args_ivl args) (nt - t)) (linearize data_prev)"
     using takedropWhile_queue_snd
     by auto
-  then have move_filter: "move = filter (\<lambda>(t, X). memL (args_ivl args) (nt - t)) (linearize data_prev)"
+  then show move_filter: "move = filter (\<lambda>(t, X). memL (args_ivl args) (nt - t)) (linearize data_prev)"
     using data_sorted[OF assms(1)] sorted_filter_takeWhile_memL[of "linearize data_prev" args nt]
     by auto
   have filter_simp: "(\<lambda>x. (case x of (t, uu_) \<Rightarrow> memL (args_ivl args) (nt - t)) \<and> (case x of (t, uu_) \<Rightarrow> memR (args_ivl args) (nt - t))) = (\<lambda>(t,_). (memL (args_ivl args) (nt - t)) \<and> (memR (args_ivl args) (nt - t)))"
     by auto
-  show move'_eq: "move' = filter (\<lambda>(t,_). memL (args_ivl args) (nt - t) \<and> memR (args_ivl args) (nt - t)) (linearize data_prev)"
+  have move'_eq: "move' = filter (\<lambda>(t,_). memL (args_ivl args) (nt - t) \<and> memR (args_ivl args) (nt - t)) (linearize data_prev)"
     using move'_def move_filter filter_filter[of "(\<lambda>(t, _). memR (args_ivl args) (nt - t))" "(\<lambda>(t, _). memL (args_ivl args) (nt - t))" "(linearize data_prev)"]
     by (auto simp add: filter_simp)
 
@@ -2308,15 +2312,13 @@ proof -
   then show "length (linearize data_in'') = idx_mid' - idx_oldest'"
     using data_in''_len
     by auto
-    
-  
 qed
 
 
 fun shift_end_hist_mmtaux :: "args \<Rightarrow> ts \<Rightarrow>
-  (nat \<times> nat \<times> nat \<times> bool list \<times> bool list \<times> (ts \<times> 'a table \<times> 'a table) queue \<times> (ts \<times> 'a table \<times> 'a table) list \<times> (ts \<times> 'a table) queue \<times> (('a tuple, ts) mapping) \<times> 'a table) \<Rightarrow>
+  nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> (ts \<times> 'a table \<times> 'a table) queue \<Rightarrow> (ts \<times> 'a table \<times> 'a table) list \<Rightarrow> (ts \<times> 'a table) queue \<Rightarrow> (('a tuple, ts) mapping) \<Rightarrow> 'a table \<Rightarrow>
   ((('a tuple, ts) mapping) \<times> 'a table)" where
-  "shift_end_hist_mmtaux args nt (idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, move, data_in, tuple_since_hist, hist_sat) = (
+  "shift_end_hist_mmtaux args nt idx_next idx_mid idx_oldest maskL maskR data_prev move data_in tuple_since_hist hist_sat = (
   let \<comment> \<open>we now have to update hist_since using the tables in move. in particular, for all dbs inside move,
        we have to do some sort of join with the keys of hist_since\<close>
     
