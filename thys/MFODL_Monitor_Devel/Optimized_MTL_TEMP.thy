@@ -648,19 +648,19 @@ qed simp
   2. for the dropped dbs from data_in we filter a mapping and remove all entries where the entry
      stored points to a dropped db (via the timestamp stored)
 *)
-fun shift_end :: "\<I> \<Rightarrow> ts \<Rightarrow> ('a \<Rightarrow> 'b table) \<Rightarrow> ('b tuple \<Rightarrow> 'b tuple) \<Rightarrow> ((ts \<times> 'c) queue \<times> (ts \<times> 'a) queue \<times> (('b tuple, ts) mapping)) \<Rightarrow> ((ts \<times> 'c) queue \<times> (ts \<times> 'a) queue \<times> (('b tuple, ts) mapping))" where
+fun shift_end :: "\<I> \<Rightarrow> ts \<Rightarrow> ('a \<Rightarrow> 'b table) \<Rightarrow> ('b tuple \<Rightarrow> 'b tuple) \<Rightarrow> ((ts \<times> 'c) queue \<times> (ts \<times> 'a) queue \<times> (('b tuple, ts) mapping)) \<Rightarrow> ((ts \<times> 'c) queue \<times> (ts \<times> 'a) queue \<times> (ts \<times> 'a) list \<times> (('b tuple, ts) mapping))" where
   "shift_end I nt to_table restrict_tuple (data_prev, data_in, tuple_in) =
     (let
       data_prev = dropWhile_queue (\<lambda>(t, _). \<not> memR I (nt - t)) data_prev;
       (data_in, in_discard) = takedropWhile_queue (\<lambda>(t, _). \<not> memR I (nt - t)) data_in;
       tuple_in = fold (\<lambda>(t, X) tuple_in. Mapping.filter
         (filter_cond_r (to_table X) restrict_tuple tuple_in t) tuple_in) in_discard tuple_in in
-      (data_prev, data_in, tuple_in)
+      (data_prev, data_in, in_discard, tuple_in)
     )"
 
 fun shift_end_mmsaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
   "shift_end_mmsaux args nt (t, gc, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
-    (let (data_prev', data_in', tuple_in') =
+    (let (data_prev', data_in', _, tuple_in') =
       shift_end
       (args_ivl args)
       nt
@@ -685,7 +685,7 @@ lemma valid_shift_end_unfolded:
     "(\<forall>t \<in> fst ` set (linearize data_in). t \<le> cur \<and> memL I (cur - t))"
   assumes max_ts_tuple_in: "newest_tuple_in_mapping f3 r data_in tuple_in P2"
   assumes nt_mono: "nt \<ge> cur"
-  assumes shift_end_appl: "(data_prev', data_in', tuple_in') = shift_end I nt f3 r (data_prev, data_in, tuple_in)"
+  assumes shift_end_appl: "(data_prev', data_in', discard, tuple_in') = shift_end I nt f3 r (data_prev, data_in, tuple_in)"
   shows
     "table n V1 (Mapping.keys tuple_in')"
     "ts_tuple_rel_f f1_auxlist (set (filter (\<lambda>(t, rel). memR I (nt - t)) (filter_auxlist auxlist))) =
@@ -697,13 +697,15 @@ lemma valid_shift_end_unfolded:
     "sorted (map fst (linearize data_in'))"
     "(\<forall>t \<in> fst ` set (linearize data_in'). t \<le> cur \<and> mem I (cur - t))"
     "newest_tuple_in_mapping f3 r data_in' tuple_in' P2"
+    "discard = snd (takedropWhile_queue (\<lambda>(t, X). \<not> memR I (nt - t)) data_in)"
     "linearize data_in' = filter (\<lambda>(t, X). memR I (nt - t)) (linearize data_in)"
     "tuple_in' = fold (\<lambda>(t, X) tuple_in. Mapping.filter
-    (filter_cond_r (f3 X) r tuple_in t) tuple_in) (snd (takedropWhile_queue (\<lambda>(t, X). \<not> memR I (nt - t)) data_in)) tuple_in"
+    (filter_cond_r (f3 X) r tuple_in t) tuple_in) discard tuple_in"
 proof -
 
-  define discard where "discard \<equiv>
-    snd (takedropWhile_queue (\<lambda>(t, X). \<not> memR I (nt - t)) data_in)"
+  show discard_def: "discard = snd (takedropWhile_queue (\<lambda>(t, X). \<not> memR I (nt - t)) data_in)"
+    using shift_end_appl
+    by (auto simp only: shift_end.simps Let_def snd_def split: prod.splits)
 
   have data_in'_def: "data_in' = fst (takedropWhile_queue (\<lambda>(t, X). \<not> memR I (nt - t)) data_in)"
     using shift_end_appl
@@ -715,7 +717,7 @@ proof -
   show tuple_in'_def: "tuple_in' = fold (\<lambda>(t, X) tuple_in. Mapping.filter
     (filter_cond_r (f3 X) r tuple_in t) tuple_in) discard tuple_in"
     using shift_end_appl
-    by (auto simp only: shift_end.simps Let_def snd_def discard_def split: prod.splits)
+    by (auto simp only: shift_end.simps Let_def snd_def  split: prod.splits)
   
   have tuple_in_Some_None: "\<And>as t X. Mapping.lookup tuple_in as = Some t \<Longrightarrow>
     (r as) \<in> (f3 X) \<Longrightarrow> (t, X) \<in> set discard \<Longrightarrow> Mapping.lookup tuple_in' as = None"
@@ -861,9 +863,10 @@ proof -
   define shift_res where "shift_res = shift_end (args_ivl args) nt id id (data_prev, data_in, tuple_in)"
   define data_prev' where "data_prev' = fst shift_res"
   define data_in' where "data_in' = (fst o snd) shift_res"
-  define tuple_in' where "tuple_in' = (snd o snd) shift_res"
-  have shift_end_res: "(data_prev', data_in', tuple_in') = shift_end (args_ivl args) nt id id (data_prev, data_in, tuple_in)"
-    using data_prev'_def data_in'_def tuple_in'_def shift_res_def
+  define in_discard where "in_discard = (fst o snd o snd) shift_res"
+  define tuple_in' where "tuple_in' = (snd o snd o snd) shift_res"
+  have shift_end_res: "(data_prev', data_in', in_discard, tuple_in') = shift_end (args_ivl args) nt id id (data_prev, data_in, tuple_in)"
+    using data_prev'_def data_in'_def in_discard_def tuple_in'_def shift_res_def
     by auto
 
   from assms(1) have table_tuple_in: "table (args_n args) (args_R args) (Mapping.keys tuple_in)"
