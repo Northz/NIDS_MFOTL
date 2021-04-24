@@ -2315,23 +2315,24 @@ proof -
 qed
 
 
-fun shift_end_hist_mmtaux :: "args \<Rightarrow> ts \<Rightarrow>
-  nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> (ts \<times> 'a table \<times> 'a table) queue \<Rightarrow> (ts \<times> 'a table \<times> 'a table) list \<Rightarrow> (ts \<times> 'a table) queue \<Rightarrow> (('a tuple, ts) mapping) \<Rightarrow> 'a table \<Rightarrow>
+fun shift_end_hist_mmtaux :: "nat \<Rightarrow> nat \<Rightarrow> bool list \<Rightarrow> (ts \<times> 'a table \<times> 'a table) list \<Rightarrow> (ts \<times> 'a table) queue \<Rightarrow> (('a tuple, ts) mapping) \<Rightarrow> 'a table \<Rightarrow>
   ((('a tuple, ts) mapping) \<times> 'a table)" where
-  "shift_end_hist_mmtaux args nt idx_next idx_mid idx_oldest maskL maskR data_prev move data_in tuple_since_hist hist_sat = (
+  "shift_end_hist_mmtaux idx_move idx_oldest maskR move data_in tuple_since_hist hist_sat = (
   let \<comment> \<open>we now have to update hist_since using the tables in move. in particular, for all dbs inside move,
        we have to do some sort of join with the keys of hist_since\<close>
-    
+    (tuple_since_hist, idx_move) = fold (\<lambda>(t, l, r) (tuple_since_hist, idx_move).
+      let tuple_since_hist = Mapping.filter (\<lambda>as _. proj_tuple_in_join True maskR as r) tuple_since_hist in \<comment> \<open>filter entries that are not present in the current db\<close>
+      (
+        Finite_Set.fold (\<lambda>as tuple_since_hist. Mapping.update as idx_move tuple_since_hist) tuple_since_hist r, \<comment> \<open>then add entries for the ones that are present in the current db\<close>
+        idx_move+1 \<comment> \<open>increase index by one every db\<close>
+      ) 
+    ) move (tuple_since_hist, idx_move);
     \<comment> \<open>in contrast to mmsaux, we don't have to look at what tuples were dropped from data_in as
        we do not have any 'in mappings', just 'since mappings'. What has to be done though,
        is to check whether there are now new tuples that satisfy historically.
        In order to do this, we look at the latest db, iterate over all tuples and check,
-       whether hist_since points to the respective timestamp.
-       IMPORTANT: THIS ONLY WORKS IF CONSECUTIVE DBs WITH THE SAME TSs ARE MERGED!
-       otherwise the following is possible: (1, T), (1, F), (1, T), .. where T means the tuple
-       (0, -), (0, \<psi> \<and> \<phi>) [0, 0]
-       satisfies the formula and F the contrary. If hist_since points to 1, we would think
-       historically is satisfied which is a mistake!\<close>
+       whether hist_since points to an index that is older than the current oldest ts, i.e.
+       whether the rhs is satisfied in the whole interval\<close>
     potential_hist_tuples = fst (safe_hd data_in);
     hist_tuples = case potential_hist_tuples
       of None \<Rightarrow>
@@ -2340,8 +2341,8 @@ fun shift_end_hist_mmtaux :: "args \<Rightarrow> ts \<Rightarrow>
       | Some db \<Rightarrow>
         \<comment> \<open>select all tuples where tuple_since_hist points to the smallest ts\<close>
         {tuple \<in> (snd db).
-          case (Mapping.lookup tuple_since_hist tuple) of Some t \<Rightarrow>
-            t = fst db
+          case (Mapping.lookup tuple_since_hist tuple) of Some idx \<Rightarrow>
+            idx \<le> idx_oldest
         };
     \<comment> \<open>now simply add them. if data_in was empty, then so was hist_sat and hist_tuples \<Rightarrow> empty again\<close>
     hist_sat = hist_sat \<union> hist_tuples in
