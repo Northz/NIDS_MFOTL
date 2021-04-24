@@ -2373,8 +2373,8 @@ proof -
 qed
 
 
-fun shift_end_hist_mmtaux :: "nat \<Rightarrow> nat \<Rightarrow> bool list \<Rightarrow> (ts \<times> 'a table \<times> 'a table) list \<Rightarrow> (ts \<times> 'a table) queue \<Rightarrow> (('a tuple, ts) mapping) \<Rightarrow> (('a tuple, ts) mapping)" where
-  "shift_end_hist_mmtaux idx_move idx_oldest maskR move data_in tuple_since_hist = (
+fun shift_end_hist_mmtaux :: "nat \<Rightarrow> bool list \<Rightarrow> (ts \<times> 'a table \<times> 'a table) list \<Rightarrow> (('a tuple, ts) mapping) \<Rightarrow> (('a tuple, ts) mapping)" where
+  "shift_end_hist_mmtaux idx_move maskR move tuple_since_hist = (
   let \<comment> \<open>we now have to update hist_since using the tables in move. in particular, for all dbs inside move,
        we have to do some sort of join with the keys of hist_since\<close>
     (tuple_since_hist, idx_move) = fold (\<lambda>(t, l, r) (tuple_since_hist, idx_move).
@@ -2392,7 +2392,7 @@ lemma valid_shift_end_hist_mmtaux:
     (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, since_sat) auxlist"
   assumes nt_mono: "nt \<ge> cur"
   assumes "(idx_mid', idx_oldest', data_prev', move, data_in', tuple_in_once') = shift_end_queues_mmtaux args nt idx_mid idx_oldest data_prev data_in tuple_in_once"
-  assumes "tuple_since_hist' = shift_end_hist_mmtaux idx_mid idx_oldest maskL move data_in' tuple_since_hist"
+  assumes "tuple_since_hist' = shift_end_hist_mmtaux idx_mid maskL move tuple_since_hist"
   shows "valid_mmtaux args cur
     (nt, idx_next', idx_mid', idx_oldest', maskL, maskR, data_prev', data_in', tuple_in_once', tuple_since_hist', since_sat) auxlist"
 proof -
