@@ -98,7 +98,7 @@ definition auxlist_data_prev :: "args \<Rightarrow> ts \<Rightarrow> (ts \<times
   "auxlist_data_prev args mt auxlist = filter (\<lambda>(t, _). \<not>memL (args_ivl args) (mt - t)) auxlist"
 
 definition auxlist_data_in :: "args \<Rightarrow> ts \<Rightarrow> (ts \<times> 'a table \<times> 'a table) list \<Rightarrow> (ts \<times> 'a table \<times> 'a table) list" where
-  "auxlist_data_in args mt auxlist = filter (\<lambda>(t, _, _). mem (args_ivl args) (mt - t)) auxlist"
+  "auxlist_data_in args mt auxlist = filter (\<lambda>(t, _). mem (args_ivl args) (mt - t)) auxlist"
 
 fun valid_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow> 'a mtaux \<Rightarrow> bool" where
   "valid_mmtaux args cur (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, since_sat) auxlist \<longleftrightarrow>
@@ -110,6 +110,7 @@ fun valid_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow>
     table (args_n args) (args_R args) (Mapping.keys tuple_since_hist) \<and>
     (\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_L args) as) \<and>
     (\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_R args) as) \<and>
+    (\<forall>as \<in> \<Union>((snd) ` (set (linearize data_in))). wf_tuple (args_n args) (args_R args) as) \<and>
     cur = mt \<and>
     \<comment> \<open>all valid lhs/\<phi> tuples in data_prev should have a valid entry in tuple_in_once, as it is shifted\<close>
     ts_tuple_rel_binary_lhs (set (auxlist_data_prev args mt auxlist)) =
@@ -442,7 +443,7 @@ proof -
   moreover from sorted have "sorted (map fst (auxlist_data_in args mt auxlist))"
     unfolding auxlist_data_in_def
     using sorted_filter
-    by simp
+    by auto
 
   ultimately have "sorted (map fst (map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist)))"
     by (simp only: )
@@ -1392,8 +1393,8 @@ proof -
 qed
 
 
-fun shift_end_queues_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> (ts \<times> 'a table \<times> 'a table) queue \<Rightarrow> (ts \<times> 'a table) queue \<Rightarrow> (('a tuple, ts) mapping) \<Rightarrow> (nat \<times> nat \<times> (ts \<times> 'a table \<times> 'a table) queue \<times> (ts \<times> 'a table \<times> 'a table) list \<times> (ts \<times> 'a table) queue \<times> (('a tuple, ts) mapping))" where
-  "shift_end_queues_mmtaux args nt idx_mid idx_oldest data_prev data_in tuple_in_once = (
+fun shift_end_queues_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool list \<Rightarrow> (ts \<times> 'a table \<times> 'a table) queue \<Rightarrow> (ts \<times> 'a table) queue \<Rightarrow> (('a tuple, ts) mapping) \<Rightarrow> (('a tuple, nat) mapping) \<Rightarrow> (nat \<times> nat \<times> (ts \<times> 'a table \<times> 'a table) queue \<times> (ts \<times> 'a table) queue \<times> (('a tuple, ts) mapping) \<times> (('a tuple, nat) mapping))" where
+  "shift_end_queues_mmtaux args nt idx_mid idx_oldest maskR data_prev data_in tuple_in_once tuple_since_hist = (
     \<comment> \<open>in a first step, we update tuple_in_once by removing all tuples where currently a ts
        is stored, that points to a db that with the new ts (nt) no longer is part of
        [0, a-1] / data_prev\<close>
@@ -1406,7 +1407,7 @@ fun shift_end_queues_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> nat \<Righta
     \<comment> \<open>pass empty_queue as the first argument as it would filter out all: [0, a-1] \<inter> [a, b] = {}.
        idx_mid can be moved forward by the number of all tuples dropped from data_prev (move)\<close>
     move_len = length move;
-    idx_mid = idx_mid + move_len;
+    idx_mid' = idx_mid + move_len;
     \<comment> \<open>in a next step, we drop all entries from data_in that are no longer relevant \<close>
     (data_in, drop) = takedropWhile_queue (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) data_in;
      \<comment> \<open>instead of first appending and then filtering, we filter move separately. this saves us the append
@@ -1419,9 +1420,25 @@ fun shift_end_queues_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> nat \<Righta
     
     \<comment> \<open>next, the right hand side of entries in move have to be appended to data_in. these all already
        satisfy memR as we just filtered them for it\<close>
-    data_in = fold (\<lambda>(t, l, r) data_in. append_queue (t, r) data_in) move' data_in
+    data_in = fold (\<lambda>(t, l, r) data_in. append_queue (t, r) data_in) move' data_in;
+    
+    \<comment> \<open>we now have to update hist_since using the tables in move. in particular, for all dbs inside move,
+       we have to do some sort of join with the keys of hist_since\<close>
+    (tuple_since_hist', idx_move) = fold (\<lambda>(t, l, r) (tuple_since_hist, idx_move).
+      let tuple_since_hist = Mapping.filter (\<lambda>as _. proj_tuple_in_join True maskR as r) tuple_since_hist in \<comment> \<open>filter entries that are not present in the current db\<close>
+      (
+        Finite_Set.fold (\<lambda>as tuple_since_hist. Mapping.update as idx_move tuple_since_hist) tuple_since_hist r, \<comment> \<open>then add entries for the ones that are present in the current db\<close>
+        idx_move+1 \<comment> \<open>increase index by one every db\<close>
+      ) 
+    ) move (tuple_since_hist, idx_mid) \<comment> \<open>use original idx_mid, not idx_mid' where the length of move already is included\<close>
+
+    \<comment> \<open>last but not least we have to update since_sat and remaining mapping. if data_in is empty,
+       since_sat has to be emptied. if not, we have to update it.
+       currently since_sat requires a phi in the interval but we do not know where \<Rightarrow> use mapping.
+       we can then remove tuples if the mapping points to a ts that now is outside of the interval
+       and add said tuple to tuple_since_hist with an index \<le> idx_oldest.\<close>
     in
-    (idx_mid, idx_oldest, data_prev, move, data_in, tuple_in_once)
+    (idx_mid', idx_oldest, data_prev, data_in, tuple_in_once, tuple_since_hist')
   )"
 
 
@@ -1527,25 +1544,69 @@ lemma fold_append_queue_map: "linearize (fold (\<lambda>(t, l, r) q. append_queu
 lemma filter_imp: "(\<forall>x. P x \<longrightarrow> Q x) \<longrightarrow> length (filter P xs) \<le> length (filter Q xs)"
   by (metis (mono_tags, lifting) filter_cong filter_filter length_filter_le)
 
+lemma filter_take_drop: "filter P xs = take n ys \<Longrightarrow> filter (\<lambda>x. \<not> P x) xs = drop n ys"
+  by auto
+
+lemma mem_mt_and_memR_imp_mem:
+  assumes "nt \<ge> mt"
+  shows "(mem (args_ivl args) (mt - t) \<and> memR (args_ivl args) (nt - t)) = (mem (args_ivl args) (mt - t) \<and> mem (args_ivl args) (nt - t))"
+  using assms by auto
+
 lemma valid_shift_end_queues_mmtaux:
   assumes valid_before: "valid_mmtaux args cur
     (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, since_sat) auxlist"
   assumes nt_mono: "nt \<ge> cur"
-  assumes "(idx_mid', idx_oldest', data_prev', move, data_in'', tuple_in_once') = shift_end_queues_mmtaux args nt idx_mid idx_oldest data_prev data_in tuple_in_once"
+  assumes "(idx_mid', idx_oldest', data_prev', data_in'', tuple_in_once', tuple_since_hist'') = shift_end_queues_mmtaux args nt idx_mid idx_oldest maskR data_prev data_in tuple_in_once tuple_since_hist"
   shows
     "table (args_n args) (args_L args) (Mapping.keys tuple_in_once')"
+    \<comment> \<open>data_prev\<close>
     "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_L args) as)"
     "(\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_R args) as)"
-    "ts_tuple_rel_binary_lhs (set (auxlist_data_prev args nt auxlist)) =
+    "ts_tuple_rel_binary_lhs (set (auxlist_data_prev args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist))) =
     {db \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')).
     \<exists>db'. db = (fst db', (restrict (args_L args) (snd db'))) \<and> valid_tuple tuple_in_once' db'}"
-    "auxlist_data_prev args nt auxlist = (linearize data_prev')"
+    "auxlist_data_prev args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist) = (linearize data_prev')"
     "newest_tuple_in_mapping fst (restrict (args_L args)) data_prev' tuple_in_once' (\<lambda>x. True)"
     "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> (restrict (args_L args) as) \<in> l)"
     "length (linearize data_prev') = idx_next - idx_mid'"
+
+    "auxlist_data_prev args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist) = drop (length (linearize data_in'')) (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist)" (* new *)
+    \<comment> \<open>data_in\<close>
+    "(\<forall>as \<in> \<Union>((snd) ` (set (linearize data_in''))). wf_tuple (args_n args) (args_R args) as)"
+    "ts_tuple_rel_binary_rhs (set (auxlist_data_in args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist))) = ts_tuple_rel (set (linearize data_in''))" (* new *)
+    "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist)) = (linearize data_in'')" (* new *)
+    "auxlist_data_in args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist) = take (length (linearize data_in'')) (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist)" (* new *)
     "length (linearize data_in'') = idx_mid' - idx_oldest'"
-    "move = filter (\<lambda>(t, X). memL (args_ivl args) (nt - t)) (linearize data_prev)"
-    "data_in'' = fold (\<lambda>(t, l, r) data_in. append_queue (t, r) data_in) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) move) (dropWhile_queue (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) data_in)"
+    \<comment> \<open>tuple_since_hist\<close>
+    "(\<forall>as \<in> Mapping.keys tuple_since_hist''. (case Mapping.lookup tuple_since_hist'' as of Some idx \<Rightarrow>
+      idx < idx_mid' \<and>
+      (\<forall>(t, r) \<in> set (drop (idx-idx_oldest') (linearize data_in'')). 
+        as \<in> r
+      ) \<and>
+      (idx > idx_oldest' \<longrightarrow> (restrict (args_L args) as) \<notin> (snd ((linearize data_in'')!(idx-idx_oldest'-1)))))
+    )"
+    "(\<forall>as. \<forall>idx.
+      (
+        (\<not>is_empty data_in'') \<and>
+        idx < idx_mid' \<and>
+        (\<forall>(t, r) \<in> set (drop (idx-idx_oldest') (linearize data_in'')). 
+          as \<in> r
+        ) \<and>
+        (idx > idx_oldest' \<longrightarrow> (restrict (args_L args) as) \<notin> (snd ((linearize data_in'')!(idx-idx_oldest'-1))))
+      ) \<longrightarrow> (\<exists>idx'\<le>idx. Mapping.lookup tuple_since_hist'' as = Some idx')
+    )"
+    \<comment> \<open>since_sat\<close>
+    "(\<forall>tuple. tuple \<in> since_sat \<longleftrightarrow>
+      (\<not>is_empty data_in'') \<and> (
+        \<exists>n \<in> {0..<length (auxlist_data_in args nt auxlist)}.
+          let suffix = drop n (auxlist_data_in args nt auxlist) in (
+            (\<forall>(t, l, r) \<in> set suffix.
+              tuple \<in> r
+            ) \<and>
+            (restrict (args_L args) tuple) \<in> relL (hd suffix)
+        )
+      )
+    )"
 proof - 
   define shift_res where "shift_res = shift_end
       (flip_int_less_lower (args_ivl args))
@@ -1560,11 +1621,7 @@ proof -
     unfolding shift_res_def
     by (auto simp add: Let_def split: prod.splits) 
   
-  have move_def: "move = (fst o snd o snd) shift_res"
-    using assms(3)
-    unfolding shift_res_def
-    by (auto simp add: Let_def split: prod.splits) 
-  
+  define move where "move = (fst o snd o snd) shift_res"
   define move' where "move' = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) move"
 
   have tuple_in_once'_def: "tuple_in_once' = (snd o snd o snd) shift_res"
@@ -1573,13 +1630,13 @@ proof -
     by (auto simp add: Let_def split: prod.splits)
 
   define data_in' where "data_in' = fst (takedropWhile_queue (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) data_in)"
-  define drop where "drop = snd (takedropWhile_queue (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) data_in)"
+  define in_drop where "in_drop = snd (takedropWhile_queue (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) data_in)"
   have data_in''_def: "data_in'' = fold (\<lambda>(t, l, r) data_in. append_queue (t, r) data_in) move' data_in'"
     using assms(3)
-    unfolding shift_res_def data_in'_def data_in'_def move'_def
-    by (auto simp only: shift_end_queues_mmtaux.simps Let_def fst_def split: prod.splits)
+    unfolding shift_res_def data_in'_def data_in'_def move'_def move_def
+    by (auto simp add: Let_def split: prod.splits)
 
-  then show "data_in'' = fold (\<lambda>(t, l, r) data_in. append_queue (t, r) data_in) move' (dropWhile_queue (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) data_in)"
+  then have "data_in'' = fold (\<lambda>(t, l, r) data_in. append_queue (t, r) data_in) move' (dropWhile_queue (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) data_in)"
     unfolding data_in'_def move'_def
     using takedropWhile_queue_fst[of "(\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t))" data_in]
     by auto
@@ -1591,8 +1648,8 @@ proof -
     unfolding shift_res_def move_def drop_prev_len_def
     by (auto simp add: Let_def split: prod.splits)
 
-  have idx_oldest'_def: "idx_oldest' = idx_oldest + length drop + drop_prev_len"
-    unfolding shift_res_def drop_def drop_prev_len_def move'_def
+  have idx_oldest'_def: "idx_oldest' = idx_oldest + length in_drop + drop_prev_len"
+    unfolding shift_res_def in_drop_def drop_prev_len_def move'_def move_def
     using assms(3) takedropWhile_queue_snd[of "(\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t))" data_in]
     by (auto simp add: Let_def split: prod.splits)
 
@@ -1604,6 +1661,14 @@ proof -
       (empty_queue::(ts \<times> 'a option list set \<times> 'a option list set) queue, data_prev, tuple_in_once)"
     using empty_queue'_def data_prev'_def move_def tuple_in_once'_def shift_res_def
     by auto
+
+  define tuple_since_hist' where "tuple_since_hist' = fst (fold (\<lambda>(t, l, r) (tuple_since_hist, idx_move).
+      let tuple_since_hist = Mapping.filter (\<lambda>as _. proj_tuple_in_join True maskR as r) tuple_since_hist in 
+      (
+        Finite_Set.fold (\<lambda>as tuple_since_hist. Mapping.update as idx_move tuple_since_hist) tuple_since_hist r, 
+        idx_move+1 \<comment> \<open>increase index by one every db\<close>
+      ) 
+    ) move (tuple_since_hist, idx_mid))"
 
   from assms(1) have table_tuple_in: "table (args_n args) (args_L args) (Mapping.keys tuple_in_once)"
     by auto
@@ -1752,7 +1817,7 @@ proof -
   then have move_takeWhile: "move = takeWhile (\<lambda>(t, X). memL (args_ivl args) (nt - t)) (linearize data_prev)"
     using takedropWhile_queue_snd
     by auto
-  then show move_filter: "move = filter (\<lambda>(t, X). memL (args_ivl args) (nt - t)) (linearize data_prev)"
+  then have move_filter: "move = filter (\<lambda>(t, X). memL (args_ivl args) (nt - t)) (linearize data_prev)"
     using data_sorted[OF assms(1)] sorted_filter_takeWhile_memL[of "linearize data_prev" args nt]
     by auto
   have filter_simp: "(\<lambda>x. (case x of (t, uu_) \<Rightarrow> memL (args_ivl args) (nt - t)) \<and> (case x of (t, uu_) \<Rightarrow> memR (args_ivl args) (nt - t))) = (\<lambda>(t,_). (memL (args_ivl args) (nt - t)) \<and> (memR (args_ivl args) (nt - t)))"
@@ -1770,20 +1835,35 @@ proof -
     by auto
   have filter_simp: "(\<lambda>x. (case x of (t, uu_) \<Rightarrow> \<not> memL (args_ivl args) (mt - t)) \<and> (case x of (t, uu_) \<Rightarrow> \<not> memL (args_ivl args) (nt - t))) = (\<lambda>(t, _). \<not> memL (args_ivl args) (mt - t) \<and>  \<not> memL (args_ivl args) (nt - t))"
     by auto
-  have "(filter (\<lambda>(t, _). \<not> memL (args_ivl args) (mt - t) \<and>  \<not> memL (args_ivl args) (nt - t)) auxlist) = (linearize data_prev')"
+  have filter_and: "(filter (\<lambda>(t, _). \<not> memL (args_ivl args) (mt - t) \<and>  \<not> memL (args_ivl args) (nt - t)) auxlist) = (linearize data_prev')"
     using auxlist_prev_eq
     by (simp add: filter_simp)
   moreover have "\<forall>t. (\<not> memL (args_ivl args) (mt - t) \<and>  \<not> memL (args_ivl args) (nt - t)) = (\<not> memL (args_ivl args) (nt - t))"
     using nt_mono time memL_mono[of "args_ivl args"]
     by auto
-  ultimately have "filter (\<lambda>(t, X). \<not>memL (args_ivl args) (nt - t)) auxlist = (linearize data_prev')"
+  ultimately have filter_auxlist_data_prev': "filter (\<lambda>(t, X). \<not>memL (args_ivl args) (nt - t)) auxlist = (linearize data_prev')"
     by auto
-  then show auxlist_prev_eq: "auxlist_data_prev args nt auxlist = (linearize data_prev')"
+  moreover have "\<forall>t. \<not>memL (args_ivl args) (nt - t) = (\<not>memL (args_ivl args) (nt - t) \<and> memR (args_ivl args) (nt - t))"
+    using not_memL_imp_memR[of args]
+    by auto
+  ultimately have filter_eq: "filter (\<lambda>x. (case x of (t, uu_) \<Rightarrow> memR (args_ivl args) (nt - t)) \<and> (case x of (t, uu_) \<Rightarrow> \<not> memL (args_ivl args) (nt - t))) auxlist = (linearize data_prev')"
+    by (smt filter_cong prod.case_eq_if)
+  then show auxlist_prev_eq: "auxlist_data_prev args nt (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist) = (linearize data_prev')"
+    unfolding auxlist_data_prev_def
+    using filter_filter[of "(\<lambda>(t, _). \<not>memL (args_ivl args) (nt - t))" "(\<lambda>(t, _). memR (args_ivl args) (nt - t))" auxlist]
+    by auto
+
+  have filter_data_prev_nt: "filter (\<lambda>(t, rel). \<not> memL (args_ivl args) (nt - t)) (auxlist_data_prev args mt auxlist) = auxlist_data_prev args nt auxlist"
+    using filter_data_prev_nt filter_auxlist_data_prev'
     unfolding auxlist_data_prev_def
     by auto
-  then have filter_data_prev_nt: "filter (\<lambda>(t, rel). \<not> memL (args_ivl args) (nt - t)) (auxlist_data_prev args mt auxlist) = auxlist_data_prev args nt auxlist"
-    using filter_data_prev_nt
+
+  have "\<forall>t. \<not>memL (args_ivl args) (nt - t) = (\<not>memL (args_ivl args) (nt - t) \<and> memR (args_ivl args) (nt - t))"
+    using not_memL_imp_memR[of args]
     by auto
+  then have auxlist_data_prev_inv: "auxlist_data_prev args nt auxlist = auxlist_data_prev args nt (filter (\<lambda>(t, rel). memR (args_ivl args) (nt - t)) auxlist)"
+    unfolding auxlist_data_prev_def filter_filter
+    by (simp add: filter_eq filter_auxlist_data_prev')
 
   
   {
@@ -2165,14 +2245,14 @@ proof -
   then have "{db \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')). \<exists>db'. db = (fst db', (restrict (args_L args) (snd db'))) \<and> valid_tuple tuple_in_once db'} =
     {db \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')). \<exists>db'. db = (fst db', (restrict (args_L args) (snd db'))) \<and> valid_tuple tuple_in_once' db'}"
     by blast
-  then show ts_tuple_rel_binary_lhs_data_prev: "ts_tuple_rel_binary_lhs (set (auxlist_data_prev args nt auxlist)) =
+  then show ts_tuple_rel_binary_lhs_data_prev: "ts_tuple_rel_binary_lhs (set (auxlist_data_prev args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist))) =
     {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')).
     \<exists>db'. tas = (fst db', (restrict (args_L args) (snd db'))) \<and> valid_tuple tuple_in_once' db'}"
-    using ts_tuple shift_end_props(2)
+    using ts_tuple shift_end_props(2) auxlist_data_prev_inv
     by auto
 
 
-  from assms(1) have
+  from assms(1) have data_prev_wf:
     "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_L args) as)"
     "(\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_R args) as)"
     by auto
@@ -2269,7 +2349,7 @@ proof -
 
   have "length (linearize data_prev') = length (filter (\<lambda>(t, _). \<not> memL (args_ivl args) (nt - t)) (linearize data_prev))"
     using data_prev'_eq
-    by auto (* not_memL_imp_memR *)
+    by auto
   then have lin_prev'_len: "length (linearize data_prev') = length (filter (\<lambda>x. \<not> (case x of (t, uu_) \<Rightarrow> memL (args_ivl args) (nt - t))) (linearize data_prev))"
     by (metis (mono_tags, lifting) case_prod_beta' filter_cong)
   
@@ -2293,7 +2373,7 @@ proof -
 
   have idx_oldest'_eq: "idx_oldest' = idx_oldest + length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in)) + drop_prev_len"
     using idx_oldest'_def
-    unfolding drop_def
+    unfolding in_drop_def
     using takedropWhile_queue_snd[of "(\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t))" data_in]
       data_sorted[OF assms(1)] sorted_filter_takeWhile_not_memR[of "linearize data_in" args nt]
     by auto
@@ -2330,7 +2410,7 @@ proof -
     by auto
   moreover have "filter (\<lambda>x. (case x of (t, uu_) \<Rightarrow> memL (args_ivl args) (nt - t)) \<and> (case x of (t, uu_) \<Rightarrow> memR (args_ivl args) (nt - t))) (linearize data_prev) = filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev)"
     by (simp add: case_prod_beta')
-  ultimately have "linearize data_in'' = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in) @ map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev))"
+  ultimately have lin_data_in''_eq: "linearize data_in'' = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in) @ map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev))"
     using filter_filter[of "(\<lambda>(t, _). memR (args_ivl args) (nt - t))" "(\<lambda>(t, _). memL (args_ivl args) (nt - t))" "(linearize data_prev)"]
     by auto
   then have "length (linearize data_in'') = length (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in)) + length (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev))"
@@ -2370,64 +2450,309 @@ proof -
   then show "length (linearize data_in'') = idx_mid' - idx_oldest'"
     using data_in''_len
     by auto
-qed
+
+  from assms(1) have "(\<forall>as \<in> \<Union>((snd) ` (set (linearize data_in))). wf_tuple (args_n args) (args_R args) as)"
+    by auto
+  moreover have "(\<forall>as \<in> \<Union>((snd) ` (set (map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev))))). wf_tuple (args_n args) (args_R args) as)"
+    using data_prev_wf(2)
+    unfolding relR_def
+    by auto
+  ultimately show "(\<forall>as \<in> \<Union>((snd) ` (set (linearize data_in''))). wf_tuple (args_n args) (args_R args) as)"
+    unfolding lin_data_in''_eq
+    by auto
+
+  have filter_simp: "(\<lambda>x. (case x of (t, _) \<Rightarrow> memR (args_ivl args) (nt - t)) \<and> (case x of (t, _) \<Rightarrow> mem (args_ivl args) (nt - t))) = (\<lambda>(t, _, _). mem (args_ivl args) (nt - t))"
+    by auto
+  have data_in_auxlist_filter_eq: "auxlist_data_in args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist) = auxlist_data_in args nt auxlist"
+    unfolding auxlist_data_in_def filter_filter
+    by (simp add: filter_simp)
+
+  {
+    fix timed_tuple
+    assume assm: "timed_tuple \<in> ts_tuple_rel_binary_rhs (set (auxlist_data_in args nt auxlist))"
+    define t where "t = fst timed_tuple"
+    define tuple where "tuple = snd timed_tuple"
+    from assm obtain l r where l_r_def: "tuple \<in> r" "(t, l, r) \<in> set (filter (\<lambda>(t, _, _). mem (args_ivl args) (nt - t)) auxlist)"
+      unfolding ts_tuple_rel_f_def t_def tuple_def auxlist_data_in_def
+      by auto
+    then have mem: "mem (args_ivl args) (nt - t)" "(t, l, r) \<in> set auxlist" by auto
+    then have "timed_tuple \<in> ts_tuple_rel (set (linearize data_in''))"
+    proof (cases "memL (args_ivl args) (mt - t)")
+      case True
+      then have "(t, r) \<in> set (linearize data_in)"
+        using mem(2) auxlist_mem_or[OF assms(1), of "(t, l, r)"]
+        unfolding time_def
+        by auto
+      then have "(t, r) \<in> set (linearize data_in'')"
+        unfolding lin_data_in''_eq
+        using mem(1)
+        by auto
+      then show ?thesis
+        using l_r_def(1)
+        unfolding ts_tuple_rel_f_def t_def tuple_def
+        by fastforce
+    next
+      case False
+      then have "(t, l, r) \<in> set (linearize data_prev)"
+        using mem(2) auxlist_mem_or[OF assms(1), of "(t, l, r)"]
+        unfolding time_def
+        by auto
+      then have "(t, l, r) \<in> set (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev))"
+        using mem(1)
+        by auto
+      then have "(t, r) \<in> set (map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev)))"
+        by force
+      then have "(t, r) \<in> set (linearize data_in'')"
+        unfolding lin_data_in''_eq
+        by auto
+      then show ?thesis
+        using l_r_def(1)
+        unfolding ts_tuple_rel_f_def t_def tuple_def
+        by fastforce
+    qed
+  }
+  moreover {
+    fix timed_tuple
+    assume assm: "timed_tuple \<in> ts_tuple_rel (set (linearize data_in''))"
+    define t where "t = fst timed_tuple"
+    define tuple where "tuple = snd timed_tuple"
+
+    from assm obtain r where tuple_props: "tuple \<in> r" "(t, r) \<in> (set (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in) @
+                  map (\<lambda>(t, l, y). (t, y)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev))))"
+      unfolding ts_tuple_rel_f_def lin_data_in''_eq t_def tuple_def
+      by force
+    then have "(t, r) \<in> (set (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in))) \<or> (t, r) \<in> set (map (\<lambda>(t, l, y). (t, y)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev)))"
+      by auto
+    moreover {
+      assume "(t, r) \<in> (set (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in)))"
+      then have memR: "memR (args_ivl args) (nt - t)" "(t, r) \<in> set (linearize data_in)"
+        by auto
+      then have "memL (args_ivl args) (mt - t)" using data_in_mem[OF assms(1), of "(t, r)"] by auto
+      then have "memL (args_ivl args) (nt - t)" using memL_mono nt_mono time by auto
+      then have mem: "mem (args_ivl args) (nt - t)" using memR by auto
+      have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
+        using assms(1) by auto
+      then have "(t, r) \<in> set (map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist))"
+        using memR(2)
+        by auto
+      then obtain l where "(t, l, r) \<in> set (auxlist_data_in args mt auxlist)"
+        using memR(2)
+        by auto
+      then have "(t, l, r) \<in> set auxlist"
+        unfolding auxlist_data_in_def
+        by auto
+      then have "(t, l, r) \<in> set (auxlist_data_in args nt auxlist)"
+        unfolding auxlist_data_in_def
+        using mem
+        by auto
+      then have "timed_tuple \<in> ts_tuple_rel_binary_rhs (set (auxlist_data_in args nt auxlist))"
+        unfolding ts_tuple_rel_f_def auxlist_data_in_def
+        using tuple_props(1) t_def tuple_def
+        by fastforce
+    }
+    moreover {
+      assume "(t, r) \<in> set (map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev)))"
+      then obtain l where "(t, l, r) \<in> set (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev))"
+        by auto
+      then have mem: "mem (args_ivl args) (nt - t)" "(t, l, r) \<in> set (linearize data_prev)" by auto
+      moreover have "auxlist_data_prev args mt auxlist = (linearize data_prev)" using assms(1) by auto
+      ultimately have "(t, l, r) \<in> set (filter (\<lambda>(t, _). \<not> memL (args_ivl args) (mt - t)) auxlist)"
+        unfolding auxlist_data_prev_def
+        by auto
+      then have "(t, l, r) \<in> set auxlist" by auto
+      then have "(t, l, r) \<in> set (auxlist_data_in args nt auxlist)"
+        unfolding auxlist_data_in_def
+        using mem
+        by auto
+      then have "timed_tuple \<in> ts_tuple_rel_binary_rhs (set (auxlist_data_in args nt auxlist))"
+        unfolding ts_tuple_rel_f_def auxlist_data_in_def
+        using tuple_props(1) t_def tuple_def
+        by fastforce
+    }
+    ultimately have "timed_tuple \<in> ts_tuple_rel_binary_rhs (set (auxlist_data_in args nt auxlist))"
+      by blast
+  }
+  ultimately have "ts_tuple_rel_binary_rhs (set (auxlist_data_in args nt auxlist)) = ts_tuple_rel (set (linearize data_in''))"
+    by blast
+  then show "ts_tuple_rel_binary_rhs (set (auxlist_data_in args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist))) = ts_tuple_rel (set (linearize data_in''))"
+    using data_in_auxlist_filter_eq
+    by auto
+
+  have filter_simp: "(\<lambda>(t, _). memR (args_ivl args) (nt - t) \<and> mem (args_ivl args) (nt - t)) = (\<lambda>x. (case x of (t, _) \<Rightarrow> memR (args_ivl args) (nt - t)) \<and> (case x of (t, _) \<Rightarrow> mem (args_ivl args) (nt - t)))"
+    by auto
+  have filter_simp': "((\<lambda>(t, _). memR (args_ivl args) (nt - t)) \<circ> (\<lambda>(t, l, r). (t, r))) = (\<lambda>(t, _). memR (args_ivl args) (nt - t))"
+    by auto
+  have filter_simp'': "(\<lambda>x. (case x of (t, uu_) \<Rightarrow> mem (args_ivl args) (mt - t)) \<and> (case x of (t, uu_) \<Rightarrow> memR (args_ivl args) (nt - t))) = (\<lambda>(t, _). mem (args_ivl args) (mt - t) \<and> memR (args_ivl args) (nt - t))"
+    by auto
+
+  from assms(1) have "auxlist_data_prev args mt auxlist = drop (length (linearize data_in)) auxlist"
+                       "auxlist_data_in args mt auxlist = take (length (linearize data_in)) auxlist"
+    by auto
+  then have auxlist_concat: "filter (\<lambda>(t, _). mem (args_ivl args) (mt - t)) auxlist @ filter (\<lambda>(t, _). \<not> memL (args_ivl args) (mt - t)) auxlist = auxlist"
+    unfolding auxlist_data_prev_def auxlist_data_in_def
+    by auto
+
+  have "linearize data_in'' = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in) @ map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev))"
+    using lin_data_in''_eq
+    by auto
+  moreover have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
+                "auxlist_data_prev args mt auxlist = (linearize data_prev)"
+    using assms(1)
+    by auto
+  ultimately have "linearize data_in'' = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _, _). mem (args_ivl args) (mt - t)) auxlist)) @ map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). \<not> memL (args_ivl args) (mt - t)) auxlist))"
+    unfolding auxlist_data_in_def auxlist_data_prev_def
+    by auto
+  then have "linearize data_in'' = map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). mem (args_ivl args) (mt - t)) auxlist)) @ map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). \<not> memL (args_ivl args) (mt - t)) auxlist))"
+    using filter_map[of "(\<lambda>(t, _). memR (args_ivl args) (nt - t))" "(\<lambda>(t, l, r). (t, r))" "(filter (\<lambda>(t, _). mem (args_ivl args) (mt - t)) auxlist)"]
+    by (auto simp add: filter_simp')
+  then have "linearize data_in'' = map (\<lambda>(t, l, r). (t, r)) ((filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). mem (args_ivl args) (mt - t)) auxlist)) @ (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). \<not> memL (args_ivl args) (mt - t)) auxlist)))"
+    by auto
+  then have "linearize data_in'' = map (\<lambda>(t, l, r). (t, r)) ((filter (\<lambda>(t, _). mem (args_ivl args) (mt - t) \<and> memR (args_ivl args) (nt - t)) auxlist) @ (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). \<not> memL (args_ivl args) (mt - t)) auxlist)))"
+    using filter_filter[of "(\<lambda>(t, _). memR (args_ivl args) (nt - t))" "(\<lambda>(t, _). mem (args_ivl args) (mt - t))" auxlist]
+    by (auto simp add: filter_simp'')
+  then have x: "linearize data_in'' = map (\<lambda>(t, l, r). (t, r)) ((filter (\<lambda>(t, _). mem (args_ivl args) (mt - t) \<and> mem (args_ivl args) (nt - t)) auxlist) @ (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). \<not> memL (args_ivl args) (mt - t)) auxlist)))"
+    using mem_mt_and_memR_imp_mem[of mt nt args] nt_mono time
+    by auto
+  moreover have filter_simp': "(\<lambda>(t, _). mem (args_ivl args) (mt - t) \<and> mem (args_ivl args) (nt - t)) = (\<lambda>x. (case x of (t, uu_) \<Rightarrow> mem (args_ivl args) (mt - t)) \<and> (case x of (t, uu_) \<Rightarrow> mem (args_ivl args) (nt - t)))"
+    by auto
+  ultimately have "linearize data_in'' = map (\<lambda>(t, l, r). (t, r)) ((filter (\<lambda>x. (case x of (t, _) \<Rightarrow> mem (args_ivl args) (mt - t)) \<and> (case x of (t, _) \<Rightarrow> mem (args_ivl args) (nt - t))) auxlist) @ (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). \<not> memL (args_ivl args) (mt - t)) auxlist)))"
+    by (simp only: filter_simp')
+  moreover have filter_simp': "filter (\<lambda>x. (case x of (t, _) \<Rightarrow> mem (args_ivl args) (mt - t)) \<and> (case x of (t, _) \<Rightarrow> mem (args_ivl args) (nt - t))) auxlist = filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). mem (args_ivl args) (mt - t)) auxlist)"
+    using filter_filter[of "(\<lambda>(t, _). mem (args_ivl args) (nt - t))" "(\<lambda>(t, _). mem (args_ivl args) (mt - t))" auxlist]
+    by auto
+  ultimately have "linearize data_in'' = map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). mem (args_ivl args) (mt - t)) auxlist) @ filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). \<not> memL (args_ivl args) (mt - t)) auxlist))"
+    unfolding filter_simp'
+    by auto
+  then have "linearize data_in'' = map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) ((filter (\<lambda>(t, _). mem (args_ivl args) (mt - t)) auxlist) @ (filter (\<lambda>(t, _). \<not> memL (args_ivl args) (mt - t)) auxlist)))"
+    by auto
+  then have "map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) auxlist) = linearize data_in''"
+    using auxlist_concat
+    by auto
+  moreover have "\<forall>t. (memR (args_ivl args) (nt - t) \<and> mem (args_ivl args) (nt - t)) = (mem (args_ivl args) (nt - t))"
+    by blast
+  ultimately have "map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t) \<and> mem (args_ivl args) (nt - t)) auxlist) = linearize data_in''"
+    by auto
+  then have "map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)) = linearize data_in''"
+    using filter_filter[of "(\<lambda>(t, _). mem (args_ivl args) (nt - t))" "(\<lambda>(t, _). memR (args_ivl args) (nt - t))" auxlist]
+    by (auto simp add: filter_simp)
+  then show "map (\<lambda>(t, l, r). (t, r)) (auxlist_data_in args nt (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)) = linearize data_in''"
+    unfolding auxlist_data_in_def
+    by auto
+
+  have filter_simp: "(\<lambda>(t, _). memR (args_ivl args) (nt - t) \<and> mem (args_ivl args) (nt - t)) = (\<lambda>x. (case x of (t, uu_) \<Rightarrow> memR (args_ivl args) (nt - t)) \<and> (case x of (t, uu_) \<Rightarrow> mem (args_ivl args) (nt - t)))"
+    by auto
+  have filter_simp': "(\<lambda>(t, _). mem (args_ivl args) (nt - t)) = (\<lambda>(t, _). memR (args_ivl args) (nt - t) \<and> mem (args_ivl args) (nt - t))"
+    by auto
 
 
-fun shift_end_hist_mmtaux :: "nat \<Rightarrow> bool list \<Rightarrow> (ts \<times> 'a table \<times> 'a table) list \<Rightarrow> (('a tuple, ts) mapping) \<Rightarrow> (('a tuple, ts) mapping)" where
-  "shift_end_hist_mmtaux idx_move maskR move tuple_since_hist = (
-  let \<comment> \<open>we now have to update hist_since using the tables in move. in particular, for all dbs inside move,
-       we have to do some sort of join with the keys of hist_since\<close>
-    (tuple_since_hist, idx_move) = fold (\<lambda>(t, l, r) (tuple_since_hist, idx_move).
-      let tuple_since_hist = Mapping.filter (\<lambda>as _. proj_tuple_in_join True maskR as r) tuple_since_hist in \<comment> \<open>filter entries that are not present in the current db\<close>
+  from assms(1) have "auxlist_data_prev args mt auxlist = (linearize data_prev)"
+                     "auxlist_data_prev args mt auxlist = drop (length (linearize data_in)) auxlist"
+    by auto
+  then have prev_drop_eq: "(linearize data_prev) = drop (length (linearize data_in)) auxlist" by auto
+
+  have "length (linearize data_in'') + length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in)) = length (linearize data_in) + length (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev))"
+    using data_in''_len
+    by auto
+  then have "length (linearize data_in'') = length (linearize data_in) - length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in)) + length (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev))"
+    by auto
+
+
+  have filter_auxlist_take: "(filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) auxlist) = take (length (linearize data_in'')) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"
+    by auto
+  then have "(filter (\<lambda>(t, _). memR (args_ivl args) (nt - t) \<and> mem (args_ivl args) (nt - t)) auxlist) = take (length (linearize data_in'')) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"
+    by (auto simp add: filter_simp')
+  then have "filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist) = take (length (linearize data_in'')) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"
+    using filter_filter[of "(\<lambda>(t, _). mem (args_ivl args) (nt - t))" "(\<lambda>(t, _). memR (args_ivl args) (nt - t))" auxlist]
+    by (auto simp add: filter_simp)
+  then show "auxlist_data_in args nt (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist) = take (length (linearize data_in'')) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"
+    unfolding auxlist_data_in_def
+    by auto
+
+  have filter_simp: "(\<lambda>(t, _). mem (args_ivl args) (nt - t)) = (\<lambda>(t, _). memR (args_ivl args) (nt - t) \<and> memL (args_ivl args) (nt - t))"
+    by auto
+  have filter_simp': "(\<lambda>(t, _). memR (args_ivl args) (nt - t) \<and> memL (args_ivl args) (nt - t)) = (\<lambda>x. (case x of (t, uu_) \<Rightarrow> memR (args_ivl args) (nt - t)) \<and> (case x of (t, uu_) \<Rightarrow> memL (args_ivl args) (nt - t)))"
+    by auto
+  have filter_simp'': "(\<lambda>x. \<not> (case x of (t, _) \<Rightarrow> memL (args_ivl args) (nt - t))) = (\<lambda>(t, _). \<not> memL (args_ivl args) (nt - t))"
+    by auto
+
+  have "(filter (\<lambda>(t, _). memR (args_ivl args) (nt - t) \<and> memL (args_ivl args) (nt - t)) auxlist) = take (length (linearize data_in'')) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"
+    using filter_auxlist_take
+    by (auto simp add: filter_simp)
+  then have "filter (\<lambda>(t, _). memL (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist) = take (length (linearize data_in'')) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"
+    using filter_filter[of "(\<lambda>(t, _). mem (args_ivl args) (nt - t))" "(\<lambda>(t, _). memR (args_ivl args) (nt - t))" auxlist]
+    by (auto simp add: filter_simp')
+  then have "filter (\<lambda>(t, _). \<not> memL (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist) = drop (length (linearize data_in'')) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"
+    using filter_take_drop[of "(\<lambda>(t, _). memL (args_ivl args) (nt - t))" "(filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)" "(length (linearize data_in''))" "(filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"]
+    by (simp only: filter_simp'')
+  then show "auxlist_data_prev args nt (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist) =
+    drop (length (linearize data_in'')) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"
+    unfolding auxlist_data_prev_def
+    by auto
+
+  show "(\<forall>as \<in> Mapping.keys tuple_since_hist''. (case Mapping.lookup tuple_since_hist'' as of Some idx \<Rightarrow>
+      idx < idx_mid' \<and>
+      (\<forall>(t, r) \<in> set (drop (idx-idx_oldest') (linearize data_in'')). 
+        as \<in> r
+      ) \<and>
+      (idx > idx_oldest' \<longrightarrow> (restrict (args_L args) as) \<notin> (snd ((linearize data_in'')!(idx-idx_oldest'-1)))))
+    )" by auto
+  show "(\<forall>as. \<forall>idx.
       (
-        Finite_Set.fold (\<lambda>as tuple_since_hist. Mapping.update as idx_move tuple_since_hist) tuple_since_hist r, \<comment> \<open>then add entries for the ones that are present in the current db\<close>
-        idx_move+1 \<comment> \<open>increase index by one every db\<close>
-      ) 
-    ) move (tuple_since_hist, idx_move) in
-    tuple_since_hist
-  )"
+        (\<not>is_empty data_in'') \<and>
+        idx < idx_mid' \<and>
+        (\<forall>(t, r) \<in> set (drop (idx-idx_oldest') (linearize data_in'')). 
+          as \<in> r
+        ) \<and>
+        (idx > idx_oldest' \<longrightarrow> (restrict (args_L args) as) \<notin> (snd ((linearize data_in'')!(idx-idx_oldest'-1))))
+      ) \<longrightarrow> (\<exists>idx'\<le>idx. Mapping.lookup tuple_since_hist'' as = Some idx')
+    )" by auto
 
-lemma valid_shift_end_hist_mmtaux:
-  assumes valid_before: "valid_mmtaux args cur
-    (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, since_sat) auxlist"
-  assumes nt_mono: "nt \<ge> cur"
-  assumes "(idx_mid', idx_oldest', data_prev', move, data_in', tuple_in_once') = shift_end_queues_mmtaux args nt idx_mid idx_oldest data_prev data_in tuple_in_once"
-  assumes "tuple_since_hist' = shift_end_hist_mmtaux idx_mid maskL move tuple_since_hist"
-  shows "valid_mmtaux args cur
-    (nt, idx_next', idx_mid', idx_oldest', maskL, maskR, data_prev', data_in', tuple_in_once', tuple_since_hist', since_sat) auxlist"
-proof -
-
+  from assms(1) have "(\<forall>tuple. tuple \<in> since_sat \<longleftrightarrow>
+      (\<not>is_empty data_in) \<and> (
+        \<exists>n \<in> {0..<length (auxlist_data_in args mt auxlist)}.
+          let suffix = drop n (auxlist_data_in args mt auxlist) in (
+            (\<forall>(t, l, r) \<in> set suffix.
+              tuple \<in> r
+            ) \<and>
+            (restrict (args_L args) tuple) \<in> relL (hd suffix)
+        )
+      )
+    )" by auto
+  then show "(\<forall>tuple. tuple \<in> since_sat \<longleftrightarrow>
+      (\<not>is_empty data_in'') \<and> (
+        \<exists>n \<in> {0..<length (auxlist_data_in args nt auxlist)}.
+          let suffix = drop n (auxlist_data_in args nt auxlist) in (
+            (\<forall>(t, l, r) \<in> set suffix.
+              tuple \<in> r
+            ) \<and>
+            (restrict (args_L args) tuple) \<in> relL (hd suffix)
+        )
+      )
+    )" by auto
+  
 qed
+
 
 (* analogous to add_new_ts_mmsaux' except that tuple_in doesn't exist / isn't updated *)
-fun add_new_ts_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow> 'a mmtaux" where
-  "add_new_ts_mmtaux args nt (mt, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, since_sat) = (
-    \<comment> \<open>in a first step, we update tuple_in_once by removing all tuples where currently a ts
-       is stored, that points to a db that with the new ts (nt) no longer is part of
-       [0, a-1] / data_prev\<close>
-    let (data_in, in_discard, data_prev, prev_discard, tuple_in_once) = shift_end
-      (flip_int_less_lower (args_ivl args)) \<comment> \<open>[0, a-1]\<close>
-      nt \<comment> \<open>the new timestamp\<close>
-      fst \<comment> \<open>here we look at the lhs tuples / \<phi>\<close>
-      (restrict (args_L args)) \<comment> \<open>we have to restrict the tuples of the lhs to the respective cols\<close>
-      (data_in, data_prev, tuple_in_once) \<comment> \<open>pass data_in as the first argument as we simply want
-                                             the filtered queue & the discarded values separated.
-                                             the since mappings do not have to be updated here\<close>
-    in
-    \<comment> \<open>the only thing we actually did was to update tuple_in_once.
-       the first return value will of course be empty again and the second one
-       is data_prev filtered by [0, a-1] which would be okay but the results
-       are discarded which is not what we want.\<close>
-
-    \<comment> \<open>in a next step, we drop all entries of data_prev where the entries are not part of the
-       new interval. this can be done without issue as the only possible inconsistency would
-       be regarding tuple_in_once which we already updated. (if the tuple isn't part of [0, b] anymore,
-       then it obviously isn't part of [0, a-1] either and hence was already removed from the mapping)\<close>
-    \<comment> \<open>it is tempting to do the same with data_in, the issue there is that this needs more careful
-       handling as for the dropped out tuples, different conditions have to be checked and
-       mappings might have to be updated. in particular it is possible, that the tuples in the
-       dropped db now satisfy the historically condition and hence have to be added to this mapping.\<close>
-    ()
+fun add_new_ts_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> 'a mmtaux \<Rightarrow> 'a mmtaux" where
+  "add_new_ts_mmtaux args nt l r (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, since_sat) = (
+    \<comment> \<open>TODO: since_sat\<close>
+    if mem (args_ivl args) 0 then (
+      \<comment> \<open>append db to data_in directly\<close>
+      let data_in' = append_queue (nt, r) data_in;
+      \<comment> \<open>as we directly added the new db to data_in, we have to join the mapping with the new tuples\<close>
+      tuple_since_hist' = Mapping.filter (\<lambda>as _. proj_tuple_in_join True maskR as r) tuple_since_hist; \<comment> \<open>filter entries that are not present in the current db\<close>
+      tuple_since_hist'' = Finite_Set.fold (\<lambda>as tuple_since_hist. Mapping.update as idx_next tuple_since_hist) tuple_since_hist r \<comment> \<open>then add entries for the ones that are present in the current db\<close>
+      in
+      (mt, idx_next+1, idx_mid+1, idx_oldest, maskL, maskR, data_prev, data_in', tuple_in_once, tuple_since_hist'', since_sat)
+    ) else (
+       \<comment> \<open>first append db to data_prev\<close>
+      let data_prev' = append_queue (nt, l, r) data_prev;
+      \<comment> \<open>for all tuples that satisfy \<phi> (lhs), add an entry in tuple_in_once\<close>
+      tuple_in_once' = Finite_Set.fold (\<lambda>tuple tuple_in_once. Mapping.update tuple nt tuple_in_once) tuple_in_once l
+      in
+      (mt, idx_next+1, idx_mid, idx_oldest, maskL, maskR, data_prev', data_in, tuple_in_once', tuple_since_hist, since_sat)
+    )
   )"
 
 lemma valid_add_new_ts_mmtaux:
