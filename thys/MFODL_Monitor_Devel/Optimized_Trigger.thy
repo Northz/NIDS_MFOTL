@@ -138,7 +138,7 @@ fun valid_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow>
     auxlist_data_in args mt auxlist = take (length (linearize data_in)) auxlist \<and>
     length (linearize data_in) + idx_oldest = idx_mid \<and> \<comment> \<open>length (linearize data_in) = idx_mid - idx_oldest\<close>
     \<comment> \<open>also all tuples in auxlist (and hence data_prev/data_in) satisfy memR \<close>
-    (\<forall>db \<in> set auxlist. memR (args_ivl args) (mt - time db)) \<and>
+    (\<forall>db \<in> set auxlist. time db \<le> mt \<and> memR (args_ivl args) (mt - time db)) \<and>
      \<comment> \<open>check whether tuple_in once contains the newest occurence of the tuple satisfying the lhs\<close>
     newest_tuple_in_mapping fst (restrict (args_L args)) data_prev tuple_in_once (\<lambda>x. True) \<and>
     (\<forall>as \<in> Mapping.keys tuple_in_once. case Mapping.lookup tuple_in_once as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> (restrict (args_L args) as) \<in> l) \<and>
@@ -583,15 +583,15 @@ lemma auxlist_mem_data_in:
 
 lemma data_prev_ts_props:
   assumes "valid_mmtaux args cur (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat) auxlist"
-  shows "\<forall>t \<in> fst ` set (linearize data_prev). \<not> memL (args_ivl args) (cur - t)"
+  shows "\<forall>t \<in> fst ` set (linearize data_prev). t \<le> cur \<and> \<not> memL (args_ivl args) (cur - t)"
 proof -
   from assms have data_props:
     "auxlist_data_prev args mt auxlist = (linearize data_prev)"
     by auto
-  from assms have "(\<forall>db \<in> set auxlist. memR (args_ivl args) (mt - time db))"
+  from assms have "(\<forall>db \<in> set auxlist. time db \<le> cur \<and> memR (args_ivl args) (mt - time db))"
     by auto
   moreover from assms have time: "cur = mt" by auto
-  ultimately have memR: "(\<forall>db \<in> set auxlist.  memR (args_ivl args) (cur - time db))"
+  ultimately have memR: "(\<forall>db \<in> set auxlist. time db \<le> cur \<and> memR (args_ivl args) (cur - time db))"
     by auto
 
   {
@@ -604,23 +604,27 @@ proof -
       unfolding auxlist_data_prev_def db_props(1)
       using time
       by auto
-    then have "\<not>memL (args_ivl args) (cur - t)" by auto
+    moreover have "t \<le> cur"
+      using calculation(2) memR
+      unfolding time_def db_props(1)
+      by auto
+    ultimately have "t \<le> cur" "\<not>memL (args_ivl args) (cur - t)" by auto
   }
   then show ?thesis by auto
 qed
 
 lemma data_in_ts_props:
   assumes "valid_mmtaux args cur (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat) auxlist"
-  shows "\<forall>t \<in> fst ` set (linearize data_in). memL (args_ivl args) (cur - t)"
+  shows "\<forall>t \<in> fst ` set (linearize data_in). t \<le> cur \<and> memL (args_ivl args) (cur - t)"
 proof -
   from assms have data_props:
     "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
     "auxlist_data_in args mt auxlist = take (length (linearize data_in)) auxlist"
     by auto
-  from assms have "(\<forall>db \<in> set auxlist.  memR (args_ivl args) (mt - time db))"
+  from assms have "(\<forall>db \<in> set auxlist. time db \<le> cur \<and>  memR (args_ivl args) (mt - time db))"
     by auto
   moreover from assms have time: "cur = mt" by auto
-  ultimately have memR: "(\<forall>db \<in> set auxlist. memR (args_ivl args) (cur - time db))"
+  ultimately have memR: "(\<forall>db \<in> set auxlist. time db \<le> cur \<and> memR (args_ivl args) (cur - time db))"
     by auto
 
   {
@@ -639,7 +643,11 @@ proof -
       using db'_props(2) time
       unfolding auxlist_data_in_def
       by auto
-    then have "memL (args_ivl args) (cur - t)" by auto
+    moreover have "t \<le> cur"
+      using calculation(2) memR same_time
+      unfolding time_def db_props(1)
+      by auto
+    ultimately have "t \<le> cur" "memL (args_ivl args) (cur - t)" by auto
   }
   then show ?thesis by auto
 qed
@@ -1331,7 +1339,6 @@ proof -
           tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev)).
           r_tuple = snd tas
         }"
-        (* "A = {j \<in> {i<..<(length auxlist)}. (restrict (args_L args) tuple) \<in> relL (auxlist!j)}"*)
         from assms(1) have "newest_tuple_in_mapping fst (restrict (args_L args)) data_prev tuple_in_once (\<lambda>x. True)"
           by auto
         then have mapping_val: "Mapping.lookup tuple_in_once tuple = safe_max B"
@@ -1711,32 +1718,32 @@ proof -
     using data_sorted[OF assms(1)]
     by auto
 
-  moreover have "(\<forall>t \<in> fst ` set (linearize data_prev). \<not> memL (args_ivl args) (cur - t))"
+  moreover have "(\<forall>t \<in> fst ` set (linearize data_prev). t \<le> cur \<and> \<not> memL (args_ivl args) (cur - t))"
     using data_prev_ts_props[OF assms(1)]
     by auto
   ultimately have
     (*"(\<forall>as \<in> \<Union>(relL ` (set (linearize data_prev))). wf_tuple (args_n args) (args_L args) as)"
     "(\<forall>as \<in> \<Union>(relR ` (set (linearize data_prev))). wf_tuple (args_n args) (args_R args) as)"*)
     "sorted (map fst (linearize data_prev))"
-    "(\<forall>t \<in> fst ` set (linearize data_prev). \<not> memL (args_ivl args) (cur - t))"
+    "(\<forall>t \<in> fst ` set (linearize data_prev). t \<le> cur \<and> \<not> memL (args_ivl args) (cur - t))"
     by auto
   then have data_prev_props:
     "sorted (map fst (linearize data_prev))"
-    "(\<forall>t \<in> fst ` set (linearize data_prev). memL (flip_int_less_lower (args_ivl args)) (cur - t))"
-    using flip_int_less_lower_memL
+    "(\<forall>t \<in> fst ` set (linearize data_prev). t \<le> nt \<and> memL (flip_int_less_lower (args_ivl args)) (cur - t))"
+    using flip_int_less_lower_memL nt_mono
     by auto
   
   have data_in_props:
     "sorted (map fst (linearize data_in))"
-    "(\<forall>t \<in> fst ` set (linearize data_in). memL (args_ivl args) (cur - t))"
-    using data_sorted[OF assms(1)] data_in_ts_props[OF assms(1)]
+    "(\<forall>t \<in> fst ` set (linearize data_in). t \<le> nt \<and> memL (args_ivl args) (cur - t))"
+    using data_sorted[OF assms(1)] data_in_ts_props[OF assms(1)] nt_mono
     by auto
 
   have empty_queue_props:
     "(\<forall>as \<in> \<Union>((fst o snd) ` (set (linearize empty_queue))). wf_tuple (args_n args) (args_L args) as)"
     "(\<forall>as \<in> \<Union>((snd o snd) ` (set (linearize empty_queue))). wf_tuple (args_n args) (args_R args) as)"
     "sorted (map fst (linearize empty_queue))"
-    "(\<forall>t \<in> fst ` set (linearize empty_queue). \<not> memL (flip_int_less_lower (args_ivl args)) (cur - t))"
+    "(\<forall>t \<in> fst ` set (linearize empty_queue). t \<le> nt \<and> \<not> memL (flip_int_less_lower (args_ivl args)) (cur - t))"
     by (auto simp add: empty_queue_rep)
 
   from assms(1) have max_ts_tuple_in:
@@ -1750,6 +1757,7 @@ proof -
     valid_tuple tuple_in_once tas}"
 
 *)
+  have nt_mono: "nt \<ge> cur" "nt \<le> nt" using nt_mono by auto
   have shift_end_props:
     "table (args_n args) (args_L args) (Mapping.keys tuple_in_once')"
     "ts_tuple_rel_binary_lhs (set (filter (\<lambda>(t, rel). memR (flip_int_less_lower (args_ivl args)) (nt - t)) (auxlist_data_prev args mt auxlist))) =
@@ -1757,7 +1765,7 @@ proof -
     \<exists>db'. tas = (fst db', (restrict (args_L args) (snd db'))) \<and> valid_tuple tuple_in_once db'}"
     "newest_tuple_in_mapping fst (restrict (args_L args)) data_prev' tuple_in_once' (\<lambda>x. True)"
     "sorted (map fst (linearize data_prev'))"
-    "\<forall>t\<in>fst ` set (linearize data_prev'). t \<le> cur \<and> mem (flip_int_less_lower (args_ivl args)) (cur - t)"
+    "\<forall>t\<in>fst ` set (linearize data_prev'). t \<le> nt \<and> mem (flip_int_less_lower (args_ivl args)) (cur - t)"
     "move = snd (takedropWhile_queue (\<lambda>(t, X). \<not> memR (flip_int_less_lower (args_ivl args)) (nt - t)) data_prev)"
     "linearize data_prev' = filter (\<lambda>(t, X). memR (flip_int_less_lower (args_ivl args)) (nt - t)) (linearize data_prev)"
     "tuple_in_once' =
@@ -1766,7 +1774,7 @@ proof -
     using valid_shift_end_unfolded [of
         "(args_n args)" "(args_L args)" tuple_in_once fst "(auxlist_data_prev args mt)" auxlist
         "(\<lambda>_. {})" empty_queue fst data_prev "(\<lambda>db. \<exists>db'. db = (fst db', (restrict (args_L args) (snd db'))) \<and> valid_tuple tuple_in_once db')" fst "(args_L args)"
-        cur "flip_int_less_lower (args_ivl args)" fst "(restrict (args_L args))" "(\<lambda>x. True)" nt empty_queue' data_prev' move tuple_in_once',
+        nt "flip_int_less_lower (args_ivl args)" cur fst "(restrict (args_L args))" "(\<lambda>x. True)" nt empty_queue' data_prev' move tuple_in_once',
         OF table_tuple_in auxlist_tuples_lhs empty_queue_props(1, 3-4) 
         data_prev_props max_ts_tuple_in nt_mono shift_end_res
       ]
