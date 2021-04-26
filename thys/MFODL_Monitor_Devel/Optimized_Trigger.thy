@@ -1568,6 +1568,66 @@ lemma mem_mt_and_memR_imp_mem:
   shows "(mem (args_ivl args) (mt - t) \<and> memR (args_ivl args) (nt - t)) = (mem (args_ivl args) (mt - t) \<and> mem (args_ivl args) (nt - t))"
   using assms by auto
 
+lemma take_filter_mem:
+  assumes "\<forall>db \<in> set xs. memR I (mt - time db)"
+  assumes "sorted (map fst xs)"
+  shows "filter (\<lambda>(t, _). mem I (mt - t)) xs = take (length (filter (\<lambda>(t, _). mem I (mt - t)) xs)) xs"
+using assms proof (induction xs)
+  case Nil
+  then show ?case by auto
+next
+  case (Cons x xs)
+  then have IH: "filter (\<lambda>(t, _). mem I (mt - t)) xs = take (length (filter (\<lambda>(t, _). mem I (mt - t)) xs)) xs"
+    using Cons
+    by auto
+  from Cons(2) have x_memR: "((\<lambda>(t, _). memR I (mt - t)) x)" unfolding time_def by auto
+  show ?case
+  proof (cases "(\<lambda>(t, _). mem I (mt - t)) x")
+    case True
+    then have "filter (\<lambda>(t, _). mem I (mt - t)) (x#xs) = x#(filter (\<lambda>(t, _). mem I (mt - t)) xs)"
+      by auto
+    moreover have "take (length (filter (\<lambda>(t, _). mem I (mt - t)) (x#xs))) (x#xs) = x#(take (length (filter (\<lambda>(t, _). mem I (mt - t)) xs)) xs)"
+      using True
+      by auto
+    ultimately show ?thesis using IH by auto
+  next
+    case not_mem: False
+    then have filter_IH: "filter (\<lambda>(t, _). mem I (mt - t)) (x#xs) = (filter (\<lambda>(t, _). mem I (mt - t)) xs)"
+      by auto
+    then have takeWhile_IH: "take (length (filter (\<lambda>(t, _). mem I (mt - t)) (x#xs))) (x#xs) = take (length (filter (\<lambda>(t, _). mem I (mt - t)) xs)) (x#xs)"
+      by auto
+    show ?thesis
+    proof (cases "length (filter (\<lambda>(t, _). mem I (mt - t)) xs)")
+      case 0
+      then show ?thesis by auto
+    next
+      case (Suc nat)
+      then have takeWhile_IH: "take (length (filter (\<lambda>(t, _). mem I (mt - t)) (x#xs))) (x#xs) = x # (take nat xs)"
+        using takeWhile_IH
+        by auto
+      then show ?thesis
+      proof (cases "\<forall>db \<in> set xs. (\<lambda>(t, _). \<not>mem I (mt - t)) db")
+        case True
+        then have "filter (\<lambda>(t, _). mem I (mt - t)) (x#xs) = []"
+          using filter_IH
+          by (simp add: case_prod_beta')
+        then show ?thesis using takeWhile_IH by auto
+      next
+        case False
+        then obtain j where j_props: "((\<lambda>(t, _). mem I (mt - t)) (xs!j))" "j \<in> {0..<length xs}"
+          by (metis (mono_tags, lifting) atLeastLessThan_iff case_prod_beta' in_set_conv_nth leI not_less_zero)
+        then have "((\<lambda>(t, _). mem I (mt - t)) ((x#xs)!(Suc j)))"
+          by auto
+        moreover have "fst ((x#xs)!0) \<le> fst ((x#xs)!(Suc j))"
+          using Cons(3) j_props
+          by auto
+        ultimately have "((\<lambda>(t, _). mem I (mt - t)) x)" using x_memR by auto
+        then show ?thesis using not_mem by auto
+      qed
+    qed
+  qed
+qed
+
 lemma valid_shift_end_queues_mmtaux:
   assumes valid_before: "valid_mmtaux args cur
     (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat) auxlist"
@@ -2649,16 +2709,16 @@ proof -
     by blast
   ultimately have "map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t) \<and> mem (args_ivl args) (nt - t)) auxlist) = linearize data_in''"
     by auto
-  then have "map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)) = linearize data_in''"
+  then have lin_data_in''_eq: "map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)) = linearize data_in''"
     using filter_filter[of "(\<lambda>(t, _). mem (args_ivl args) (nt - t))" "(\<lambda>(t, _). memR (args_ivl args) (nt - t))" auxlist]
     by (auto simp add: filter_simp)
   then show "map (\<lambda>(t, l, r). (t, r)) (auxlist_data_in args nt (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)) = linearize data_in''"
     unfolding auxlist_data_in_def
     by auto
 
-  have filter_simp: "(\<lambda>(t, _). memR (args_ivl args) (nt - t) \<and> mem (args_ivl args) (nt - t)) = (\<lambda>x. (case x of (t, uu_) \<Rightarrow> memR (args_ivl args) (nt - t)) \<and> (case x of (t, uu_) \<Rightarrow> mem (args_ivl args) (nt - t)))"
+  have filter_simp: "(\<lambda>x. (case x of (t, uu_) \<Rightarrow> memR (args_ivl args) (nt - t)) \<and> (case x of (t, uu_) \<Rightarrow> mem (args_ivl args) (nt - t))) = (\<lambda>(t, _). memR (args_ivl args) (nt - t) \<and> mem (args_ivl args) (nt - t))"
     by auto
-  have filter_simp': "(\<lambda>(t, _). mem (args_ivl args) (nt - t)) = (\<lambda>(t, _). memR (args_ivl args) (nt - t) \<and> mem (args_ivl args) (nt - t))"
+  have filter_simp': "(\<lambda>(t, _). memR (args_ivl args) (nt - t) \<and> mem (args_ivl args) (nt - t)) = (\<lambda>(t, _). mem (args_ivl args) (nt - t))"
     by auto
 
 
@@ -2673,17 +2733,30 @@ proof -
   then have "length (linearize data_in'') = length (linearize data_in) - length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in)) + length (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev))"
     by auto
 
-
-  have filter_auxlist_take: "(filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) auxlist) = take (length (linearize data_in'')) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"
+  
+  have memR: "\<forall>db \<in> set (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist). memR (args_ivl args) (nt - time db)"
+    unfolding time_def
     by auto
-  then have "(filter (\<lambda>(t, _). memR (args_ivl args) (nt - t) \<and> mem (args_ivl args) (nt - t)) auxlist) = take (length (linearize data_in'')) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"
-    by (auto simp add: filter_simp')
-  then have "filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist) = take (length (linearize data_in'')) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"
-    using filter_filter[of "(\<lambda>(t, _). mem (args_ivl args) (nt - t))" "(\<lambda>(t, _). memR (args_ivl args) (nt - t))" auxlist]
-    by (auto simp add: filter_simp)
+  have "sorted (map fst auxlist)" using assms(1) by auto
+  then have sorted: "sorted (map fst (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist))"
+    using sorted_filter
+    by blast
+  have "length (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)) = length (linearize data_in'')"
+    using lin_data_in''_eq
+    by (smt length_map)
+
+  then have filter_take_eq: "filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist) = take (length (linearize data_in'')) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"
+    using take_filter_mem[OF memR sorted]
+    by auto
   then show "auxlist_data_in args nt (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist) = take (length (linearize data_in'')) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"
     unfolding auxlist_data_in_def
     by auto
+
+  from filter_take_eq have "(filter (\<lambda>(t, _). memR (args_ivl args) (nt - t) \<and> mem (args_ivl args) (nt - t)) auxlist) = take (length (linearize data_in'')) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"
+    using filter_filter[of "(\<lambda>(t, _). mem (args_ivl args) (nt - t))" "(\<lambda>(t, _). memR (args_ivl args) (nt - t))" auxlist]
+    by (auto simp add: filter_simp)
+  then have filter_auxlist_take: "(filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) auxlist) = take (length (linearize data_in'')) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"
+    by (simp only: filter_simp')
 
   have filter_simp: "(\<lambda>(t, _). mem (args_ivl args) (nt - t)) = (\<lambda>(t, _). memR (args_ivl args) (nt - t) \<and> memL (args_ivl args) (nt - t))"
     by auto
