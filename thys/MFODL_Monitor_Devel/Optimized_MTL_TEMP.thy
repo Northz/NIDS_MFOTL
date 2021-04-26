@@ -572,24 +572,24 @@ abbreviation "filter_cond_r X' r ts t' \<equiv> (\<lambda>as _. \<not> ((r as) \
 abbreviation "filter_cond X' ts t' \<equiv> filter_cond_r X' id ts t'"
 
 lemma dropWhile_filter:
-  "sorted (map fst xs) \<Longrightarrow> \<forall>t \<in> fst ` set xs. t \<le> nt \<Longrightarrow>
+  "sorted (map fst xs) \<Longrightarrow>
   dropWhile (\<lambda>(t, X). \<not> memR I (nt - t)) xs = filter (\<lambda>(t, X). memR I (nt - t)) xs"
   by (induction xs) (auto 0 3 intro!: filter_id_conv[THEN iffD2, symmetric])
 
 lemma dropWhile_filter':
   fixes nt :: nat
-  shows "sorted (map fst xs) \<Longrightarrow> \<forall>t \<in> fst ` set xs. t \<le> nt \<Longrightarrow>
+  shows "sorted (map fst xs) \<Longrightarrow>
   dropWhile (\<lambda>(t, X). memL I (nt - t)) xs = filter (\<lambda>(t, X). \<not> memL I (nt - t)) xs"
   by (induction xs) (auto 0 3 simp: memL_mono diff_le_mono intro!: filter_id_conv[THEN iffD2, symmetric])
 
 lemma takeWhile_filter:
-  "sorted (map fst xs) \<Longrightarrow> \<forall>t \<in> fst ` set xs. t \<le> nt \<Longrightarrow>
+  "sorted (map fst xs) \<Longrightarrow>
   takeWhile (\<lambda>(t, X). \<not> memR I (nt - t)) xs = filter (\<lambda>(t, X). \<not> memR I (nt - t)) xs"
   by (induction xs) (auto 0 3 simp: memR_antimono intro!: filter_empty_conv[THEN iffD2, symmetric])
 
 lemma takeWhile_filter':
   fixes nt :: nat
-  shows "sorted (map fst xs) \<Longrightarrow> \<forall>t \<in> fst ` set xs. t \<le> nt \<Longrightarrow>
+  shows "sorted (map fst xs) \<Longrightarrow>
   takeWhile (\<lambda>(t, X). memL I (nt - t)) xs = filter (\<lambda>(t, X). memL I (nt - t)) xs"
   by (induction xs) (auto 0 3 simp: memL_mono intro!: filter_empty_conv[THEN iffD2, symmetric])
 
@@ -679,12 +679,12 @@ lemma valid_shift_end_unfolded:
   assumes data_prev_props:
     "(\<forall>as \<in> \<Union>((f2 o snd) ` (set (linearize data_prev))). wf_tuple n V2 as)"
     "sorted (map fst (linearize data_prev))"
-    "(\<forall>t \<in> fst ` set (linearize data_prev). t \<le> cur \<and> \<not> memL I (cur - t))"
+    "(\<forall>t \<in> fst ` set (linearize data_prev). t \<le> t' \<and> \<not> memL I (cur - t))"
   assumes data_in_props:
     "sorted (map fst (linearize data_in))"
-    "(\<forall>t \<in> fst ` set (linearize data_in). t \<le> cur \<and> memL I (cur - t))"
+    "(\<forall>t \<in> fst ` set (linearize data_in). t \<le> t' \<and> memL I (cur - t))"
   assumes max_ts_tuple_in: "newest_tuple_in_mapping f3 r data_in tuple_in P2"
-  assumes nt_mono: "nt \<ge> cur"
+  assumes nt_mono: "nt \<ge> cur" "t' \<le> nt"
   assumes shift_end_appl: "(data_prev', data_in', discard, tuple_in') = shift_end I nt f3 r (data_prev, data_in, tuple_in)"
   shows
     "table n V1 (Mapping.keys tuple_in')"
@@ -693,9 +693,9 @@ lemma valid_shift_end_unfolded:
     P1 tas}"
     "(\<forall>as \<in> \<Union>((f2 o snd) ` (set (linearize data_prev'))). wf_tuple n V2 as)"
     "sorted (map fst (linearize data_prev'))"
-    "(\<forall>t \<in> fst ` set (linearize data_prev'). t \<le> cur \<and> \<not> memL I (cur - t))"
+    "(\<forall>t \<in> fst ` set (linearize data_prev'). t \<le> t' \<and> \<not> memL I (cur - t))"
     "sorted (map fst (linearize data_in'))"
-    "(\<forall>t \<in> fst ` set (linearize data_in'). t \<le> cur \<and> mem I (cur - t))"
+    "(\<forall>t \<in> fst ` set (linearize data_in'). t \<le> t' \<and> mem I (cur - t))"
     "newest_tuple_in_mapping f3 r data_in' tuple_in' P2"
     "discard = snd (takedropWhile_queue (\<lambda>(t, X). \<not> memR I (nt - t)) data_in)"
     "linearize data_in' = filter (\<lambda>(t, X). memR I (nt - t)) (linearize data_in)"
@@ -738,7 +738,7 @@ proof -
   show lin_data_in': "linearize data_in' =
     filter (\<lambda>(t, X). memR I (nt - t)) (linearize data_in)"
     unfolding data_in'_def[unfolded takedropWhile_queue_fst] dropWhile_queue_rep
-      dropWhile_filter[OF F1] thm dropWhile_filter[OF F1] ..
+      dropWhile_filter[OF F1(1)] thm dropWhile_filter[OF F1(1)] ..
   then have set_lin_data_in': "set (linearize data_in') \<subseteq> set (linearize data_in)"
     by auto
   show sorted_lin_data_in': "sorted (map fst (linearize data_in'))"
@@ -746,11 +746,11 @@ proof -
 
 
   have discard_alt: "discard = filter (\<lambda>(t, X). \<not> memR I (nt - t)) (linearize data_in)"
-    unfolding discard_def[unfolded takedropWhile_queue_snd] takeWhile_filter[OF F1] ..
+    unfolding discard_def[unfolded takedropWhile_queue_snd] takeWhile_filter[OF F1(1)] ..
   have lin_data_prev': "linearize data_prev' =
     filter (\<lambda>(t, X). memR I (nt - t)) (linearize data_prev)"
     unfolding data_prev'_def[unfolded takedropWhile_queue_fst] dropWhile_queue_rep
-      dropWhile_filter[OF F2] ..
+      dropWhile_filter[OF F2(1)] ..
   show sorted_lin_data_prev': "sorted (map fst (linearize data_prev'))"
     unfolding lin_data_prev' using sorted_filter data_prev_props(2) by auto
 
@@ -833,12 +833,12 @@ proof -
     by auto
 
   show
-    "(\<forall>t \<in> fst ` set (linearize data_prev'). t \<le> cur \<and> \<not> memL I (cur - t))"
+    "(\<forall>t \<in> fst ` set (linearize data_prev'). t \<le> t' \<and> \<not> memL I (cur - t))"
     using lin_data_prev' data_prev_props
     by auto
 
   show
-    "\<forall>t\<in>fst ` set (linearize data_in'). t \<le> cur \<and> mem I (cur - t)"
+    "\<forall>t\<in>fst ` set (linearize data_in'). t \<le> t' \<and> mem I (cur - t)"
     using lin_data_in' data_in_props nt_mono
     by auto
 
@@ -901,6 +901,12 @@ proof -
   from assms(1) have max_ts_tuple_in: "newest_tuple_in_mapping id id data_in tuple_in (\<lambda>x. valid_tuple tuple_since x)"
     by auto
 
+  from assms(1) have time: "cur = ot" by auto
+
+  have nt_mono: "nt \<ge> cur" "cur \<le> nt"
+    using nt_mono
+    by auto
+
   then have "valid_mmsaux args cur
     (ot, gc, maskL, maskR, data_prev', data_in', tuple_in', tuple_since)
     (filter (\<lambda>(t, rel). memR (args_ivl args) (nt - t)) auxlist)"
@@ -911,7 +917,7 @@ proof -
         OF table_tuple_in auxlist_tuples data_prev_props
         data_in_props max_ts_tuple_in nt_mono shift_end_res
       ]
-    by (auto simp only: valid_mmsaux.simps) (auto simp add: ts_tuple_rel_Un)
+    by (auto simp only: valid_mmsaux.simps time) (auto simp add: ts_tuple_rel_Un)
   (* is slow *)
 
   moreover have "(ot, gc, maskL, maskR, data_prev', data_in', tuple_in', tuple_since) =
@@ -1113,10 +1119,10 @@ proof -
  
   have lin_data_prev': "linearize data_prev' =
     filter (\<lambda>(t, X). \<not> memL I (nt - t)) (linearize data_prev)"
-    unfolding data_prev'_def[unfolded takedropWhile_queue_fst] dropWhile_queue_rep dropWhile_filter'[OF F2(1,2)]
+    unfolding data_prev'_def[unfolded takedropWhile_queue_fst] dropWhile_queue_rep dropWhile_filter'[OF F2(1)]
     ..
   have move_filter: "move = filter (\<lambda>(t, X). memL I (nt - t)) (linearize data_prev)"
-    unfolding move_def[unfolded takedropWhile_queue_snd] takeWhile_filter'[OF F2(1,2)] ..
+    unfolding move_def[unfolded takedropWhile_queue_snd] takeWhile_filter'[OF F2(1)] ..
   then have sorted_move: "sorted (map fst move)"
     using sorted_filter F2 by auto
   have "\<forall>t\<in>fst ` set move. t \<le> cur \<and> \<not> memL I (cur - t)"
