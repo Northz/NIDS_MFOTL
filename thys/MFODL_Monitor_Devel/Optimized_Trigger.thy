@@ -1897,6 +1897,134 @@ lemma idx_append_snd: "i \<in> {length ys..<length xs} \<Longrightarrow> xs = ys
 lemma nth_set_member: "i \<in> {0..<length xs} \<Longrightarrow> xs!i \<in> set xs"
   by auto
 
+lemma tuple_since_hist_lookup_eq:
+  assumes "(\<forall>as. (case Mapping.lookup tuple_since_hist as of
+    Some idx \<Rightarrow> tuple_since_tp args as (linearize data_in) idx_oldest idx_mid idx
+    | None   \<Rightarrow> \<forall>idx. \<not>tuple_since_tp args as (linearize data_in) idx_oldest idx_mid idx)
+  )"
+  assumes "tuple_since_tp args as (linearize data_in) idx_oldest idx_mid jdx" "jdx > idx_oldest"
+  assumes "length (linearize data_in) + idx_oldest = idx_mid"
+  shows "Mapping.lookup tuple_since_hist as = Some jdx"
+proof -
+  (* (idx_oldest + j + 1) = jdx *)
+  define j where "j = jdx - idx_oldest - 1"
+
+  from assms(2) have in_nonempty: "linearize data_in \<noteq> []"
+    unfolding tuple_since_tp_def
+    by auto
+
+  from assms(2-3) have jdx_props: "jdx < idx_mid" "jdx > idx_oldest"
+    unfolding tuple_since_tp_def
+    by auto
+  moreover have "as \<notin> snd ((linearize data_in)!j)"
+    using assms(2) jdx_props(2)
+    unfolding tuple_since_tp_def j_def
+    by auto
+  ultimately have j_props: "j \<in> {0..<length (linearize data_in) - 1}" "as \<notin> snd ((linearize data_in)!j)"
+    using assms(4)
+    unfolding j_def
+    by auto
+
+  from assms(2) have all_relR: "(\<forall>(t, y)\<in>set (drop ((idx_oldest + j + 1) - idx_oldest) (linearize data_in)). as \<in> y)"
+    using jdx_props(2)
+    unfolding tuple_since_tp_def j_def
+    by fastforce
+
+  obtain idx where idx_props:
+    "Mapping.lookup tuple_since_hist as = Some idx"
+    "tuple_since_tp args as (linearize data_in) idx_oldest idx_mid idx"
+    using assms(1) assms(2)
+    by (auto split: option.splits)
+  then have idx_l: "idx < idx_mid"
+    unfolding tuple_since_tp_def
+    by auto
+  {
+    assume assm: "idx < (idx_oldest + j + 1)"
+    then have "(linearize data_in)!j = (drop (idx - idx_oldest) (linearize data_in))!(j - (idx - idx_oldest))"
+      using idx_props(2) j_props(1) assms(4)
+      unfolding tuple_since_tp_def
+      by (metis One_nat_def Suc_leI add.right_neutral add_Suc_right add_diff_cancel_left' add_diff_cancel_right' diff_Suc_Suc diff_le_mono le_add_diff_inverse less_imp_le_nat nth_drop)
+    then have "(linearize data_in)!j \<in> set (drop (idx - idx_oldest) (linearize data_in))"
+      using j_props(1) assm 
+      by (metis (no_types, lifting) One_nat_def Suc_leI add.commute add.right_neutral add_Suc_right atLeastLessThan_iff diff_le_self diff_less_mono le_def length_drop less_diff_conv less_le_trans nth_mem)
+    moreover have "(\<forall>(t, y)\<in>set (drop (idx - idx_oldest) (linearize data_in)). as \<in> y)"
+      using idx_props(2)
+      unfolding tuple_since_tp_def
+      by auto
+    ultimately have "as \<in> snd ((linearize data_in)!j)" by auto
+    then have "False" using j_props(2) by auto
+  }
+  moreover {
+    assume assm: "idx > idx_oldest + j + 1"
+    then have geq_drop: "idx - idx_oldest - 1 \<ge> j + 1"
+      by auto
+    moreover have l_len: "(idx - idx_oldest - 1) < length (linearize data_in)"
+      using idx_l assms(4) in_nonempty assm
+      by linarith
+    ultimately have "linearize data_in ! (idx - idx_oldest - 1) = (drop (j + 1) (linearize data_in))!(idx - idx_oldest - 1 - j - 1)"
+      by (smt diff_diff_left le_add_diff_inverse le_less_trans less_imp_le_nat nth_drop)
+    then have "(linearize data_in ! (idx - idx_oldest - 1)) \<in> set (drop (j + 1) (linearize data_in))"
+      by (metis (no_types, lifting) l_len geq_drop diff_diff_left diff_less_mono length_drop nth_mem)
+    then have "as \<in> snd (linearize data_in ! (idx - idx_oldest - 1))"
+      using all_relR
+      by auto
+    moreover have "as \<notin> snd (linearize data_in ! (idx - idx_oldest - 1))"
+      using assm idx_props(2)
+      unfolding tuple_since_tp_def
+      by auto
+    ultimately have "False" by auto
+  }
+  ultimately have "idx = (idx_oldest + j + 1)"
+    using linorder_neqE_nat
+    by blast
+  then have "idx = jdx"
+    using jdx_props
+    unfolding j_def
+    by auto
+  then show ?thesis using idx_props(1) by auto
+qed
+
+lemma tuple_since_hist_lookup_leq:
+  assumes "(case Mapping.lookup tuple_since_hist as of
+    Some idx \<Rightarrow> tuple_since_tp args as lin_data_in idx_oldest idx_mid idx
+    | None   \<Rightarrow> \<forall>idx. \<not>tuple_since_tp args as lin_data_in idx_oldest idx_mid idx)
+  "
+  assumes "tuple_since_tp args as lin_data_in idx_oldest idx_mid idx_oldest"
+  assumes "length lin_data_in + idx_oldest = idx_mid"
+  shows "\<exists>idx. Mapping.lookup tuple_since_hist as = Some idx \<and> idx \<le> idx_oldest"
+proof -
+  {
+    assume assm: "\<not>(\<exists>idx. Mapping.lookup tuple_since_hist as = Some idx \<and> idx \<le> idx_oldest)"
+    have "False"
+    proof (cases "Mapping.lookup tuple_since_hist as")
+      case None
+      then show ?thesis
+        using assms(1-2)
+        by (metis option.simps(4))
+    next
+      case (Some idx)
+      then have "tuple_since_tp args as lin_data_in idx_oldest idx_mid idx"
+        using assms(1)
+        by (auto split: option.splits)
+      moreover have "idx > idx_oldest" using Some assm by auto
+      ultimately have
+        "idx < idx_mid"
+        "idx > idx_oldest"
+        "as \<notin> snd (lin_data_in ! (idx - idx_oldest - 1))"
+        unfolding tuple_since_tp_def
+        by auto
+      moreover have "(\<forall>(t, y)\<in>set (lin_data_in). as \<in> y)"
+        using assms(2)
+        unfolding tuple_since_tp_def
+        by auto
+      ultimately show ?thesis
+        using assms(3)
+        by (simp add: case_prod_beta')
+    qed
+  }
+  then show ?thesis by auto
+qed
+
 lemma idx_append: "i < length xs \<Longrightarrow> ((xs @ [x])!i) = (xs!i)"
   by (simp add: nth_append)
 
@@ -3197,9 +3325,9 @@ proof -
     (case Mapping.lookup (tuple_since_hist_mv move init_tuple) as of
       Some idx \<Rightarrow> tuple_since_tp args as (lin_data_in''_mv move) (idx_oldest_mv move) (idx_mid_mv move) idx
       | None   \<Rightarrow> \<forall>idx. \<not>tuple_since_tp args as (lin_data_in''_mv move) (idx_oldest_mv move) (idx_mid_mv move) idx) \<and>
-    (\<forall>tuple. tuple \<in> (hist_sat_mv move init_tuple) \<longleftrightarrow>
+    (as \<in> (hist_sat_mv move init_tuple) \<longleftrightarrow>
       ((lin_data_in''_mv move) \<noteq> []) \<and> (
-        \<forall>(t, r) \<in> set (lin_data_in''_mv move). tuple \<in> r
+        \<forall>(t, r) \<in> set (lin_data_in''_mv move). as \<in> r
     )) \<and>
     get_idx_move (fold fold_op_f move init_tuple) = (idx_mid_mv move) \<and>
     (case Mapping.lookup (fst (fold fold_op_f move init_tuple)) as of Some idx \<Rightarrow> idx < (idx_mid_mv move) | None \<Rightarrow> True)"
@@ -3359,299 +3487,252 @@ proof -
           by auto
         ultimately show ?thesis by auto
       qed
-      moreover have "(\<forall>tuple. tuple \<in> (hist_sat_mv [] init_tuple) \<longleftrightarrow>
+      moreover have "(as \<in> (hist_sat_mv [] init_tuple) \<longleftrightarrow>
         ((lin_data_in''_mv []) \<noteq> []) \<and> (
-          \<forall>(t, r) \<in> set (lin_data_in''_mv []). tuple \<in> r
+          \<forall>(t, r) \<in> set (lin_data_in''_mv []). as \<in> r
         ))"
       proof -
         {
-          fix tuple
-
-          {
-            assume assm: "tuple \<in> (hist_sat_mv [] init_tuple)"
-            then have non_empty: "lin_data_in''_mv [] \<noteq> []"
-              unfolding hist_sat_mv_def
-              by auto
-            then obtain db dbs where db_props: "lin_data_in''_mv [] = db # dbs"
-              using list.exhaust
-              by blast
-            have "\<forall>(t, r) \<in> set (lin_data_in''_mv []). tuple \<in> r"
-            proof -
-              {
-                fix t r
-                assume "(t, r) \<in> set (lin_data_in''_mv [])"
-                then have list_mem: "(t, r) \<in> set (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in))"
-                  unfolding lin_data_in''_mv_def data_in'_eq
-                  by auto
-                have "(fst \<circ> snd) (fold fold_op_f [] init_tuple) = hist_sat"
-                  unfolding init_tuple_def 
-                  by auto
-                moreover have "tuple_since_hist_mv [] init_tuple = tuple_since_hist"
-                  using non_empty Nil(1)
-                  unfolding tuple_since_hist_mv_def init_tuple_def 
-                  by auto
-                ultimately have "tuple \<in> hist_sat \<union> {as \<in> snd db. case Mapping.lookup tuple_since_hist as of Some idx \<Rightarrow> idx \<le> idx_oldest_mv [] | None \<Rightarrow> False}"
-                  using assm db_props
-                  unfolding hist_sat_mv_def
-                  by auto
-                moreover {
-                  assume "tuple \<in> hist_sat"
-                  then have "\<forall>(t, r)\<in>set (linearize data_in). tuple \<in> r" using tuple_init_props_hist_sat by auto
-                  then have "tuple \<in> r" using list_mem by auto
-                }
-                moreover {
-                  assume "tuple \<in> {as \<in> snd db. case Mapping.lookup tuple_since_hist as of Some idx \<Rightarrow> idx \<le> idx_oldest_mv [] | None \<Rightarrow> False}"
-                  then have "tuple \<in> snd db" "(case Mapping.lookup tuple_since_hist tuple of Some idx \<Rightarrow> idx \<le> idx_oldest_mv [] | None \<Rightarrow> False)"
-                    by auto
-                  then obtain idx where idx_props: "Mapping.lookup tuple_since_hist tuple = Some idx" "idx \<le> idx_oldest_mv []"
-                    using case_optionE
-                    by blast
-                  then have "tuple_since_tp args tuple (linearize data_in) idx_oldest idx_mid idx"
-                    using tuple_init_props
-                    by (auto split: option.splits)
-                  then have "(\<forall>(t, y)\<in>set (drop (idx - idx_oldest) (linearize data_in)). tuple \<in> y)"
-                    unfolding tuple_since_tp_def
-                    by auto
-                  then have "(\<forall>(t, y)\<in>set (drop (idx_oldest_mv [] - idx_oldest) (linearize data_in)). tuple \<in> y)"
-                    using idx_props(2)
-                    by (meson diff_le_mono set_drop_subset_set_drop subsetD)
-                  then have "(\<forall>(t, y)\<in>set (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in)). tuple \<in> y)"
-                    using data_sorted[OF assms(1)] drop_filter_memR[of "linearize data_in" "args_ivl args" nt]
-                    unfolding idx_oldest_mv_def
-                    by auto
-                  then have "tuple \<in> r" using list_mem by auto
-                }
-                ultimately have "tuple \<in> r" by auto
-              }
-              then show ?thesis by auto
-            qed
-            then have "((lin_data_in''_mv []) \<noteq> []) \<and> (
-              \<forall>(t, r) \<in> set (lin_data_in''_mv []). tuple \<in> r
-            )" using non_empty by auto
-          }
-          moreover {
-            assume assm:
-              "((lin_data_in''_mv []) \<noteq> [])" 
-              "\<forall>(t, r) \<in> set (lin_data_in''_mv []). tuple \<in> r"
-            then obtain db dbs where db_props: "lin_data_in''_mv [] = db # dbs"
-              using list.exhaust
-              by blast
-            then have db_in: "db \<in> set (linearize data_in)"
-              by (metis db_props in_set_dropD lin_data_in''_eq list.set_intros(1))
-            have db_mem: "(\<lambda>(t, _). memR (args_ivl args) (nt - t)) db"
-              using db_props
-              unfolding lin_data_in''_mv_def data_in'_eq
-              by (metis (no_types, lifting) append_Nil2 filter.simps(1) list.set_intros(1) list.simps(8) mem_Collect_eq set_filter)
-            from assm(2) have all_relR: "\<forall>(t, r) \<in> set (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in)). tuple \<in> r"
-              unfolding lin_data_in''_mv_def data_in'_eq
-              by auto
-
-            have db_relR: "tuple \<in> snd db"
-              using db_props assm(2)
-              by auto
-
-            have in_nonempty: "linearize data_in \<noteq> []" using assm(1) unfolding lin_data_in''_mv_def data_in'_eq by auto
-
-            define l where "l = drop (length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))) (linearize data_in)"
-            define in_but_last where "in_but_last = (take (length (linearize data_in) - 1) (linearize data_in))"
-
-            have l_props: "l \<noteq> []"
-                 "\<forall>(t, r)\<in>set l. tuple \<in> r"
-              using assm data_sorted[OF assms(1)] drop_filter_memR[of "linearize data_in" "args_ivl args" nt]
-              unfolding lin_data_in''_mv_def data_in'_eq l_def
-              by auto
-            then have last_l_mem: "last (linearize data_in) \<in> set l"
-              unfolding l_def
-              by (metis drop_eq_Nil last_drop last_in_set leI)
-            then have last_relR: "tuple \<in> snd (last (linearize data_in))"
-              using l_props(2)
-              by auto
-            have data_in_split: "linearize data_in = in_but_last @ [last (linearize data_in)]"
-              using in_nonempty
-                    drop_last[of "linearize data_in"]
-              unfolding in_but_last_def
-              by (simp add: Suc_leI atd_lem)
-
+          assume assm: "as \<in> (hist_sat_mv [] init_tuple)"
+          then have non_empty: "lin_data_in''_mv [] \<noteq> []"
+            unfolding hist_sat_mv_def
+            by auto
+          then obtain db dbs where db_props: "lin_data_in''_mv [] = db # dbs"
+            using list.exhaust
+            by blast
+          have "\<forall>(t, r) \<in> set (lin_data_in''_mv []). as \<in> r"
+          proof -
             {
-              assume assm_all: "\<forall>(t, r) \<in> set in_but_last. tuple \<in> r"
-              then have "\<forall>(t, r) \<in> set (linearize data_in). tuple \<in> r"
-                using assm_all l_props(2) data_in_split last_l_mem
-                by (metis in_set_simps(4) list_appendE set_ConsD)
-              then have "tuple \<in> hist_sat" using tuple_init_props_hist_sat in_nonempty is_empty_alt
+              fix t r
+              assume "(t, r) \<in> set (lin_data_in''_mv [])"
+              then have list_mem: "(t, r) \<in> set (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in))"
+                unfolding lin_data_in''_mv_def data_in'_eq
                 by auto
-            }
-            moreover {
-              define A where "A = {i \<in> {0..<length (linearize data_in) - 1}. tuple \<notin> snd ((linearize data_in)!i)}"
-              define j where "j = Max A"
-              assume "\<exists>(t, r) \<in> set in_but_last. tuple \<notin> r"
-              then obtain i where "i \<in> {0..<length (linearize data_in) - 1}" "tuple \<notin> snd ((linearize data_in)!i)"
-                unfolding in_but_last_def
-                by (metis (no_types, lifting) case_prodE diff_le_self imageE nth_image snd_conv)
-              then have "i \<in> A" unfolding A_def by auto
-              then have A_props: "A \<noteq> {}" "finite A" unfolding A_def by auto
-              then have "j \<in> A" unfolding j_def by auto
-              then have j_props: "j \<in> {0..<length (linearize data_in) - 1}" "tuple \<notin> snd ((linearize data_in)!j)"
-                unfolding A_def
+              have "(fst \<circ> snd) (fold fold_op_f [] init_tuple) = hist_sat"
+                unfolding init_tuple_def 
                 by auto
-              then have j_l: "(idx_oldest + j + 1) < idx_mid"
-                using data_in_len
+              moreover have "tuple_since_hist_mv [] init_tuple = tuple_since_hist"
+                using non_empty Nil(1)
+                unfolding tuple_since_hist_mv_def init_tuple_def 
                 by auto
-              {
-                assume "j + 1 > length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))"
-                then have j_geq: "j \<ge> length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))"
-                  by auto
-                moreover have "filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in) = takeWhile (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in)"
-                  using data_sorted[OF assms(1)] sorted_filter_takeWhile_not_memR[of "linearize data_in" args nt]
-                  by auto
-                moreover have "linearize data_in = (takeWhile (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in)) @ (dropWhile (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))"
-                  by auto
-                ultimately have "((linearize data_in)!j) = (dropWhile (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))!(j - length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in)))"
-                  using j_props(1) idx_append_snd[of j "(takeWhile (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))" "linearize data_in" "(dropWhile (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))"]
-                  by auto
-                then have jth: "((linearize data_in)!j) = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in)!(j - length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in)))"
-                  using data_sorted[OF assms(1)] sorted_filter_dropWhile_memR[of "linearize data_in" args nt]
-                  by auto
-                have "j - length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in)) \<in> {0..<length (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in))}"
-                  using j_geq j_props(1) sum_length_filter_compl[of "(\<lambda>(t, _). memR (args_ivl args) (nt - t))" "(linearize data_in)"]
-                  by (auto simp add: filter_simp)
-                then have "filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in)!(j - length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))) \<in> set (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in))"
-                  using nth_set_member[of "j - length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))" "filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in)"]
-                  by auto
-                then have "tuple \<in> snd ((linearize data_in)!j)"
-                  using jth all_relR
-                  by auto
-                then have "False" using j_props(2) by auto
-              }
-              then have j_suc_leq: "j + 1 \<le> length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))"
-                using le_def
-                by blast
-              {
-                fix t y
-                assume "(t, y)\<in>set (drop ((idx_oldest + j + 1) - idx_oldest) (linearize data_in))"
-                then have assm: "(t, y)\<in>set (drop ((idx_oldest + j + 1) - idx_oldest) (in_but_last @ [last (linearize data_in)]))"
-                  using data_in_split
-                  by auto
-                have "tuple \<in> y"
-                proof (cases "(t, y)\<in>set (drop ((idx_oldest + j + 1) - idx_oldest) in_but_last)")
-                  case True
-                  then obtain k' where k'_props: "k' \<in> {0..<length in_but_last - j - 1}" "(drop (j+1) in_but_last)!k' = (t, y)"
-                    by (metis (no_types, lifting) One_nat_def add.right_neutral add_Suc_right atLeastLessThan_iff diff_add_inverse diff_diff_left in_set_conv_nth leI length_drop not_less_zero)
-                  
-                  define k where "k = k' + j + 1"
-                  have "in_but_last!k = (t, y)" "k \<in> {j+1..<length in_but_last}"
-                    using k'_props j_props(1)
-                    unfolding k_def
-                    by (auto simp add: add.commute)
-                  then have k_props: "(linearize data_in)!k = (t, y)" "k \<in> {j+1..<length (linearize data_in) - 1}"
-                    unfolding in_but_last_def
-                    by auto
-                  {
-                    assume "tuple \<notin> y"
-                    then have "k \<in> A" using k_props unfolding A_def by auto
-                    then have "k \<le> j" using A_props unfolding j_def by auto
-                    then have "False" using k_props(2) by auto
-                  }
-                  then show ?thesis by auto
-                next
-                  case False
-                  {
-                    assume "(t, y) \<noteq> last (linearize data_in)"
-                    then have "(t, y) \<notin> set (drop ((idx_oldest + j + 1) - idx_oldest) (in_but_last @ [last (linearize data_in)]))"
-                      using False
-                      using in_set_dropD
-                      by fastforce
-                    then have "False"
-                      using assm
-                      by auto
-                  }
-                  then have "(t, y) = last (linearize data_in)" using assm by auto
-                  then show ?thesis
-                    using last_relR
-                    by (metis snd_conv)
-                qed
-              }
-              then have all_relR: "(\<forall>(t, y)\<in>set (drop ((idx_oldest + j + 1) - idx_oldest) (linearize data_in)). tuple \<in> y)"
+              ultimately have "as \<in> hist_sat \<union> {as \<in> snd db. case Mapping.lookup tuple_since_hist as of Some idx \<Rightarrow> idx \<le> idx_oldest_mv [] | None \<Rightarrow> False}"
+                using assm db_props
+                unfolding hist_sat_mv_def
                 by auto
-
-              moreover have "tuple \<notin> snd (linearize data_in ! ((idx_oldest + j + 1) - idx_oldest - 1))"
-                using j_props(2)
-                by auto
-  
-              ultimately have "tuple_since_tp args tuple (linearize data_in) idx_oldest idx_mid (idx_oldest + j + 1)"
-                using in_nonempty j_l
-                unfolding tuple_since_tp_def
-                by auto
-              then obtain idx where idx_props:
-                "Mapping.lookup tuple_since_hist tuple = Some idx"
-                "tuple_since_tp args tuple (linearize data_in) idx_oldest idx_mid idx"
-                using tuple_init_props
-                by (auto split: option.splits)
-              then have idx_l: "idx < idx_mid"
-                unfolding tuple_since_tp_def
-                by auto
-              {
-                assume assm: "idx < (idx_oldest + j + 1)"
-                then have "(linearize data_in)!j = (drop (idx - idx_oldest) (linearize data_in))!(j - (idx - idx_oldest))"
-                  using j_props(1) idx_props(2)
-                  unfolding tuple_since_tp_def
-                  by (metis One_nat_def Suc_leI add.right_neutral add_Suc_right add_diff_cancel_left' add_diff_cancel_right' data_in_len diff_Suc_Suc diff_le_mono le_add_diff_inverse less_imp_le_nat nth_drop)
-                then have "(linearize data_in)!j \<in> set (drop (idx - idx_oldest) (linearize data_in))"
-                  using j_props(1) assm 
-                  by (metis (no_types, lifting) One_nat_def Suc_leI add.commute add.right_neutral add_Suc_right atLeastLessThan_iff diff_le_self diff_less_mono le_def length_drop less_diff_conv less_le_trans nth_mem)
-                moreover have "(\<forall>(t, y)\<in>set (drop (idx - idx_oldest) (linearize data_in)). tuple \<in> y)"
-                  using idx_props(2)
-                  unfolding tuple_since_tp_def
-                  by auto
-                ultimately have "tuple \<in> snd ((linearize data_in)!j)" by auto
-                then have "False" using j_props(2) by auto
+              moreover {
+                assume "as \<in> hist_sat"
+                then have "\<forall>(t, r)\<in>set (linearize data_in). as \<in> r" using tuple_init_props_hist_sat by auto
+                then have "as \<in> r" using list_mem by auto
               }
               moreover {
-                assume assm: "idx > idx_oldest + j + 1"
-                then have geq_drop: "idx - idx_oldest - 1 \<ge> j + 1"
+                assume "as \<in> {as \<in> snd db. case Mapping.lookup tuple_since_hist as of Some idx \<Rightarrow> idx \<le> idx_oldest_mv [] | None \<Rightarrow> False}"
+                then have "as \<in> snd db" "(case Mapping.lookup tuple_since_hist as of Some idx \<Rightarrow> idx \<le> idx_oldest_mv [] | None \<Rightarrow> False)"
                   by auto
-                moreover have l_len: "(idx - idx_oldest - 1) < length (linearize data_in)"
-                  using idx_l data_in_len in_nonempty assm
-                  by linarith
-                ultimately have "linearize data_in ! (idx - idx_oldest - 1) = (drop (j + 1) (linearize data_in))!(idx - idx_oldest - 1 - j - 1)"
-                  by (smt diff_diff_left le_add_diff_inverse le_less_trans less_imp_le_nat nth_drop)
-                then have "(linearize data_in ! (idx - idx_oldest - 1)) \<in> set (drop (j + 1) (linearize data_in))"
-                  by (metis (no_types, lifting) l_len geq_drop diff_diff_left diff_less_mono length_drop nth_mem)
-                then have "tuple \<in> snd (linearize data_in ! (idx - idx_oldest - 1))"
-                  using all_relR
-                  by auto
-                moreover have "tuple \<notin> snd (linearize data_in ! (idx - idx_oldest - 1))"
-                  using assm idx_props(2)
+                then obtain idx where idx_props: "Mapping.lookup tuple_since_hist as = Some idx" "idx \<le> idx_oldest_mv []"
+                  using case_optionE
+                  by blast
+                then have "tuple_since_tp args as (linearize data_in) idx_oldest idx_mid idx"
+                  using tuple_init_props
+                  by (auto split: option.splits)
+                then have "(\<forall>(t, y)\<in>set (drop (idx - idx_oldest) (linearize data_in)). as \<in> y)"
                   unfolding tuple_since_tp_def
                   by auto
-                ultimately have "False" by auto
+                then have "(\<forall>(t, y)\<in>set (drop (idx_oldest_mv [] - idx_oldest) (linearize data_in)). as \<in> y)"
+                  using idx_props(2)
+                  by (meson diff_le_mono set_drop_subset_set_drop subsetD)
+                then have "(\<forall>(t, y)\<in>set (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in)). as \<in> y)"
+                  using data_sorted[OF assms(1)] drop_filter_memR[of "linearize data_in" "args_ivl args" nt]
+                  unfolding idx_oldest_mv_def
+                  by auto
+                then have "as \<in> r" using list_mem by auto
               }
-              ultimately have "idx = (idx_oldest + j + 1)"
-                using linorder_neqE_nat
-                by blast
-              moreover have "idx_oldest + j + 1 \<le> idx_oldest_mv []"
-                using j_suc_leq
-                unfolding idx_oldest_mv_def
-                by auto
-              ultimately have "tuple \<in> {as \<in> snd db. case Mapping.lookup tuple_since_hist as of Some idx \<Rightarrow> idx \<le> idx_oldest_mv [] | None \<Rightarrow> False}"
-                using db_relR idx_props(1)
-                unfolding idx_oldest_mv_def
-                by auto
+              ultimately have "as \<in> r" by auto
             }
+            then show ?thesis by auto
+          qed
+          then have "((lin_data_in''_mv []) \<noteq> []) \<and> (
+            \<forall>(t, r) \<in> set (lin_data_in''_mv []). as \<in> r
+          )" using non_empty by auto
+        }
+        moreover {
+          assume assm:
+            "((lin_data_in''_mv []) \<noteq> [])" 
+            "\<forall>(t, r) \<in> set (lin_data_in''_mv []). as \<in> r"
+          then obtain db dbs where db_props: "lin_data_in''_mv [] = db # dbs"
+            using list.exhaust
+            by blast
+          then have db_in: "db \<in> set (linearize data_in)"
+            by (metis db_props in_set_dropD lin_data_in''_eq list.set_intros(1))
+          have db_mem: "(\<lambda>(t, _). memR (args_ivl args) (nt - t)) db"
+            using db_props
+            unfolding lin_data_in''_mv_def data_in'_eq
+            by (metis (no_types, lifting) append_Nil2 filter.simps(1) list.set_intros(1) list.simps(8) mem_Collect_eq set_filter)
+          from assm(2) have all_relR: "\<forall>(t, r) \<in> set (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in)). as \<in> r"
+            unfolding lin_data_in''_mv_def data_in'_eq
+            by auto
 
-            ultimately have "tuple \<in> hist_sat \<union> {as \<in> snd db. case Mapping.lookup tuple_since_hist as of Some idx \<Rightarrow> idx \<le> idx_oldest_mv [] | None \<Rightarrow> False}"
+          have db_relR: "as \<in> snd db"
+            using db_props assm(2)
+            by auto
+
+          have in_nonempty: "linearize data_in \<noteq> []" using assm(1) unfolding lin_data_in''_mv_def data_in'_eq by auto
+
+          define l where "l = drop (length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))) (linearize data_in)"
+          define in_but_last where "in_but_last = (take (length (linearize data_in) - 1) (linearize data_in))"
+
+          have l_props: "l \<noteq> []"
+               "\<forall>(t, r)\<in>set l. as \<in> r"
+            using assm data_sorted[OF assms(1)] drop_filter_memR[of "linearize data_in" "args_ivl args" nt]
+            unfolding lin_data_in''_mv_def data_in'_eq l_def
+            by auto
+          then have last_l_mem: "last (linearize data_in) \<in> set l"
+            unfolding l_def
+            by (metis drop_eq_Nil last_drop last_in_set leI)
+          then have last_relR: "as \<in> snd (last (linearize data_in))"
+            using l_props(2)
+            by auto
+          have data_in_split: "linearize data_in = in_but_last @ [last (linearize data_in)]"
+            using in_nonempty
+                  drop_last[of "linearize data_in"]
+            unfolding in_but_last_def
+            by (simp add: Suc_leI atd_lem)
+
+          {
+            assume assm_all: "\<forall>(t, r) \<in> set in_but_last. as \<in> r"
+            then have "\<forall>(t, r) \<in> set (linearize data_in). as \<in> r"
+              using assm_all l_props(2) data_in_split last_l_mem
+              by (metis in_set_simps(4) list_appendE set_ConsD)
+            then have "as \<in> hist_sat" using tuple_init_props_hist_sat in_nonempty is_empty_alt
               by auto
-            then have "tuple \<in> (hist_sat_mv [] init_tuple)"
-              using assm(1) db_props Nil(1)
-              unfolding hist_sat_mv_def init_tuple_def tuple_since_hist_mv_def
-              by (auto split: list.splits)
+          }
+          moreover {
+            define A where "A = {i \<in> {0..<length (linearize data_in) - 1}. as \<notin> snd ((linearize data_in)!i)}"
+            define j where "j = Max A"
+            assume "\<exists>(t, r) \<in> set in_but_last. as \<notin> r"
+            then obtain i where "i \<in> {0..<length (linearize data_in) - 1}" "as \<notin> snd ((linearize data_in)!i)"
+              unfolding in_but_last_def
+              by (metis (no_types, lifting) case_prodE diff_le_self imageE nth_image snd_conv)
+            then have "i \<in> A" unfolding A_def by auto
+            then have A_props: "A \<noteq> {}" "finite A" unfolding A_def by auto
+            then have "j \<in> A" unfolding j_def by auto
+            then have j_props: "j \<in> {0..<length (linearize data_in) - 1}" "as \<notin> snd ((linearize data_in)!j)"
+              unfolding A_def
+              by auto
+            then have j_l: "(idx_oldest + j + 1) < idx_mid"
+              using data_in_len
+              by auto
+            {
+              assume "j + 1 > length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))"
+              then have j_geq: "j \<ge> length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))"
+                by auto
+              moreover have "filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in) = takeWhile (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in)"
+                using data_sorted[OF assms(1)] sorted_filter_takeWhile_not_memR[of "linearize data_in" args nt]
+                by auto
+              moreover have "linearize data_in = (takeWhile (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in)) @ (dropWhile (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))"
+                by auto
+              ultimately have "((linearize data_in)!j) = (dropWhile (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))!(j - length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in)))"
+                using j_props(1) idx_append_snd[of j "(takeWhile (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))" "linearize data_in" "(dropWhile (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))"]
+                by auto
+              then have jth: "((linearize data_in)!j) = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in)!(j - length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in)))"
+                using data_sorted[OF assms(1)] sorted_filter_dropWhile_memR[of "linearize data_in" args nt]
+                by auto
+              have "j - length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in)) \<in> {0..<length (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in))}"
+                using j_geq j_props(1) sum_length_filter_compl[of "(\<lambda>(t, _). memR (args_ivl args) (nt - t))" "(linearize data_in)"]
+                by (auto simp add: filter_simp)
+              then have "filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in)!(j - length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))) \<in> set (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in))"
+                using nth_set_member[of "j - length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))" "filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in)"]
+                by auto
+              then have "as \<in> snd ((linearize data_in)!j)"
+                using jth all_relR
+                by auto
+              then have "False" using j_props(2) by auto
+            }
+            then have j_suc_leq: "j + 1 \<le> length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))"
+              using le_def
+              by blast
+            {
+              fix t y
+              assume "(t, y)\<in>set (drop ((idx_oldest + j + 1) - idx_oldest) (linearize data_in))"
+              then have assm: "(t, y)\<in>set (drop ((idx_oldest + j + 1) - idx_oldest) (in_but_last @ [last (linearize data_in)]))"
+                using data_in_split
+                by auto
+              have "as \<in> y"
+              proof (cases "(t, y)\<in>set (drop ((idx_oldest + j + 1) - idx_oldest) in_but_last)")
+                case True
+                then obtain k' where k'_props: "k' \<in> {0..<length in_but_last - j - 1}" "(drop (j+1) in_but_last)!k' = (t, y)"
+                  by (metis (no_types, lifting) One_nat_def add.right_neutral add_Suc_right atLeastLessThan_iff diff_add_inverse diff_diff_left in_set_conv_nth leI length_drop not_less_zero)
+                
+                define k where "k = k' + j + 1"
+                have "in_but_last!k = (t, y)" "k \<in> {j+1..<length in_but_last}"
+                  using k'_props j_props(1)
+                  unfolding k_def
+                  by (auto simp add: add.commute)
+                then have k_props: "(linearize data_in)!k = (t, y)" "k \<in> {j+1..<length (linearize data_in) - 1}"
+                  unfolding in_but_last_def
+                  by auto
+                {
+                  assume "as \<notin> y"
+                  then have "k \<in> A" using k_props unfolding A_def by auto
+                  then have "k \<le> j" using A_props unfolding j_def by auto
+                  then have "False" using k_props(2) by auto
+                }
+                then show ?thesis by auto
+              next
+                case False
+                {
+                  assume "(t, y) \<noteq> last (linearize data_in)"
+                  then have "(t, y) \<notin> set (drop ((idx_oldest + j + 1) - idx_oldest) (in_but_last @ [last (linearize data_in)]))"
+                    using False
+                    using in_set_dropD
+                    by fastforce
+                  then have "False"
+                    using assm
+                    by auto
+                }
+                then have "(t, y) = last (linearize data_in)" using assm by auto
+                then show ?thesis
+                  using last_relR
+                  by (metis snd_conv)
+              qed
+            }
+            then have all_relR: "(\<forall>(t, y)\<in>set (drop ((idx_oldest + j + 1) - idx_oldest) (linearize data_in)). as \<in> y)"
+              by auto
+
+            moreover have "as \<notin> snd (linearize data_in ! ((idx_oldest + j + 1) - idx_oldest - 1))"
+              using j_props(2)
+              by auto
+
+            ultimately have tp: "tuple_since_tp args as (linearize data_in) idx_oldest idx_mid (idx_oldest + j + 1)"
+              using in_nonempty j_l
+              unfolding tuple_since_tp_def
+              by auto
+            then obtain idx where idx_props:
+              "Mapping.lookup tuple_since_hist as = Some idx"
+              "tuple_since_tp args as (linearize data_in) idx_oldest idx_mid idx"
+              using tuple_init_props
+              by (auto split: option.splits)
+            then have "idx = (idx_oldest + j + 1)"
+              using tuple_since_hist_lookup_eq[OF tuple_init_props tp _ data_in_len]
+              by auto                              
+            moreover have "idx_oldest + j + 1 \<le> idx_oldest_mv []"
+              using j_suc_leq
+              unfolding idx_oldest_mv_def
+              by auto
+            ultimately have "as \<in> {as \<in> snd db. case Mapping.lookup tuple_since_hist as of Some idx \<Rightarrow> idx \<le> idx_oldest_mv [] | None \<Rightarrow> False}"
+              using db_relR idx_props(1)
+              unfolding idx_oldest_mv_def
+              by auto
+          }
+
+          ultimately have "as \<in> hist_sat \<union> {as \<in> snd db. case Mapping.lookup tuple_since_hist as of Some idx \<Rightarrow> idx \<le> idx_oldest_mv [] | None \<Rightarrow> False}"
+            by auto
+          then have "as \<in> (hist_sat_mv [] init_tuple)"
+            using assm(1) db_props Nil(1)
+            unfolding hist_sat_mv_def init_tuple_def tuple_since_hist_mv_def
+            by (auto split: list.splits)
         }
-        ultimately have "tuple \<in> (hist_sat_mv [] init_tuple) \<longleftrightarrow>
-          ((lin_data_in''_mv []) \<noteq> []) \<and> (
-            \<forall>(t, r) \<in> set (lin_data_in''_mv []). tuple \<in> r
-          )"
+        ultimately show ?thesis
           by blast
-        }
-        then show ?thesis by auto
       qed
       moreover have "get_idx_move (fold fold_op_f [] init_tuple) = idx_mid_mv []"
         unfolding get_idx_move_def init_tuple_def idx_mid_mv_def
@@ -3709,6 +3790,10 @@ proof -
         | Some idx \<Rightarrow> tuple_since_tp args as (lin_data_in''_mv xs) (idx_oldest_mv xs) (idx_mid_mv xs) idx"
         "get_idx_move (fold fold_op_f xs init_tuple) = idx_mid_mv xs"
         "(case Mapping.lookup (fst (fold fold_op_f xs init_tuple)) as of None \<Rightarrow> True | Some idx \<Rightarrow> idx < idx_mid_mv xs)"
+        "as \<in> (hist_sat_mv xs init_tuple) \<longleftrightarrow>
+          ((lin_data_in''_mv xs) \<noteq> []) \<and> (
+            \<forall>(t, r) \<in> set (lin_data_in''_mv xs). as \<in> r
+        )"
         using snoc(1)
         by auto
 
@@ -3716,11 +3801,48 @@ proof -
       define tuple_since_hist' where "tuple_since_hist' = fst tuple"
       define joined_mapping where "joined_mapping = Mapping.filter (\<lambda>as _. as \<in> (relR x)) tuple_since_hist'"
 
-      have fold_IH: "fst (fold_op_f x tuple) = upd_set joined_mapping (\<lambda>_. (get_idx_move tuple)) ((relR x) - Mapping.keys joined_mapping)"
+      have fold_IH_since_hist: "fst (fold_op_f x tuple) = upd_set joined_mapping (\<lambda>_. (get_idx_move tuple)) ((relR x) - Mapping.keys joined_mapping)"
         unfolding fold_op_f_def relR_def relL_def joined_mapping_def get_idx_move_def tuple_since_hist'_def
         by (auto simp add: Let_def case_prod_beta')
 
-      have "(case Mapping.lookup (tuple_since_hist_mv (xs @ [x]) init_tuple) as of
+      define hist_sat' where "hist_sat' = (fst o snd) tuple"
+      have fold_IH_hist_sat: "(fst o snd) (fold_op_f x tuple) = hist_sat' \<inter> (relR x)"
+        unfolding fold_op_f_def relR_def hist_sat'_def
+        by (auto simp add: Let_def case_prod_beta')
+
+      {
+        assume non_empty: "lin_data_in''_mv (xs @ [x]) \<noteq> []"
+        assume mem: "\<not> (\<lambda>(t, _). memR (args_ivl args) (nt - t)) x"
+        {
+          fix db
+          assume "db \<in> set xs"
+          then have "fst db \<le> fst x"
+            using snoc(3)
+            by (simp add: sorted_append)
+          then have  "\<not> (\<lambda>(t, _). memR (args_ivl args) (nt - t)) db"
+            using mem memR_antimono
+            by auto
+        }
+        moreover {
+          fix db
+          assume "db \<in> set (linearize data_in)"
+          then have "fst db < fst x"
+            using snoc(4)
+            by auto
+          then have "\<not> (\<lambda>(t, _). memR (args_ivl args) (nt - t)) db"
+            using mem memR_antimono
+            by auto
+        }
+        ultimately have "lin_data_in''_mv (xs @ [x]) = []"
+          using mem
+          unfolding lin_data_in''_mv_def data_in'_eq
+          by auto
+        then have "False" using non_empty by auto
+      }
+      then have mem: "lin_data_in''_mv (xs @ [x]) \<noteq> [] \<longrightarrow> (\<lambda>(t, _). memR (args_ivl args) (nt - t)) x"
+        by auto
+
+      have tuple_since_hist_mv_props: "(case Mapping.lookup (tuple_since_hist_mv (xs @ [x]) init_tuple) as of
         None    \<Rightarrow> \<forall>idx. \<not> tuple_since_tp args as (lin_data_in''_mv (xs @ [x])) (idx_oldest_mv (xs @ [x])) (idx_mid_mv (xs @ [x])) idx
        | Some idx \<Rightarrow> tuple_since_tp args as (lin_data_in''_mv (xs @ [x])) (idx_oldest_mv (xs @ [x])) (idx_mid_mv (xs @ [x])) idx)"
       proof (cases "(idx_mid_mv (xs @ [x])) = (idx_oldest_mv (xs @ [x]))")
@@ -3738,6 +3860,7 @@ proof -
       next
 
         case non_empty: False
+        
         then have "tuple_since_hist_mv (xs @ [x]) init_tuple = fst (fold fold_op_f (xs @ [x]) init_tuple)"
           unfolding tuple_since_hist_mv_def
           by auto
@@ -3745,40 +3868,12 @@ proof -
           using fold_alt[of fold_op_f "xs" "x" init_tuple]
           unfolding tuple_def
           by auto              
-
         then have mapping_eq: "tuple_since_hist_mv (xs @ [x]) init_tuple = upd_set joined_mapping (\<lambda>_. (get_idx_move tuple)) ((relR x) - Mapping.keys joined_mapping)"
-          using fold_IH
+          using fold_IH_since_hist
           by auto
-
-        {
-          assume mem: "\<not> (\<lambda>(t, _). memR (args_ivl args) (nt - t)) x"
-          {
-            fix db
-            assume "db \<in> set xs"
-            then have "fst db \<le> fst x"
-              using snoc(3)
-              by (simp add: sorted_append)
-            then have  "\<not> (\<lambda>(t, _). memR (args_ivl args) (nt - t)) db"
-              using mem memR_antimono
-              by auto
-          }
-          moreover {
-            fix db
-            assume "db \<in> set (linearize data_in)"
-            then have "fst db < fst x"
-              using snoc(4)
-              by auto
-            then have "\<not> (\<lambda>(t, _). memR (args_ivl args) (nt - t)) db"
-              using mem memR_antimono
-              by auto
-          }
-          ultimately have "lin_data_in''_mv (xs @ [x]) = []"
-            using mem
-            unfolding lin_data_in''_mv_def data_in'_eq
-            by auto
-          then have "False" using snoc(2) non_empty by auto
-        }
-        then have mem: "(\<lambda>(t, _). memR (args_ivl args) (nt - t)) x"
+        
+        have mem: "(\<lambda>(t, _). memR (args_ivl args) (nt - t)) x"
+          using mem non_empty snoc(2)
           by auto
 
         have data_in''_eq: "(lin_data_in''_mv (xs @ [x])) = lin_data_in''_mv (xs) @ [(\<lambda>(t, l, y). (t, y)) x]"
@@ -4142,6 +4237,180 @@ proof -
           qed
         qed
       qed
+      moreover have "as \<in> (hist_sat_mv (xs @ [x]) init_tuple) =
+        (((lin_data_in''_mv (xs @ [x])) \<noteq> []) \<and> (
+          \<forall>(t, r) \<in> set (lin_data_in''_mv (xs @ [x])). as \<in> r
+        ))"
+      proof -
+        have fold_eq: "(fst \<circ> snd) (fold fold_op_f (xs @ [x]) init_tuple) = (fst \<circ> snd) (fold_op_f x tuple)"
+          using fold_alt[of fold_op_f xs x init_tuple]
+          unfolding tuple_def
+          by auto
+        
+        show "as \<in> (hist_sat_mv (xs @ [x]) init_tuple) =
+        (((lin_data_in''_mv (xs @ [x])) \<noteq> []) \<and> (
+          \<forall>(t, r) \<in> set (lin_data_in''_mv (xs @ [x])). as \<in> r
+        ))"
+        proof (cases "lin_data_in''_mv (xs @ [x]) = []")
+          case True
+          show ?thesis
+          proof (rule iffI)
+            assume "as \<in> hist_sat_mv (xs @ [x]) init_tuple"
+            then have "False" using True unfolding hist_sat_mv_def by auto
+            then show "lin_data_in''_mv (xs @ [x]) \<noteq> [] \<and> (\<forall>(t, r)\<in>set (lin_data_in''_mv (xs @ [x])). as \<in> r)"
+              by auto
+          next
+            assume "lin_data_in''_mv (xs @ [x]) \<noteq> [] \<and> (\<forall>(t, r)\<in>set (lin_data_in''_mv (xs @ [x])). as \<in> r)"
+            then have "False" using True by auto
+            then show "as \<in> hist_sat_mv (xs @ [x]) init_tuple" by auto
+          qed
+        next
+          case non_empty: False
+          show ?thesis
+          proof (cases "lin_data_in''_mv xs = []")
+            case True
+            {
+              assume "\<not>(\<lambda>(t, _). memR (args_ivl args) (nt - t)) x"
+              then have "(\<lambda>(t, _). \<not>memR (args_ivl args) (nt - t)) x" by auto
+              then have "lin_data_in''_mv (xs @ [x]) = []"
+                using True
+                unfolding lin_data_in''_mv_def
+                by auto
+              then have "False" using non_empty by auto
+            }
+            then have mem: "(\<lambda>(t, _). memR (args_ivl args) (nt - t)) x"
+              by blast
+            then have lin_eq: "lin_data_in''_mv (xs @ [x]) = [(\<lambda>(t, l, r). (t, r)) x]"
+              using True
+              unfolding lin_data_in''_mv_def
+              by auto
+
+            show ?thesis
+            proof (rule iffI)
+              assume "as \<in> hist_sat_mv (xs @ [x]) init_tuple"
+              then have "as \<in> (((fst \<circ> snd) (fold fold_op_f xs init_tuple) \<inter> relR x) \<union> {as \<in> (snd o snd) x. case Mapping.lookup (tuple_since_hist_mv (xs @ [x]) init_tuple) as of None \<Rightarrow> False | Some idx \<Rightarrow> idx \<le> idx_oldest_mv (xs @ [x])})"
+                using lin_eq fold_alt[of fold_op_f xs x init_tuple] fold_IH_hist_sat
+                unfolding hist_sat_mv_def tuple_def hist_sat'_def
+                by (auto split: list.splits simp add: case_prod_beta')
+              moreover {
+                assume "as \<in> ((fst \<circ> snd) (fold fold_op_f xs init_tuple) \<inter> relR x)"
+                then have "as \<in> snd ((\<lambda>(t, l, r). (t, r)) x)"
+                  unfolding relR_def
+                  by (auto simp add: case_prod_beta')
+                then have "lin_data_in''_mv (xs @ [x]) \<noteq> [] \<and> (\<forall>(t, r)\<in>set (lin_data_in''_mv (xs @ [x])). as \<in> r)"
+                  using lin_eq
+                  by auto
+              }
+              moreover {
+                assume "as \<in> {as \<in> (snd o snd) x. case Mapping.lookup (tuple_since_hist_mv (xs @ [x]) init_tuple) as of None \<Rightarrow> False | Some idx \<Rightarrow> idx \<le> idx_oldest_mv (xs @ [x])}"
+                then have "as \<in> snd ((\<lambda>(t, l, r). (t, r)) x)"
+                  by (auto simp add: case_prod_beta')
+                then have "lin_data_in''_mv (xs @ [x]) \<noteq> [] \<and> (\<forall>(t, r)\<in>set (lin_data_in''_mv (xs @ [x])). as \<in> r)"
+                  using lin_eq
+                  by auto
+              }
+              ultimately show "lin_data_in''_mv (xs @ [x]) \<noteq> [] \<and> (\<forall>(t, r)\<in>set (lin_data_in''_mv (xs @ [x])). as \<in> r)"
+                by auto
+            next
+              assume assm: "lin_data_in''_mv (xs @ [x]) \<noteq> [] \<and> (\<forall>(t, r)\<in>set (lin_data_in''_mv (xs @ [x])). as \<in> r)"
+              then have tp: "tuple_since_tp args as (lin_data_in''_mv (xs @ [x])) (idx_oldest_mv (xs @ [x])) (idx_mid_mv (xs @ [x])) (idx_oldest_mv (xs @ [x]))"
+                using mv_ln_eq
+                unfolding tuple_since_tp_def
+                by (metis add_diff_cancel_right' in_set_dropD length_greater_0_conv less_irrefl zero_less_diff)
+              have len: "length (lin_data_in''_mv (xs @ [x])) + idx_oldest_mv (xs @ [x]) = idx_mid_mv (xs @ [x])"
+                using mv_ln_eq
+                by auto
+              obtain idx where "Mapping.lookup (tuple_since_hist_mv (xs @ [x]) init_tuple) as = Some idx \<and> idx \<le> idx_oldest_mv (xs @ [x])"
+                using tuple_since_hist_lookup_leq[OF tuple_since_hist_mv_props tp len]
+                by auto
+              moreover have relR: "as \<in> relR x"
+                using assm lin_eq
+                unfolding relR_def
+                by (auto simp add: case_prod_beta')
+              ultimately have "as \<in> {as \<in> (snd o snd) x. case Mapping.lookup (tuple_since_hist_mv (xs @ [x]) init_tuple) as of None \<Rightarrow> False | Some idx \<Rightarrow> idx \<le> idx_oldest_mv (xs @ [x])}"
+                unfolding relR_def
+                by auto
+              then show "as \<in> hist_sat_mv (xs @ [x]) init_tuple"
+                using lin_eq relR
+                unfolding hist_sat_mv_def relR_def
+                by (auto split: list.splits simp add: case_prod_beta')
+            qed
+          next
+            case False
+            show ?thesis
+            proof (rule iffI)
+              assume assm: "as \<in> hist_sat_mv (xs @ [x]) init_tuple"
+              then obtain db dbs where db_props: "db#dbs = lin_data_in''_mv (xs @ [x])"
+                unfolding hist_sat_mv_def
+                by (auto split: list.splits)
+              then have "as \<in> ((fst \<circ> snd) (fold_op_f x tuple) \<union> {as \<in> snd db. case Mapping.lookup (tuple_since_hist_mv (xs @ [x]) init_tuple) as of None \<Rightarrow> False | Some idx \<Rightarrow> idx \<le> idx_oldest_mv (xs @ [x])})"
+                using assm fold_eq
+                unfolding hist_sat_mv_def
+                by (auto split: list.splits)
+              moreover {
+                assume as_mem: "as \<in> (fst \<circ> snd) (fold_op_f x tuple)"
+                then have as_props:
+                    "as \<in> hist_sat'"
+                    "as \<in> snd ((\<lambda>(t, l, r). (t, r)) x)"
+                  using fold_IH_hist_sat
+                  unfolding relR_def
+                  by (auto simp add: case_prod_beta')
+                moreover have "(\<forall>(t, r)\<in>set (lin_data_in''_mv xs). as \<in> r)"
+                  using as_props(1) IH(4) False
+                  unfolding hist_sat_mv_def hist_sat'_def tuple_def
+                  by (auto split: list.splits)
+                ultimately have "\<forall>(t, r)\<in>set (lin_data_in''_mv (xs @ [x])). as \<in> r"
+                  unfolding lin_data_in''_mv_def
+                  by auto
+              }
+              moreover {
+                assume "as \<in> {as \<in> snd db. case Mapping.lookup (tuple_since_hist_mv (xs @ [x]) init_tuple) as of None \<Rightarrow> False | Some idx \<Rightarrow> idx \<le> idx_oldest_mv (xs @ [x])}"
+                then obtain idx where idx_props: "Mapping.lookup (tuple_since_hist_mv (xs @ [x]) init_tuple) as = Some idx" "idx \<le> idx_oldest_mv (xs @ [x])"
+                  by (auto split: option.splits)
+                then have "\<forall>(t, y)\<in>set (drop (idx - idx_oldest_mv (xs @ [x])) (lin_data_in''_mv (xs @ [x]))). as \<in> y"
+                  using tuple_since_hist_mv_props
+                  unfolding tuple_since_tp_def
+                  by auto
+                then have "\<forall>(t, r)\<in>set (lin_data_in''_mv (xs @ [x])). as \<in> r"
+                  using idx_props(2)
+                  by auto
+              }
+              ultimately have "\<forall>(t, r)\<in>set (lin_data_in''_mv (xs @ [x])). as \<in> r" by auto
+  
+              then show "lin_data_in''_mv (xs @ [x]) \<noteq> [] \<and> (\<forall>(t, r)\<in>set (lin_data_in''_mv (xs @ [x])). as \<in> r)"
+                using db_props
+                by auto
+            next
+              assume assm: "lin_data_in''_mv (xs @ [x]) \<noteq> [] \<and> (\<forall>(t, r)\<in>set (lin_data_in''_mv (xs @ [x])). as \<in> r)"
+              then have tp: "tuple_since_tp args as (lin_data_in''_mv (xs @ [x])) (idx_oldest_mv (xs @ [x])) (idx_mid_mv (xs @ [x])) (idx_oldest_mv (xs @ [x]))"
+                using mv_ln_eq
+                unfolding tuple_since_tp_def
+                by (metis add_diff_cancel_right' in_set_dropD length_greater_0_conv less_irrefl zero_less_diff)
+              have len: "length (lin_data_in''_mv (xs @ [x])) + idx_oldest_mv (xs @ [x]) = idx_mid_mv (xs @ [x])"
+                using mv_ln_eq
+                by auto
+              obtain idx where idx_props: "Mapping.lookup (tuple_since_hist_mv (xs @ [x]) init_tuple) as = Some idx \<and> idx \<le> idx_oldest_mv (xs @ [x])"
+                using tuple_since_hist_lookup_leq[OF tuple_since_hist_mv_props tp len]
+                by auto
+              then have mem: "(\<lambda>(t, _). memR (args_ivl args) (nt - t)) x"
+                using mem non_empty snoc(2)
+                by auto
+              then have relR: "as \<in> relR x"
+                using assm
+                unfolding relR_def lin_data_in''_mv_def
+                by (auto simp add: case_prod_beta')
+              then have "as \<in> {as \<in> (snd o snd) x. case Mapping.lookup (tuple_since_hist_mv (xs @ [x]) init_tuple) as of None \<Rightarrow> False | Some idx \<Rightarrow> idx \<le> idx_oldest_mv (xs @ [x])}"
+                using idx_props
+                unfolding relR_def
+                by auto
+              then show "as \<in> hist_sat_mv (xs @ [x]) init_tuple"
+                using assm
+                unfolding hist_sat_mv_def
+                by (auto split: list.splits simp add: case_prod_beta')
+            qed
+          qed
+        qed
+      qed
       moreover have "get_idx_move (fold fold_op_f (xs @ [x]) init_tuple) = idx_mid_mv (xs @ [x])"
       proof -
         have "fold fold_op_f (xs @ [x]) init_tuple = fold_op_f x tuple"
@@ -4163,7 +4432,7 @@ proof -
           using fold_alt[of fold_op_f xs x init_tuple]
           by auto
         then have mapping_eq: "fst (fold fold_op_f (xs @ [x]) init_tuple) = upd_set joined_mapping (\<lambda>_. get_idx_move tuple) (relR x - Mapping.keys joined_mapping)"
-          using fold_IH
+          using fold_IH_since_hist
           unfolding tuple_def
           by auto
         show ?thesis
