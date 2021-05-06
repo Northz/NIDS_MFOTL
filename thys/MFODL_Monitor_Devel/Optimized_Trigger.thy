@@ -112,9 +112,9 @@ definition tuple_since_tp where
   )"
 
 definition tuple_since_lhs where
-  "tuple_since_lhs tuple lin_data_in args mt auxlist = ((lin_data_in \<noteq> []) \<and> ( \<comment> \<open>with an empty data_in, all tuples satisfy trigger\<close>
+  "tuple_since_lhs tuple lin_data_in args auxlist_in = ((lin_data_in \<noteq> []) \<and> ( \<comment> \<open>with an empty data_in, all tuples satisfy trigger\<close>
     \<exists>n \<in> {0..<length lin_data_in}. \<comment> \<open>dropping less then length guarantees length suffix > 0\<close>
-      let suffix = drop n (auxlist_data_in args mt auxlist) in (
+      let suffix = drop n auxlist_in in (
         (\<forall>(t, l, r) \<in> set suffix.
           tuple \<in> r
         ) \<and>
@@ -166,9 +166,9 @@ fun valid_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow>
         \<forall>(t, l, r) \<in> set (auxlist_data_in args mt auxlist). tuple \<in> r
     )) \<and>
     (\<forall>tuple. tuple \<in> since_sat \<longrightarrow>
-      ((tuple \<in> hist_sat) \<or> tuple_since_lhs tuple (linearize data_in) args mt auxlist)
+      ((tuple \<in> hist_sat) \<or> tuple_since_lhs tuple (linearize data_in) args (auxlist_data_in args mt auxlist))
     ) \<and>
-    (\<forall>tuple. tuple_since_lhs tuple (linearize data_in) args mt auxlist \<longrightarrow>
+    (\<forall>tuple. tuple_since_lhs tuple (linearize data_in) args (auxlist_data_in args mt auxlist) \<longrightarrow>
       tuple \<in> since_sat
     )
   "
@@ -901,7 +901,7 @@ proof -
     moreover {
       assume "tuple \<in> since_sat"
       moreover have "(\<forall>tuple. tuple \<in> since_sat \<longrightarrow>
-        ((tuple \<in> hist_sat) \<or> tuple_since_lhs tuple (linearize data_in) args mt auxlist)
+        ((tuple \<in> hist_sat) \<or> tuple_since_lhs tuple (linearize data_in) args (auxlist_data_in args mt auxlist))
       )"
         using assms(1)
         unfolding valid_mmtaux.simps
@@ -1331,7 +1331,7 @@ proof -
           then show ?thesis
             by (metis length_map)
         qed
-        ultimately have "tuple_since_lhs tuple (linearize data_in) args mt auxlist"
+        ultimately have "tuple_since_lhs tuple (linearize data_in) args (auxlist_data_in args mt auxlist)"
           using data_in_nonempty is_empty_alt
           unfolding tuple_since_lhs_def 
           by auto
@@ -1469,13 +1469,14 @@ fun shift_end_queues_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> nat \<Righta
       ) 
     ) move (tuple_since_hist, hist_sat, idx_mid, since_sat); \<comment> \<open>use original idx_mid, not idx_mid' where the length of move already is included\<close>
     tuple_since_hist'' = (if (idx_mid' = idx_oldest') then Mapping.empty else tuple_since_hist'); \<comment> \<open>if data_in'' is empty, empty the mapping\<close>
+    since_sat'' = (if (idx_mid' = idx_oldest') then {} else since_sat');
     \<comment> \<open>in contrast to mmsaux, we don't have to look at what tuples were dropped from data_in as
        we do not have any 'in mappings', just 'since mappings'. What has to be done though,
        is to check whether there are now new tuples that satisfy historically.
        In order to do this, we look at the latest db, iterate over all tuples and check,
        whether hist_since points to an index that is older than the current oldest ts, i.e.
        whether the rhs is satisfied in the whole interval\<close>
-    hist_sat'' = case fst (safe_hd data_in'')
+    hist_sat'' = (case fst (safe_hd data_in'')
       of None \<Rightarrow>
         {} \<comment> \<open>if data_in is empty, no tuples should be in the set.
               (mmtaux only returns results if data_in isn't empty)\<close>
@@ -1486,8 +1487,9 @@ fun shift_end_queues_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> nat \<Righta
             Some idx \<Rightarrow> idx \<le> idx_oldest'
           | None \<Rightarrow> False
         }
+    )
     in
-    (idx_mid', idx_oldest', data_prev', data_in'', tuple_in_once', tuple_since_hist'', hist_sat'', since_sat')
+    (idx_mid', idx_oldest', data_prev', data_in'', tuple_in_once', tuple_since_hist'', hist_sat'', since_sat'')
   )"
 
 
@@ -1673,6 +1675,64 @@ next
   qed
 qed
 
+lemma take_filter_not_memR:
+  assumes "sorted (map fst xs)"
+  shows "filter (\<lambda>(t, _). \<not>memR I (mt - t)) xs = take (length (filter (\<lambda>(t, _). \<not>memR I (mt - t)) xs)) xs"
+using assms proof (induction xs)
+  case Nil
+  then show ?case by auto
+next
+  case (Cons x xs)
+  then have IH: "filter (\<lambda>(t, _). \<not>memR I (mt - t)) xs = take (length (filter (\<lambda>(t, _). \<not>memR I (mt - t)) xs)) xs"
+    using Cons
+    by auto
+  show ?case
+  proof (cases "(\<lambda>(t, _). \<not>memR I (mt - t)) x")
+    case True
+    then have "filter (\<lambda>(t, _). \<not>memR I (mt - t)) (x#xs) = x#(filter (\<lambda>(t, _). \<not>memR I (mt - t)) xs)"
+      by auto
+    moreover have "take (length (filter (\<lambda>(t, _). \<not>memR I (mt - t)) (x#xs))) (x#xs) = x#(take (length (filter (\<lambda>(t, _). \<not>memR I (mt - t)) xs)) xs)"
+      using True
+      by auto
+    ultimately show ?thesis using IH by auto
+  next
+    case not_mem: False
+    then have filter_IH: "filter (\<lambda>(t, _). \<not>memR I (mt - t)) (x#xs) = (filter (\<lambda>(t, _). \<not>memR I (mt - t)) xs)"
+      by auto
+    then have takeWhile_IH: "take (length (filter (\<lambda>(t, _). \<not>memR I (mt - t)) (x#xs))) (x#xs) = take (length (filter (\<lambda>(t, _). \<not>memR I (mt - t)) xs)) (x#xs)"
+      by auto
+    show ?thesis
+    proof (cases "length (filter (\<lambda>(t, _). \<not>memR I (mt - t)) xs)")
+      case 0
+      then show ?thesis by auto
+    next
+      case (Suc nat)
+      then have takeWhile_IH: "take (length (filter (\<lambda>(t, _). \<not>memR I (mt - t)) (x#xs))) (x#xs) = x # (take nat xs)"
+        using takeWhile_IH
+        by auto
+      then show ?thesis
+      proof (cases "\<forall>db \<in> set xs. (\<lambda>(t, _). memR I (mt - t)) db")
+        case True
+        then have "filter (\<lambda>(t, _). \<not>memR I (mt - t)) (x#xs) = []"
+          using filter_IH
+          by (simp add: case_prod_beta')
+        then show ?thesis using takeWhile_IH by auto
+      next
+        case False
+        then obtain j where j_props: "((\<lambda>(t, _). \<not>memR I (mt - t)) (xs!j))" "j \<in> {0..<length xs}"
+          by (metis (mono_tags, lifting) atLeastLessThan_iff case_prod_beta' in_set_conv_nth leI not_less_zero)
+        then have "((\<lambda>(t, _). \<not>memR I (mt - t)) ((x#xs)!(Suc j)))"
+          by auto
+        moreover have "fst ((x#xs)!0) \<le> fst ((x#xs)!(Suc j))"
+          using Cons(2) j_props
+          by auto
+        ultimately have "((\<lambda>(t, _). \<not>memR I (mt - t)) x)" using memR_antimono by auto
+        then show ?thesis using not_mem by auto
+      qed
+    qed
+  qed
+qed
+
 lemma drop_filter_memR:
   assumes "sorted (map fst xs)"
   shows "filter (\<lambda>(t, _). memR I (mt - t)) xs = drop (length (filter (\<lambda>(t, _). \<not>memR I (mt - t)) xs)) xs"
@@ -1735,6 +1795,8 @@ next
     qed
   qed
 qed
+
+
 
 lemma fold_alt: "fold f (xs @ [x]) acc = f x (fold f xs acc)"
   by simp
@@ -2055,7 +2117,7 @@ lemma valid_shift_end_queues_mmtaux:
   assumes valid_before: "valid_mmtaux args cur
     (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat) auxlist"
   assumes nt_mono: "nt \<ge> cur"
-  assumes "(idx_mid', idx_oldest', data_prev', data_in'', tuple_in_once', tuple_since_hist'', hist_sat'', since_sat') = shift_end_queues_mmtaux args nt idx_mid idx_oldest maskL maskR data_prev data_in tuple_in_once tuple_since_hist hist_sat since_sat"
+  assumes "(idx_mid', idx_oldest', data_prev', data_in'', tuple_in_once', tuple_since_hist'', hist_sat'', since_sat'') = shift_end_queues_mmtaux args nt idx_mid idx_oldest maskL maskR data_prev data_in tuple_in_once tuple_since_hist hist_sat since_sat"
   shows
     "table (args_n args) (args_L args) (Mapping.keys tuple_in_once')"
     \<comment> \<open>data_prev\<close>
@@ -2086,11 +2148,11 @@ lemma valid_shift_end_queues_mmtaux:
         \<forall>(t, l, r) \<in> set (auxlist_data_in args mt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist)). tuple \<in> r
     ))"
     \<comment> \<open>since_sat\<close>
-    "(\<forall>tuple. tuple \<in> since_sat' \<longrightarrow>
-      ((tuple \<in> hist_sat') \<or> tuple_since_lhs tuple (linearize data_in'') args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist))
+    "(\<forall>tuple. tuple \<in> since_sat'' \<longrightarrow>
+      ((tuple \<in> hist_sat') \<or> tuple_since_lhs tuple (linearize data_in) args (auxlist_data_in args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist)))
     ) \<and>
-    (\<forall>tuple. tuple_since_lhs tuple (linearize data_in'') args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist) \<longrightarrow>
-      tuple \<in> since_sat'
+    (\<forall>tuple. tuple_since_lhs tuple (linearize data_in) args (auxlist_data_in args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist)) \<longrightarrow>
+      tuple \<in> since_sat''
     )"
 proof - 
   define shift_res where "shift_res = shift_end
@@ -2160,12 +2222,17 @@ proof -
       ) 
     )"
 
-  obtain tuple_since_hist' x hist_sat' where fold_tuple_res: "(tuple_since_hist', hist_sat', x, since_sat') = fold fold_op_f move (tuple_since_hist, hist_sat, idx_mid, since_sat)"
+  obtain tuple_since_hist' x hist_sat' since_sat' where fold_tuple_res: "(tuple_since_hist', hist_sat', x, since_sat') = fold fold_op_f move (tuple_since_hist, hist_sat, idx_mid, since_sat)"
     using assms(3) 
     unfolding fold_op_f_def move_def shift_res_def
     by (auto simp only: shift_end_queues_mmtaux.simps Let_def fst_def snd_def o_def split: prod.splits)
   then have tuple_since_hist''_def: "tuple_since_hist'' = (if (idx_mid' = idx_oldest') then Mapping.empty else tuple_since_hist')"
     using assms(3) 
+    unfolding fold_op_f_def move_def shift_res_def
+    by (auto simp only: shift_end_queues_mmtaux.simps Let_def fst_def snd_def o_def split: prod.splits)
+
+  have since_sat''_def: "since_sat'' = (if (idx_mid' = idx_oldest') then {} else since_sat')"
+    using assms(3) fold_tuple_res
     unfolding fold_op_f_def move_def shift_res_def
     by (auto simp only: shift_end_queues_mmtaux.simps Let_def fst_def snd_def o_def split: prod.splits)
 
@@ -3101,8 +3168,9 @@ proof -
   have filter_simp'': "(\<lambda>x. (case x of (t, uu_) \<Rightarrow> mem (args_ivl args) (mt - t)) \<and> (case x of (t, uu_) \<Rightarrow> memR (args_ivl args) (nt - t))) = (\<lambda>(t, _). mem (args_ivl args) (mt - t) \<and> memR (args_ivl args) (nt - t))"
     by auto
 
-  from assms(1) have "auxlist_data_prev args mt auxlist = drop (length (linearize data_in)) auxlist"
-                       "auxlist_data_in args mt auxlist = take (length (linearize data_in)) auxlist"
+  from assms(1) have auxlist_eqs:
+    "auxlist_data_prev args mt auxlist = drop (length (linearize data_in)) auxlist"
+    "auxlist_data_in args mt auxlist = take (length (linearize data_in)) auxlist"
     by auto
   then have auxlist_concat: "filter (\<lambda>(t, _). mem (args_ivl args) (mt - t)) auxlist @ filter (\<lambda>(t, _). \<not> memL (args_ivl args) (mt - t)) auxlist = auxlist"
     unfolding auxlist_data_prev_def auxlist_data_in_def
@@ -3111,8 +3179,9 @@ proof -
   have "linearize data_in'' = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in) @ map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev))"
     using lin_data_in''_eq
     by auto
-  moreover have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
-                "auxlist_data_prev args mt auxlist = (linearize data_prev)"
+  moreover have in_eqs:
+      "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
+      "auxlist_data_prev args mt auxlist = (linearize data_prev)"
     using assms(1)
     by auto
   ultimately have "linearize data_in'' = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _, _). mem (args_ivl args) (mt - t)) auxlist)) @ map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). \<not> memL (args_ivl args) (mt - t)) auxlist))"
@@ -3187,7 +3256,7 @@ proof -
   then have filter_take_eq: "filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist) = take (length (linearize data_in'')) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"
     using take_filter_mem[OF memR sorted]
     by auto
-  then show "auxlist_data_in args nt (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist) = take (length (linearize data_in'')) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"
+  then show auxlist_data_in_take_eq: "auxlist_data_in args nt (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist) = take (length (linearize data_in'')) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist)"
     unfolding auxlist_data_in_def
     by auto
 
@@ -3276,8 +3345,34 @@ proof -
     )"
 
     define since_sat_mv where "since_sat_mv = (\<lambda>move tuple.
-      (snd o snd o snd) (fold fold_op_f move tuple)
+      if ((idx_mid_mv move) = (idx_oldest_mv move)) then
+        {}
+      else
+        (snd o snd o snd) (fold fold_op_f move tuple)
     )"
+
+    define data_in'_aux where "data_in'_aux =
+      filter (\<lambda>(t, _). memR (args_ivl args) (nt - t))(take (length (linearize data_in)) auxlist)
+    "
+
+    have filter_map_simp: "filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) = filter ((\<lambda>(t, _). memR (args_ivl args) (nt - t)) \<circ> (\<lambda>(t, l, r). (t, r)))"
+      by (metis (mono_tags, lifting) case_prod_beta' fst_conv o_apply)
+
+    (* check if defined correctly *)
+    have data_in'_aux_eq: "map (\<lambda>(t, l, r). (t, r)) data_in'_aux = linearize data_in'"
+      using in_eqs(1) auxlist_eqs(2)
+      unfolding data_in'_aux_def data_in'_eq
+      using filter_map[of "(\<lambda>(t, _). memR (args_ivl args) (nt - t))" "(\<lambda>(t, l, r). (t, r))" "(take (length (linearize data_in)) auxlist)"]
+      by (auto simp add: filter_map_simp)
+
+    define lin_data_in''_aux_mv where "lin_data_in''_aux_mv = (\<lambda>move::(ts \<times> 'a option list set \<times> 'a option list set) list.
+      data_in'_aux @ filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) move
+    )"
+
+    have data_in''_aux_eq: "\<forall>move. map (\<lambda>(t, l, r). (t, r)) (lin_data_in''_aux_mv move) = lin_data_in''_mv move"
+      using data_in'_aux_eq
+      unfolding lin_data_in''_aux_mv_def lin_data_in''_mv_def
+      by auto
 
     define init_tuple where "init_tuple = (tuple_since_hist, hist_sat, idx_mid, since_sat)"
 
@@ -3321,35 +3416,23 @@ proof -
         \<forall>(t, r) \<in> set (linearize data_in). tuple \<in> r
     ))" by auto
 
-    have "(\<forall>tuple. tuple \<in> since_sat \<longleftrightarrow>
-      (tuple \<in> hist_sat) \<or> (\<not>is_empty data_in) \<and> (
-        \<exists>n \<in> {0..<length (auxlist_data_in args mt auxlist)}.
-          let suffix = drop n (auxlist_data_in args mt auxlist) in (
-            (\<forall>(t, l, r) \<in> set suffix.
-              tuple \<in> r
-            ) \<and>
-            (
-              (restrict (args_L args) tuple) \<in> relL (hd suffix)
-            )
-        )
-      )
-    )" using assms(1) by auto
-    moreover have "\<not>is_empty data_in = ((linearize data_in) \<noteq> [])"
-      using is_empty_alt
-      by auto
-    ultimately have tuple_init_props_since: "(\<forall>tuple. tuple \<in> since_sat \<longleftrightarrow>
-      (tuple \<in> hist_sat) \<or> (((linearize data_in) \<noteq> [])) \<and> (
-        \<exists>n \<in> {0..<length (auxlist_data_in args mt auxlist)}.
-          let suffix = drop n (auxlist_data_in args mt auxlist) in (
-            (\<forall>(t, l, r) \<in> set suffix.
-              tuple \<in> r
-            ) \<and>
-            (
-              (restrict (args_L args) tuple) \<in> relL (hd suffix)
-            )
-        )
-      )
-    )" by auto
+    have tuple_init_props_since:
+      "(\<forall>tuple. tuple \<in> since_sat \<longrightarrow>
+        ((tuple \<in> hist_sat) \<or> tuple_since_lhs tuple (linearize data_in) args (auxlist_data_in args mt auxlist))
+      )"
+      "(\<forall>tuple. tuple_since_lhs tuple (linearize data_in) args (auxlist_data_in args mt auxlist) \<longrightarrow>
+        tuple \<in> since_sat
+      )"
+      using assms(1)
+      unfolding valid_mmtaux.simps
+      apply -
+      apply (erule conjE)+
+       apply assumption
+      apply -
+      apply (erule conjE)+
+       apply assumption
+      done
+
     
     have mv_data_in'': "linearize data_in'' = lin_data_in''_mv move"
       using data_in''_def fold_append_queue_map[of move' data_in'] move'_def
@@ -3380,18 +3463,11 @@ proof -
         \<forall>(t, r) \<in> set (lin_data_in''_mv move). as \<in> r
     )) \<and>
      \<comment> \<open>since\<close>
-    (as \<in> (since_sat_mv move init_tuple) \<longleftrightarrow>
-      (as \<in> (hist_sat_mv move init_tuple)) \<or> ((lin_data_in''_mv move) \<noteq> []) \<and> (
-        \<exists>n \<in> {0..<length (lin_data_in''_mv move)}.
-          let suffix = drop n (auxlist_data_in args nt auxlist) in (
-            (\<forall>(t, l, r) \<in> set suffix.
-              as \<in> r
-            ) \<and>
-            (
-              (restrict (args_L args) as) \<in> relL (hd suffix)
-            )
-        )
-      )
+    (as \<in> (since_sat_mv move init_tuple) \<longrightarrow>        
+      ((as \<in> (hist_sat_mv move init_tuple)) \<or> tuple_since_lhs as (lin_data_in''_mv move) args (lin_data_in''_aux_mv move))
+    ) \<and>
+    (tuple_since_lhs as (lin_data_in''_mv move) args (lin_data_in''_aux_mv move) \<longrightarrow>
+      as \<in> (since_sat_mv move init_tuple)
     ) \<and>
     \<comment> \<open>other required properties\<close>
     get_idx_move (fold fold_op_f move init_tuple) = (idx_mid_mv move) \<and>
@@ -3552,7 +3628,7 @@ proof -
           by auto
         ultimately show ?thesis by auto
       qed
-      moreover have "(as \<in> (hist_sat_mv [] init_tuple) \<longleftrightarrow>
+      moreover have hist_sat_props: "(as \<in> (hist_sat_mv [] init_tuple) \<longleftrightarrow>
         ((lin_data_in''_mv []) \<noteq> []) \<and> (
           \<forall>(t, r) \<in> set (lin_data_in''_mv []). as \<in> r
         ))"
@@ -3799,45 +3875,252 @@ proof -
         ultimately show ?thesis
           by blast
       qed
-      moreover have "as \<in> (since_sat_mv [] init_tuple) \<longleftrightarrow>
-        ((as \<in> (hist_sat_mv [] init_tuple)) \<or> ((lin_data_in''_mv []) \<noteq> []) \<and> (
-          \<exists>n \<in> {0..<length (lin_data_in''_mv [])}.
-            let suffix = drop n (auxlist_data_in args nt auxlist) in (
-              (\<forall>(t, l, r) \<in> set suffix.
-                as \<in> r
-              ) \<and>
-              (
-                (restrict (args_L args) as) \<in> relL (hd suffix)
-              )
-          )
-        ))
-      "
-      proof (rule iffI)
-        assume "as \<in> (since_sat_mv [] init_tuple)"
-        then show "(as \<in> (hist_sat_mv [] init_tuple)) \<or> ((lin_data_in''_mv []) \<noteq> []) \<and> (
-          \<exists>n \<in> {0..<length (lin_data_in''_mv [])}.
-            let suffix = drop n (auxlist_data_in args nt auxlist) in (
-              (\<forall>(t, l, r) \<in> set suffix.
-                as \<in> r
-              ) \<and>
-              (
-                (restrict (args_L args) as) \<in> relL (hd suffix)
-              )
-          )
-        )" by auto
-      next
-        assume "(as \<in> (hist_sat_mv [] init_tuple)) \<or> ((lin_data_in''_mv []) \<noteq> []) \<and> (
-          \<exists>n \<in> {0..<length (lin_data_in''_mv [])}.
-            let suffix = drop n (auxlist_data_in args nt auxlist) in (
-              (\<forall>(t, l, r) \<in> set suffix.
-                as \<in> r
-              ) \<and>
-              (
-                (restrict (args_L args) as) \<in> relL (hd suffix)
-              )
-          )
-        )"
-        then show "as \<in> (since_sat_mv [] init_tuple)" by auto
+      moreover have "(as \<in> (since_sat_mv [] init_tuple) \<longrightarrow>
+        ((as \<in> (hist_sat_mv [] init_tuple)) \<or> tuple_since_lhs as (lin_data_in''_mv []) args (lin_data_in''_aux_mv []))
+      )"
+      proof -
+        {
+          assume "as \<in> (since_sat_mv [] init_tuple)"
+          then have since_mem: "idx_mid_mv [] \<noteq> idx_oldest_mv []"
+                    "as \<in> since_sat"
+            unfolding since_sat_mv_def init_tuple_def
+            by (auto split: if_splits)
+          then have non_empty: "lin_data_in''_mv [] \<noteq> []"
+            using mv_ln_eq
+            by (metis add_cancel_left_left list.size(3))
+
+          from assms(1) have in_eq: "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
+            by auto
+
+          from assms(1) have auxlist_props: "(\<forall>db \<in> set auxlist. time db \<le> mt \<and> memR (args_ivl args) (mt - time db))"
+            by auto
+          then have in_memR: "\<forall>db\<in>set (auxlist_data_in args mt auxlist). memR (args_ivl args) (mt - time db)"
+            unfolding auxlist_data_in_def
+            by auto
+
+          have "as \<in> hist_sat \<or> tuple_since_lhs as (linearize data_in) args (auxlist_data_in args mt auxlist)"
+            using since_mem tuple_init_props_since(1)
+            by auto
+          moreover {
+            assume "as \<in> hist_sat"
+            then have "\<forall>(t, r)\<in>set (linearize data_in). as \<in> r"
+              using tuple_init_props_hist_sat
+              by auto
+            then have "\<forall>(t, r)\<in>set (lin_data_in''_mv []). as \<in> r"
+              unfolding lin_data_in''_mv_def data_in'_eq
+              by auto
+            then have "as \<in> (hist_sat_mv [] init_tuple)"
+              using non_empty hist_sat_props
+              by auto
+          }
+          moreover {
+            assume "tuple_since_lhs as (linearize data_in) args (auxlist_data_in args mt auxlist)"
+            then obtain n where n_props:
+              "n\<in>{0..<length (linearize data_in)}"
+              "let suffix = drop n (auxlist_data_in args mt auxlist) in (\<forall>(t, l, y)\<in>set suffix. as \<in> y) \<and> restrict (args_L args) as \<in> relL (hd suffix)"
+              "linearize data_in \<noteq> []"
+              unfolding tuple_since_lhs_def
+              by auto
+            then have n_l: "n < length (auxlist_data_in args mt auxlist)"
+              using auxlist_eqs(2)
+              by (metis atLeastLessThan_iff in_eq length_map)
+            define suffix where "suffix = drop n (auxlist_data_in args mt auxlist)"
+            
+            have sorted_auxlist: "sorted (map fst auxlist)" using assms(1) by auto
+            then have sorted_in: "sorted (map fst (auxlist_data_in args mt auxlist))"
+              unfolding suffix_def auxlist_data_in_def
+              by (metis (no_types, lifting) sorted_filter)
+
+
+            then have suffix_props:
+              "(\<forall>(t, l, y)\<in>set suffix. as \<in> y)"
+              "restrict (args_L args) as \<in> relL (hd suffix)"
+              "suffix \<noteq> []"
+              using n_props n_l
+              unfolding suffix_def
+              by (auto simp add: Let_def)
+
+            moreover have hd_suffix: "hd suffix = (auxlist_data_in args mt auxlist)!n"
+              using suffix_props(3)
+              unfolding suffix_def
+              by (simp add: hd_drop_conv_nth)
+
+            ultimately have relL: "restrict (args_L args) as \<in> relL ((auxlist_data_in args mt auxlist)!n)"
+              by auto
+
+            {
+              define l where "l = length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (auxlist_data_in args mt auxlist))"
+              assume assm: "(\<lambda>(t, _). memR (args_ivl args) (nt - t)) ((auxlist_data_in args mt auxlist)!n)"
+              have "lin_data_in''_aux_mv [] = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (auxlist_data_in args mt auxlist)"
+                using auxlist_eqs(2)
+                unfolding lin_data_in''_aux_mv_def data_in'_aux_def
+                by auto
+              then have lin_data_in''_eq: "lin_data_in''_aux_mv [] = drop l (auxlist_data_in args mt auxlist)"
+                using drop_filter_memR[OF sorted_in, of "args_ivl args" nt]
+                unfolding l_def
+                by auto
+
+              define n' where "n' = n - l"
+              {
+                assume "l > n"
+                then have "((auxlist_data_in args mt auxlist)!n) \<in> set (take l (auxlist_data_in args mt auxlist))"
+                  using n_l n_props(1) 
+                  by (metis atLeastLessThan_iff image_eqI nat_le_linear nth_image take_all)
+                then have "((auxlist_data_in args mt auxlist)!n) \<in> set (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (auxlist_data_in args mt auxlist))"
+                  using take_filter_not_memR[OF sorted_in, of "args_ivl args" nt]
+                  unfolding l_def
+                  by auto
+                then have "(\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) ((auxlist_data_in args mt auxlist)!n)"
+                  by auto
+                then have "False"
+                  using assm
+                  by auto
+              }
+              then have l_leq: "l \<le> n" using le_def by blast
+              then have "\<forall>(t, l, r)\<in>set (drop (n-l) (drop l (auxlist_data_in args mt auxlist))). as \<in> r"
+                using suffix_props(1) n_l
+                unfolding suffix_def
+                by auto
+              then have "\<forall>(t, l, r)\<in>set (drop (n-l) (lin_data_in''_aux_mv [])). as \<in> r"
+                using lin_data_in''_eq
+                by auto
+              moreover have "restrict (args_L args) as \<in> relL (hd (drop (n-l) (lin_data_in''_aux_mv [])))"
+                using lin_data_in''_eq l_leq suffix_props(2)
+                unfolding suffix_def
+                by auto
+              ultimately have "(
+                let suffix = drop n' (lin_data_in''_aux_mv [])
+                in (\<forall>(t, l, y)\<in>set suffix. as \<in> y) \<and> restrict (args_L args) as \<in> relL (hd suffix))"
+                by (simp only: Let_def n'_def)
+              moreover have "n'\<in>{0..<length (lin_data_in''_mv [])}"
+                unfolding n'_def
+                using n_l lin_data_in''_eq l_leq data_in''_aux_eq
+                by (metis (mono_tags) atLeastLessThan_iff diff_less_mono length_drop length_map zero_le)
+              ultimately have "tuple_since_lhs as (lin_data_in''_mv []) args (lin_data_in''_aux_mv [])"
+                using non_empty
+                unfolding tuple_since_lhs_def
+                by auto
+            }
+            moreover {
+              assume assm: "\<not>(\<lambda>(t, _). memR (args_ivl args) (nt - t)) ((auxlist_data_in args mt auxlist)!n)"
+              {
+                fix t r
+                assume "(t, r) \<in> set (lin_data_in''_mv [])"
+                then have data_in_mem: "(t, r) \<in> set (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in))"
+                  unfolding lin_data_in''_mv_def data_in'_eq
+                  by auto
+                then have memR: "memR (args_ivl args) (nt - t)" by auto
+
+                have filter_simp: "(\<lambda>(t, _). memR (args_ivl args) (nt - t)) = ((\<lambda>(t, _). memR (args_ivl args) (nt - t)) \<circ> (\<lambda>(t, l, r). (t, r)))"
+                  by auto
+
+                have "map (\<lambda> (t, l, r). (t, r)) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (auxlist_data_in args mt auxlist)) = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (linearize data_in)"
+                  using in_eq filter_map[of "(\<lambda>(t, _). memR (args_ivl args) (nt - t))" "(\<lambda> (t, l, r). (t, r))" "(auxlist_data_in args mt auxlist)"]
+                  by (auto simp add: filter_simp)
+                then have "(t, r) \<in> set (map (\<lambda> (t, l, r). (t, r)) (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (auxlist_data_in args mt auxlist)))"
+                  using data_in_mem
+                  by auto
+                then obtain l where tlr_mem: "(t, l, r) \<in> set (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (auxlist_data_in args mt auxlist))"
+                  by auto
+                then have mem: "mem (args_ivl args) (mt - t)"
+                  using nt_mono(1) time
+                  unfolding auxlist_data_in_def
+                  by auto
+                then have "(t, l, r) \<in> set (auxlist_data_in args mt auxlist)"
+                  using tlr_mem
+                  unfolding auxlist_data_in_def
+                  by auto
+                then obtain i where i_props:
+                  "i \<in> {0..<length(auxlist_data_in args mt auxlist)}"
+                  "(auxlist_data_in args mt auxlist)!i = (t, l, r)"
+                  by (meson atLeastLessThan_iff nth_the_index the_index_bounded zero_le)
+                {
+                  assume "i \<le> n"
+                  then have "t \<le> fst ((auxlist_data_in args mt auxlist)!n)"
+                    using i_props(2) sorted_in n_l
+                    by (smt fst_conv le_less_trans length_map nth_map sorted_iff_nth_mono)
+                  then have "(\<lambda>(t, _). memR (args_ivl args) (nt - t)) ((auxlist_data_in args mt auxlist)!n)"
+                    using memR memR_antimono[of "args_ivl args"]
+                    by auto
+                  then have "False" using assm by blast
+                }
+                then have "i > n" using le_def by blast
+                then have "(t, l, r) \<in> set suffix"
+                  using i_props
+                  unfolding suffix_def
+                  by (metis atLeastLessThan_iff in_set_conv_nth le_add_diff_inverse length_drop less_imp_le_nat n_l nat_add_left_cancel_less nth_drop)
+                then have "as \<in> r" using suffix_props by auto
+              }
+              then have "\<forall>(t, r)\<in>set (lin_data_in''_mv []). as \<in> r" by auto
+              then have "as \<in> (hist_sat_mv [] init_tuple)"
+                using non_empty hist_sat_props
+                by auto
+            }
+
+            ultimately have "((as \<in> (hist_sat_mv [] init_tuple)) \<or> tuple_since_lhs as (lin_data_in''_mv []) args (lin_data_in''_aux_mv []))"
+              by fast
+          }
+          ultimately have "((as \<in> (hist_sat_mv [] init_tuple)) \<or> tuple_since_lhs as (lin_data_in''_mv []) args (lin_data_in''_aux_mv []))"
+            by blast
+        }
+        then show ?thesis by auto
+      qed
+      moreover have "(tuple_since_lhs as (lin_data_in''_mv []) args (lin_data_in''_aux_mv []) \<longrightarrow>
+        as \<in> (since_sat_mv [] init_tuple)
+      )"
+      proof -
+        {
+          assume assm: "tuple_since_lhs as (lin_data_in''_mv []) args (lin_data_in''_aux_mv [])"
+          then have non_empty: "lin_data_in''_mv [] \<noteq> []"
+            unfolding tuple_since_lhs_def
+            by auto
+          
+          have sorted_auxlist: "sorted (map fst auxlist)" using assms(1) by auto
+          then have sorted_in: "sorted (map fst (auxlist_data_in args mt auxlist))"
+            unfolding suffix_def auxlist_data_in_def
+            by (metis (no_types, lifting) sorted_filter)
+
+          define l where "l = length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (auxlist_data_in args mt auxlist))"
+
+          have "lin_data_in''_aux_mv [] = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (auxlist_data_in args mt auxlist)"
+            using auxlist_eqs(2)
+            unfolding lin_data_in''_aux_mv_def data_in'_aux_def
+            by auto
+          then have lin_data_in''_eq: "lin_data_in''_aux_mv [] = drop l (auxlist_data_in args mt auxlist)"
+            using drop_filter_memR[OF sorted_in, of "args_ivl args" nt]
+            unfolding l_def
+            by auto
+
+          moreover obtain n where n_props:
+            "n\<in>{0..<length (lin_data_in''_mv [])}"
+            "let suffix = drop n (lin_data_in''_aux_mv []) in (\<forall>(t, l, y)\<in>set suffix. as \<in> y) \<and> restrict (args_L args) as \<in> relL (hd suffix)"
+            using assm
+            unfolding tuple_since_lhs_def
+            by auto
+
+          ultimately have "let suffix = drop (l+n) (auxlist_data_in args mt auxlist) in (
+            (\<forall>(t, l, y)\<in>set suffix. as \<in> y) \<and>
+            restrict (args_L args) as \<in> relL (hd suffix)
+          )"
+            by (simp add: add.commute)
+
+          moreover have "l + n < length (linearize data_in)"
+            using n_props data_in''_aux_eq lin_data_in''_eq in_eq
+            by (smt add.commute atLeastLessThan_iff drop_drop length_drop length_map zero_less_diff)
+
+          ultimately have "tuple_since_lhs as (linearize data_in) args (auxlist_data_in args mt auxlist)"
+            using non_empty
+            unfolding tuple_since_lhs_def
+            by auto
+          then have "as \<in> since_sat"
+            using tuple_init_props_since(2)
+            by auto
+          then have "as \<in> (since_sat_mv [] init_tuple)"
+            using mv_ln_eq non_empty
+            unfolding since_sat_mv_def init_tuple_def
+            by (metis List.fold_simps(1) add_cancel_left_left comp_apply length_0_conv snd_conv)
+        }
+        then show ?thesis by auto
       qed
       moreover have "get_idx_move (fold fold_op_f [] init_tuple) = idx_mid_mv []"
         unfolding get_idx_move_def init_tuple_def idx_mid_mv_def
