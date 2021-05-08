@@ -136,10 +136,6 @@ fun valid_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow>
     (\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_R args) as) \<and>
     (\<forall>as \<in> \<Union>((snd) ` (set (linearize data_in))). wf_tuple (args_n args) (args_R args) as) \<and>
     cur = mt \<and>
-    \<comment> \<open>all valid lhs/\<phi> tuples in data_prev should have a valid entry in tuple_in_once, as it is shifted\<close>
-    ts_tuple_rel_binary_lhs (set (auxlist_data_prev args mt auxlist)) =
-    {db \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev)).
-    \<exists>db'. db = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once db'} \<and>
     \<comment> \<open>all valid rhs/\<psi> tuples in data_in should have a valid entry in tuple_since_hist, as it is shifted\<close>
     ts_tuple_rel_binary_rhs (set (auxlist_data_in args mt auxlist)) =
     ts_tuple_rel (set (linearize data_in)) \<and>
@@ -2124,9 +2120,6 @@ lemma valid_update_mmtaux'_unfolded:
     \<comment> \<open>data_prev\<close>
     "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_L args) as)"
     "(\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_R args) as)"
-    "ts_tuple_rel_binary_lhs (set (auxlist_data_prev args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist))) =
-    {db \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')).
-    \<exists>db'. db = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once' db'}"
     "auxlist_data_prev args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist) = (linearize data_prev')"
     "newest_tuple_in_mapping fst (proj_tuple maskL) data_prev' tuple_in_once' (\<lambda>x. True)"
     "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> (proj_tuple maskL as) \<in> l)"
@@ -2255,18 +2248,9 @@ proof -
 
   from assms(1) have time: "cur = mt" by auto
 
-  from assms(1) have "ts_tuple_rel_binary_lhs (set (auxlist_data_prev args mt auxlist)) =
-    {db \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev)).
-     \<exists>db'. db = (fst db', proj_tuple maskL (snd db')) \<and> valid_tuple tuple_in_once db'}"
-    unfolding valid_mmtaux.simps
-    apply -
-    apply (erule conjE)+
-    apply assumption
-    done
-
-  then have auxlist_tuples_lhs: "ts_tuple_rel_binary_lhs (set ((auxlist_data_prev args mt) auxlist)) =
+  have auxlist_tuples_lhs: "ts_tuple_rel_f (\<lambda>_. {}) (set ((auxlist_data_prev args mt) auxlist)) =
     {tas \<in> (ts_tuple_rel_f (\<lambda>_. {}) (set (linearize empty_queue))) \<union> (ts_tuple_rel_binary_lhs (set (linearize data_prev))).
-    \<exists>db'. tas = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once db'}"
+    False}"
     using ts_tuple_rel_empty
     by auto
 
@@ -2324,9 +2308,6 @@ proof -
   have nt_mono: "nt \<ge> cur" "nt \<le> nt" using nt_mono by auto
   have shift_end_props:
     "table (args_n args) (args_L args) (Mapping.keys tuple_in_once')"
-    "ts_tuple_rel_binary_lhs (set (filter (\<lambda>(t, rel). memR (flip_int_less_lower (args_ivl args)) (nt - t)) (auxlist_data_prev args mt auxlist))) =
-    {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')).
-    \<exists>db'. tas = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once db'}"
     "newest_tuple_in_mapping fst (proj_tuple maskL) data_prev' tuple_in_once' (\<lambda>x. True)"
     "sorted (map fst (linearize data_prev'))"
     "\<forall>t\<in>fst ` set (linearize data_prev'). t \<le> nt \<and> mem (flip_int_less_lower (args_ivl args)) (cur - t)"
@@ -2336,8 +2317,8 @@ proof -
     fold (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond_r (fst X) (proj_tuple maskL) tuple_in t) tuple_in) move tuple_in_once"
     unfolding relL_def relR_def
     using valid_shift_end_unfolded [of
-        "(args_n args)" "(args_L args)" tuple_in_once fst "(auxlist_data_prev args mt)" auxlist
-        "(\<lambda>_. {})" empty_queue fst data_prev "(\<lambda>db. \<exists>db'. db = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once db')" fst "(args_L args)"
+        "(args_n args)" "(args_L args)" tuple_in_once "(\<lambda>_. {})" "(auxlist_data_prev args mt)" auxlist
+        "(\<lambda>_. {})" empty_queue fst data_prev "(\<lambda>db. False)" fst "(args_L args)"
         nt "flip_int_less_lower (args_ivl args)" cur fst "(proj_tuple maskL)" "(\<lambda>x. True)" nt empty_queue' data_prev' move tuple_in_once',
         OF table_tuple_in auxlist_tuples_lhs empty_queue_props(1, 3-4) 
         data_prev_props max_ts_tuple_in nt_mono shift_end_res
@@ -2347,7 +2328,7 @@ proof -
   show
     "table (args_n args) (args_L args) (Mapping.keys tuple_in_once')"
     "newest_tuple_in_mapping fst (proj_tuple maskL) data_prev' tuple_in_once' (\<lambda>x. True)"
-    using shift_end_props(1,3)
+    using shift_end_props(1,2)
     by auto
 
   from assms(1) have auxlist_prev: "auxlist_data_prev args mt auxlist = (linearize data_prev)"
@@ -2360,7 +2341,7 @@ proof -
       unfolding auxlist_data_prev_def
       by auto
     moreover have empty: "linearize data_prev' = []"
-      using shift_end_props(7) calculation(1)
+      using shift_end_props(6) calculation(1)
       by auto
     ultimately have "(linearize data_prev) = (linearize data_prev')" "(linearize data_prev) = []"  by auto
   }
@@ -2378,7 +2359,7 @@ proof -
     case False
     then have not_mem: "\<not> memL (args_ivl args) 0" by auto
     show ?thesis
-      using shift_end_props(7) flip_int_less_lower_memR[OF not_mem]
+      using shift_end_props(6) flip_int_less_lower_memR[OF not_mem]
       by auto
   qed
 
@@ -2386,13 +2367,13 @@ proof -
   proof (cases "mem (args_ivl args) 0")
     case True
     then show ?thesis
-      using shift_end_props(6) data_prev_eq_mem_0
+      using shift_end_props(5) data_prev_eq_mem_0
       by (metis takeWhile.simps(1) takedropWhile_queue_snd)
   next
     case False
     then have not_mem: "\<not> memL (args_ivl args) 0" by auto
     then show ?thesis
-      using shift_end_props(6) flip_int_less_lower_memR[OF not_mem]
+      using shift_end_props(5) flip_int_less_lower_memR[OF not_mem]
       by auto
   qed
   then have move_takeWhile: "move = takeWhile (\<lambda>(t, X). memL (args_ivl args) (nt - t)) (linearize data_prev)"
@@ -2446,78 +2427,7 @@ proof -
     unfolding auxlist_data_prev_def filter_filter
     by (simp add: filter_eq filter_auxlist_data_prev')
 
-  
-  {
-    assume mem0: "mem (args_ivl args) 0"
-    then have "Mapping.keys tuple_in_once = {}" using tuple_in_once_mem0[OF assms(1)] by auto
-    then have "\<forall>k. Mapping.lookup tuple_in_once k = None"
-      using Mapping_keys_intro
-      by fastforce
-    then have "{tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')). \<exists>db'. snd tas = (proj_tuple maskL (snd db')) \<and> valid_tuple tuple_in_once db'} = {}"
-      unfolding valid_tuple_def
-      by auto
-    moreover {
-      from mem0 have "(set (filter (\<lambda>(t, rel). \<not> memL (args_ivl args) (nt - t)) (auxlist_data_prev args mt auxlist))) = {}"
-        by auto
-      then have "ts_tuple_rel_binary_lhs (set (filter (\<lambda>(t, rel). \<not> memL (args_ivl args) (nt - t)) (auxlist_data_prev args mt auxlist))) = {}"
-        unfolding ts_tuple_rel_f_def
-        by auto
-    }
-    ultimately have "ts_tuple_rel_binary_lhs (set (filter (\<lambda>(t, rel). \<not> memL (args_ivl args) (nt - t)) (auxlist_data_prev args mt auxlist))) =
-    {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')). \<exists>db'. tas = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once db'}"
-      using shift_end_props(2)
-      by auto
-  }
-  moreover {
-    define f1 :: "ts \<times> 'a table \<times> 'a table \<Rightarrow> bool" where "f1 = (\<lambda>(t, rel). memR (flip_int_less_lower (args_ivl args)) (nt - t))"
-    define f2 :: "ts \<times> 'a table \<times> 'a table \<Rightarrow> bool" where "f2 = (\<lambda>(t, rel). \<not>memL (args_ivl args) (nt - t))"
 
-    assume "\<not>mem (args_ivl args) 0"
-    then have not_memL: "\<not>memL (args_ivl args) 0" by auto
-
-    have mem_simp: "\<forall>t.
-      ( memR (flip_int_less_lower (args_ivl args)) (nt - t))  =
-      (\<not>memL (args_ivl args) (nt - t))"
-      using flip_int_less_lower_memR[OF not_memL]
-      by auto
-    {
-      fix x::"ts \<times> 'a table \<times> 'a table"
-
-      have "f1 x = (memR (flip_int_less_lower (args_ivl args)) (nt - fst x))"
-        unfolding f1_def
-        by auto
-      moreover have "f2 x = (\<not>memL (args_ivl args) (nt - fst x))"
-        unfolding f2_def
-        by auto
-      ultimately have "f1 x = f2 x"
-        using mem_simp
-        by auto
-    }
-    then have "f1 = f2"
-      by auto
-
-    then have filter_eq: "(filter f1 (auxlist_data_prev args mt auxlist)) =
-                    (filter f2 (auxlist_data_prev args mt auxlist))"
-      by auto
-
-    have "(filter (\<lambda>(t, rel).  memR (flip_int_less_lower (args_ivl args)) (nt - t)) (auxlist_data_prev args mt auxlist)) =
-          (filter (\<lambda>(t, rel). \<not>memL (args_ivl args) (nt - t)) (auxlist_data_prev args mt auxlist))"
-      using filter_eq
-      unfolding f1_def f2_def
-      by (auto simp only:)
-
-    then have "ts_tuple_rel_binary_lhs (set (filter (\<lambda>(t, rel). memR (flip_int_less_lower (args_ivl args)) (nt - t)) (auxlist_data_prev args mt auxlist))) =
-               ts_tuple_rel_binary_lhs (set (filter (\<lambda>(t, rel). \<not> memL (args_ivl args) (nt - t)) (auxlist_data_prev args mt auxlist)))"
-      by auto
-    then have "ts_tuple_rel_binary_lhs (set (filter (\<lambda>(t, rel). \<not> memL (args_ivl args) (nt - t)) (auxlist_data_prev args mt auxlist))) =
-    {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')). \<exists>db'. tas = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once db'}"
-      using shift_end_props(2)
-      by auto
-  }
-  ultimately have ts_tuple: "ts_tuple_rel_binary_lhs (set (auxlist_data_prev args nt auxlist)) =
-    {db \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')). \<exists>db'. db = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once db'}"
-    using filter_data_prev_nt
-    by auto
   
 
   {
@@ -2536,7 +2446,7 @@ proof -
       by (auto simp only: filter_simp)
    
     then have "tuple_in_once' = Mapping.empty" "tuple_in_once = Mapping.empty"
-      using tuple_in_once_empty shift_end_props(6) shift_end_props(8)
+      using tuple_in_once_empty shift_end_props(5) shift_end_props(7)
       by auto
   }
   then have mem0: "mem (args_ivl args) 0 \<Longrightarrow> tuple_in_once = Mapping.empty \<and> tuple_in_once' = Mapping.empty"
@@ -2548,7 +2458,7 @@ proof -
 
     have "tuple_in_once' = fold (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond_r (fst X) (proj_tuple maskL) tuple_in t) tuple_in)
         move tuple_in_once"
-      using shift_end_props(8)
+      using shift_end_props(7)
       by auto
     then have tuple_in_once'_eq: "tuple_in_once' = fold (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond_r (fst X) (proj_tuple maskL) tuple_in t) tuple_in)
       (snd (takedropWhile_queue (\<lambda>(t, X). memL (args_ivl args) (nt - t)) data_prev)) tuple_in_once"
@@ -2700,139 +2610,6 @@ proof -
     then show ?thesis by auto
   qed
 
-  {
-    fix timed_tuple
-    assume assm: "(fst timed_tuple, (proj_tuple maskL (snd timed_tuple))) \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'))"
-    define t where "t = fst timed_tuple"
-    define tuple where "tuple = (snd timed_tuple)"
-    
-    (* as we update tuple_in_once here and used it at the same time as a condition (in mmsaux, the condition is with since
-       we have to show separately that the condition is the same for the old & new mapping *)
-    have "valid_tuple tuple_in_once timed_tuple = valid_tuple tuple_in_once' timed_tuple"
-    proof (cases "mem (args_ivl args) 0")
-      case True
-      then show ?thesis
-        using mem0
-        unfolding valid_tuple_def
-        by auto
-    next
-      define A where "A = fst ` {
-          tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev)).
-          proj_tuple maskL tuple = snd tas
-        }"
-      case False
-      have "(t, (proj_tuple maskL tuple)) \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev))"
-        using assm shift_end_props(7)
-        unfolding t_def tuple_def ts_tuple_rel_f_def
-        by auto
-      then have t_mem: "t \<in> A"
-        using restrict_double_appl[of "args_L args" tuple]
-        unfolding A_def
-        by force
-      then have A_props: "A \<noteq> {}" "finite A"
-        unfolding A_def
-        by (auto simp add: finite_fst_ts_tuple_rel)
-      have zero_not_memL: "\<not> memL (args_ivl args) 0" using False by auto
-      from assm obtain X where X_props: "(t, X) \<in> (set (linearize data_prev'))"
-        unfolding ts_tuple_rel_f_def t_def
-        by auto
-      then have "memR (flip_int_less_lower (args_ivl args)) (nt - t)"
-        using shift_end_props(7)
-        by auto
-      then have t_not_memL: "\<not>memL (args_ivl args) (nt - t)"
-        using flip_int_less_lower_memR[OF zero_not_memL]
-        by auto
-      
-      show ?thesis
-      proof (rule iffI)
-        assume "valid_tuple tuple_in_once timed_tuple"
-        then obtain t' where t'_props: "Mapping.lookup tuple_in_once tuple = Some t'" "fst timed_tuple \<ge> t'"
-          unfolding valid_tuple_def tuple_def
-          by (metis (no_types, lifting) case_optionE case_prod_beta)
-        from assms(1) have "newest_tuple_in_mapping fst (proj_tuple maskL) data_prev tuple_in_once (\<lambda>x. True)"
-          by auto
-        then have "Mapping.lookup tuple_in_once tuple = safe_max A"
-          unfolding newest_tuple_in_mapping_def A_def
-          by auto
-        then have "t' \<ge> t" using A_props t_mem t'_props
-          unfolding safe_max_def
-          by auto
-        then have t'_not_memL: "\<not>memL (args_ivl args) (nt - t')"
-          using t_not_memL memL_mono
-          by auto
-        then have "Mapping.lookup tuple_in_once' tuple = Some t'" "fst timed_tuple \<ge> t'"
-          using False t'_props tuple_in_once_lookup(1)
-          by auto
-        then have "\<exists>t'. Mapping.lookup tuple_in_once' tuple = Some t' \<and> fst timed_tuple \<ge> t'" by auto
-        then show "valid_tuple tuple_in_once' timed_tuple"
-          unfolding tuple_def valid_tuple_def
-          by auto
-      next
-        assume "valid_tuple tuple_in_once' timed_tuple"
-        then obtain t' where t'_props:
-          "Mapping.lookup tuple_in_once' tuple = Some t'"
-          "fst timed_tuple \<ge> t'"
-          unfolding valid_tuple_def tuple_def
-          by (metis (no_types, lifting) case_optionE case_prod_beta')
-        {
-          assume "Mapping.lookup tuple_in_once tuple \<noteq> Mapping.lookup tuple_in_once' tuple"
-          then have "Mapping.lookup tuple_in_once tuple = None \<or> (\<exists>t. Mapping.lookup tuple_in_once tuple = Some t \<and> t\<noteq>t')"
-            using t'_props option.exhaust_sel
-            by auto
-          moreover {
-            assume "Mapping.lookup tuple_in_once tuple = None"
-            then have "False"
-              using False t'_props tuple_in_once_lookup(3)
-              by auto
-          }
-          moreover {
-            assume "\<exists>t. Mapping.lookup tuple_in_once tuple = Some t \<and> t\<noteq>t'"
-            then obtain t'' where t''_props: "Mapping.lookup tuple_in_once tuple = Some t''" "t''\<noteq>t'"
-              by auto
-            from assms(1) have "newest_tuple_in_mapping fst (proj_tuple maskL) data_prev tuple_in_once (\<lambda>x. True)"
-              by auto
-            then have "Mapping.lookup tuple_in_once tuple = safe_max A"
-              unfolding newest_tuple_in_mapping_def A_def
-              by auto
-            then have "t'' \<ge> t"
-              using A_props t_mem t''_props(1)
-              unfolding safe_max_def
-              by auto
-            then have "\<not>memL (args_ivl args) (nt - t'')"
-              using t_not_memL memL_mono
-              by auto
-            then have "False"
-              using False t'_props t''_props tuple_in_once_lookup(1)
-              by auto
-          }
-          ultimately have "False" by blast
-        }
-        then have "Mapping.lookup tuple_in_once tuple = Mapping.lookup tuple_in_once' tuple"
-          by blast
-        then have "Mapping.lookup tuple_in_once tuple = Some t' \<and> fst timed_tuple \<ge> t'"
-          using tuple_in_once_lookup(1) t'_props
-          unfolding tuple_def
-          by auto
-        then have "\<exists>t'. Mapping.lookup tuple_in_once tuple = Some t' \<and> fst timed_tuple \<ge> t'" by auto
-        then show "valid_tuple tuple_in_once timed_tuple"
-          unfolding tuple_def valid_tuple_def
-          by auto
-      qed
-    qed
-  }
-  then have valid_tuple_in_once: "\<forall>timed_tuple. (fst timed_tuple, proj_tuple maskL (snd timed_tuple)) \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')) \<longrightarrow>
-  valid_tuple tuple_in_once timed_tuple = valid_tuple tuple_in_once' timed_tuple"
-    by auto
-  then have "{db \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')). \<exists>db'. db = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once db'} =
-    {db \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')). \<exists>db'. db = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once' db'}"
-    by blast
-  then show ts_tuple_rel_binary_lhs_data_prev: "ts_tuple_rel_binary_lhs (set (auxlist_data_prev args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist))) =
-    {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')).
-    \<exists>db'. tas = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once' db'}"
-    using ts_tuple shift_end_props(2) auxlist_data_prev_inv
-    by auto
-
-
   from assms(1) have data_prev_wf:
     "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_L args) as)"
     "(\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_R args) as)"
@@ -2841,7 +2618,7 @@ proof -
   then show
     "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_L args) as)"
     "(\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_R args) as)"
-    using shift_end_props(7)
+    using shift_end_props(6)
     by auto
 
   from assms(1) have tuple_in_once_props:
@@ -5465,12 +5242,6 @@ proof -
   moreover have "(\<forall>as \<in> \<Union>((snd) ` (set (linearize data_in''))). wf_tuple (args_n args) (args_R args) as)"
     using valid_update_mmtaux'_unfolded[OF assms]
     by auto
-  moreover have "ts_tuple_rel_binary_lhs (set (auxlist_data_prev args nt auxlist')) =
-    {db \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')).
-    \<exists>db'. db = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once' db'}"
-    using valid_update_mmtaux'_unfolded[OF assms]
-    unfolding auxlist'_def
-    by auto
   moreover have "ts_tuple_rel_binary_rhs (set (auxlist_data_in args nt auxlist')) =
     ts_tuple_rel (set (linearize data_in''))"
     using valid_update_mmtaux'_unfolded[OF assms]
@@ -5742,91 +5513,6 @@ proof -
     moreover have "(\<forall>as \<in> \<Union>((snd) ` (set (linearize data_in'))). wf_tuple (args_n args) (args_R args) as)"
       using valid
       by auto
-    moreover have "ts_tuple_rel_binary_lhs (set (auxlist_data_prev args nt auxlist'')) =
-      {db \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')).
-      \<exists>db'. db = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once'' db'}"
-    proof -
-      have before: "ts_tuple_rel_binary_lhs (set (auxlist_data_prev args nt auxlist')) =
-      {db \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')).
-      \<exists>db'. db = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once' db'}"
-        using valid
-        unfolding valid_mmtaux.simps
-        apply -
-        apply (erule conjE)+
-        apply assumption
-        done
-      have valid_tuple_eq: "\<forall>db. valid_tuple tuple_in_once' db = valid_tuple tuple_in_once'' db"
-      proof -
-        {
-          fix db::"nat \<times> 'a option list"
-          assume assm: "fst db = nt"
-
-          have "valid_tuple tuple_in_once' db = valid_tuple tuple_in_once'' db"
-          proof (rule iffI)
-            assume "valid_tuple tuple_in_once' db"
-            then obtain t where t_props: "Mapping.lookup tuple_in_once' (snd db) = Some t" "t \<le> fst db"
-              unfolding valid_tuple_def
-              by (auto split: option.splits)
-            
-            then show "valid_tuple tuple_in_once'' db"
-            proof (cases "(snd db) \<in> l")
-              case True
-              then have "Mapping.lookup tuple_in_once'' (snd db) = Some nt"
-                unfolding tuple_in_once''_def
-                by (simp add: Mapping_lookup_upd_set)
-              then show ?thesis
-                using assm
-                unfolding valid_tuple_def
-                by auto
-            next
-              case False
-              then show ?thesis sorry
-            qed
-          next
-            assume "valid_tuple tuple_in_once'' db"
-            then show "valid_tuple tuple_in_once' db"
-              by auto
-          qed
-        }
-        then show ?thesis by auto
-      qed
-
-      {
-        fix as
-        assume "as \<in> ts_tuple_rel_binary_lhs (set (auxlist_data_prev args nt auxlist''))"
-        then have "as \<in> ts_tuple_rel_binary_lhs (set (auxlist_data_prev args nt auxlist')) \<or> as \<in> ts_tuple_rel_binary_lhs (set ([(nt, l, r)]))"
-          unfolding auxlist_prev_eq ts_tuple_rel_f_def
-          by auto
-        moreover {
-          assume "as \<in> ts_tuple_rel_binary_lhs (set (auxlist_data_prev args nt auxlist'))"
-          then have "as \<in> {db \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')).
-          \<exists>db'. db = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once' db'}"
-            using before
-            by auto
-          then have "as \<in> {db \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')).
-          \<exists>db'. db = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once'' db'}"
-            by auto
-        }
-        moreover {
-          assume "as \<in> ts_tuple_rel_binary_lhs (set ([(nt, l, r)]))"
-          then have "as \<in> {db \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')).
-          \<exists>db'. db = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once'' db'}"
-            by auto
-        }
-        ultimately have "as \<in> {db \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')).
-        \<exists>db'. db = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once'' db'}"
-          by blast
-      }
-      moreover {
-        fix as
-        assume "as \<in> {db \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')).
-        \<exists>db'. db = (fst db', (proj_tuple maskL (snd db'))) \<and> valid_tuple tuple_in_once'' db'}"
-
-        then have "as \<in> ts_tuple_rel_binary_lhs (set (auxlist_data_prev args nt auxlist''))"
-          by auto
-      }
-      ultimately show ?thesis by blast
-    qed
     moreover have "ts_tuple_rel_binary_rhs (set (auxlist_data_in args nt auxlist'')) =
       ts_tuple_rel (set (linearize data_in'))"
       unfolding auxlist_in_eq
