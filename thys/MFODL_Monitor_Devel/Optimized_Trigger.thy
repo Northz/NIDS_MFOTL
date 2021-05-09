@@ -5354,7 +5354,7 @@ fun update_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a table \<Rightarrow>
           (append_queue (nt, r) data_in'),
           tuple_in_once',
           upd_set tuple_since_hist'' (\<lambda>_. idx_mid') (r - Mapping.keys tuple_since_hist''),
-          hist_sat' \<inter> r,
+          (if is_empty data_in' then r else hist_sat' \<inter> r),
           (since_sat' \<inter> r) \<union> {as \<in> r. proj_tuple_in_join True maskL as l}
         )
       )
@@ -5414,24 +5414,673 @@ proof -
     by blast
 
   define update_mmtaux_res where "update_mmtaux_res = update_mmtaux args nt l r (cur, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat)"
+  define auxlist'' where "auxlist'' = auxlist' @ [(nt, l, r)]"
+
+  have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args nt auxlist') = (linearize data_in')"
+    using valid
+    by auto
+  then have data_in'_len_leq: "length (linearize data_in') \<le> length auxlist'"
+    unfolding auxlist_data_in_def
+    by (metis (no_types, lifting) length_filter_le length_map)
 
   show ?thesis
-  proof (cases "mem (args_ivl args) 0")
+  proof (cases "mem (args_ivl args) 0")    
     case True
-  then show ?thesis sorry
+
+    define idx_mid'' where "idx_mid'' = idx_mid'+1"
+    define idx_next'' where "idx_next'' = idx_next+1"
+    define data_in'' where "data_in'' = (append_queue (nt, r) data_in')"
+    define tuple_since_hist'' where "tuple_since_hist'' = Mapping.filter (\<lambda>as _. as \<in> r) tuple_since_hist'"
+    define tuple_since_hist''' where "tuple_since_hist''' = upd_set tuple_since_hist'' (\<lambda>_. idx_mid') (r - Mapping.keys tuple_since_hist'')"
+    define hist_sat'' where "hist_sat'' = (if is_empty data_in' then r else hist_sat' \<inter> r)"
+    define since_sat'' where "since_sat'' = (since_sat' \<inter> r) \<union> {as \<in> r. proj_tuple_in_join True maskL as l}"
+
+    have res_eq: "(
+        nt,
+        idx_next'',
+        idx_mid'',
+        idx_oldest',
+        maskL,
+        maskR,
+        data_prev',
+        data_in'',
+        tuple_in_once',
+        tuple_since_hist''',
+        hist_sat'',
+        since_sat''
+      ) = update_mmtaux args nt l r (cur, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat)"
+      unfolding update_mmtaux_res_def idx_mid''_def idx_next''_def data_in''_def tuple_since_hist'''_def tuple_since_hist''_def hist_sat''_def since_sat''_def
+      using True
+      by (auto simp only: update_mmtaux.simps Let_def update_eq[symmetric] split: if_splits)
+
+    have auxlist_in_eq: "(auxlist_data_in args nt auxlist'') = (auxlist_data_in args nt auxlist') @ [(nt, l, r)]"
+      using True
+      unfolding auxlist_data_in_def auxlist''_def
+      by auto
+
+    have auxlist_prev_eq: "(auxlist_data_prev args nt auxlist'') = (auxlist_data_prev args nt auxlist')"
+      using True
+      unfolding auxlist_data_prev_def auxlist''_def
+      by auto
+
+    have "auxlist_data_prev args nt auxlist' = (linearize data_prev')"
+      using valid
+      by auto
+    moreover have memL: "\<forall>t. memL (args_ivl args) t"
+      using True
+      by auto
+    ultimately have lin_data_prev'_eq:
+      "(linearize data_prev') = []"
+      "auxlist_data_prev args nt auxlist' = []"
+      unfolding auxlist_data_prev_def
+      by auto
+    moreover have "auxlist_data_prev args nt auxlist' = drop (length (linearize data_in')) auxlist'"
+      using valid
+      by auto
+    ultimately have data_in'_len:"length (linearize data_in') = length auxlist'"
+      using data_in'_len_leq
+      by auto
+    moreover have "auxlist_data_in args nt auxlist' = take (length (linearize data_in')) auxlist'"
+      using valid
+      by auto
+    ultimately have auxlist_in_eq:
+      "auxlist_data_in args nt auxlist' = auxlist'"
+      "auxlist_data_in args nt auxlist'' = auxlist' @ [(nt, l, r)]"
+      using auxlist_in_eq
+      by auto
+
+    have "(if mem (args_ivl args) 0 then (args_L args) \<subseteq> (args_R args) else (args_L args) = (args_R args))"
+      using assms(4)
+      by auto
+    moreover have "maskL = join_mask (args_n args) (args_L args)"
+      using assms(4)
+      by auto
+    moreover have "maskR = join_mask (args_n args) (args_R args)"
+      using assms(4)
+      by auto
+    moreover have "(\<forall>(t, relL, relR) \<in> set auxlist''. table (args_n args) (args_L args) relL \<and> table (args_n args) (args_R args) relR)"
+    proof -
+      have "(\<forall>(t, relL, relR) \<in> set auxlist'. table (args_n args) (args_L args) relL \<and> table (args_n args) (args_R args) relR)"
+        using valid
+        by auto
+      then show ?thesis using assms(2-3) unfolding auxlist''_def by auto
+    qed
+    moreover have "table (args_n args) (args_L args) (Mapping.keys tuple_in_once')"
+      using valid
+      by auto
+    moreover have "table (args_n args) (args_R args) (Mapping.keys tuple_since_hist''')"
+    proof -
+      have "table (args_n args) (args_R args) (Mapping.keys tuple_since_hist')"
+        using valid
+        by auto
+      then have "table (args_n args) (args_R args) (Mapping.keys tuple_since_hist'')"
+        unfolding tuple_since_hist''_def
+        by (meson New_max.wf_atable_subset keys_filter)
+      moreover have "table (args_n args) (args_R args) (r - Mapping.keys tuple_since_hist'')"
+        using assms(3)
+        unfolding table_def
+        by (meson DiffD1)
+      ultimately show ?thesis
+        unfolding tuple_since_hist'''_def
+        by (metis Mapping_upd_set_keys table_Un)
+    qed
+    moreover have "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_L args) as)"
+      using valid
+      by auto
+    moreover have "(\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_R args) as)"
+      using valid
+      by auto
+    moreover have "(\<forall>as \<in> \<Union>((snd) ` (set (linearize data_in''))). wf_tuple (args_n args) (args_R args) as)"
+    proof -
+      have "(\<forall>as \<in> \<Union>((snd) ` (set (linearize data_in'))). wf_tuple (args_n args) (args_R args) as)"
+        using valid
+        by auto
+      then show ?thesis
+        using assms(3)
+        unfolding data_in''_def append_queue_rep table_def
+        by auto
+    qed
+    moreover have "ts_tuple_rel_binary_rhs (set (auxlist_data_in args nt auxlist'')) =
+      ts_tuple_rel (set (linearize data_in''))"
+    proof -
+      have "ts_tuple_rel_binary_rhs (set (auxlist_data_in args nt auxlist')) =
+      ts_tuple_rel (set (linearize data_in'))"
+        using valid
+        by auto
+      moreover have "ts_tuple_rel_binary_rhs (set (auxlist_data_in args nt auxlist'')) = ts_tuple_rel_binary_rhs (set (auxlist_data_in args nt auxlist')) \<union> ts_tuple_rel_binary_rhs (set ([(nt, l, r)]))"
+        using auxlist_in_eq
+        unfolding ts_tuple_rel_f_def
+        by auto
+      moreover have "ts_tuple_rel (set (linearize data_in'')) = ts_tuple_rel (set (linearize data_in')) \<union> ts_tuple_rel (set [(nt, r)])"
+        unfolding data_in''_def ts_tuple_rel_f_def append_queue_rep
+        by auto
+      ultimately show ?thesis
+        unfolding ts_tuple_rel_f_def
+        by auto
+    qed
+    moreover have "sorted (map fst auxlist'')"
+    proof -
+      have
+        "sorted (map fst auxlist')"
+        "\<forall>db \<in> set auxlist'. time db \<le> nt"
+        using valid
+        by auto
+      then show ?thesis
+        unfolding auxlist''_def time_def
+        using sorted_append[of "map fst auxlist'" "map fst [(nt, l, r)]"]
+        by auto
+    qed
+    moreover have "auxlist_data_prev args nt auxlist'' = (linearize data_prev')"
+      unfolding auxlist_prev_eq
+      using valid
+      by auto
+    moreover have "auxlist_data_prev args nt auxlist'' = drop (length (linearize data_in'')) auxlist''"
+      using True data_in'_len memL
+      unfolding auxlist''_def data_in''_def append_queue_rep auxlist_data_prev_def
+      by auto
+    moreover have "length (linearize data_prev') + idx_mid'' = idx_next''"
+      using valid
+      unfolding idx_mid''_def idx_next''_def
+      by auto
+    moreover have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args nt auxlist'') = (linearize data_in'')"
+    proof -
+      have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args nt auxlist') = (linearize data_in')"
+        using valid
+        by auto
+     then show ?thesis
+      unfolding auxlist_in_eq data_in''_def append_queue_rep
+      by auto
+    qed
+    moreover have "auxlist_data_in args nt auxlist'' = take (length (linearize data_in'')) auxlist''"
+      unfolding auxlist_in_eq(2) data_in''_def append_queue_rep
+      unfolding auxlist''_def
+      using take_append[of "length auxlist'" auxlist' "[(nt, l, r)]"] length_append[of "linearize data_in'" "[(nt, r)]"]
+      by (simp add: data_in'_len)
+    moreover have data_in''_len: "length (linearize data_in'') + idx_oldest' = idx_mid''"
+    proof -
+      have "length (linearize data_in') + idx_oldest' = idx_mid'"
+        using valid
+        by auto
+      then show ?thesis
+        unfolding idx_mid''_def data_in''_def append_queue_rep
+        by auto
+    qed
+    moreover have "(\<forall>db \<in> set auxlist''. time db \<le> nt \<and> memR (args_ivl args) (nt - time db))"
+    proof -
+      have "(\<forall>db \<in> set auxlist'. time db \<le> nt \<and> memR (args_ivl args) (nt - time db))"
+        using valid
+        by auto
+      then show ?thesis
+        unfolding auxlist''_def time_def
+        by auto
+    qed
+    moreover have "newest_tuple_in_mapping fst (proj_tuple maskL) data_prev' tuple_in_once' (\<lambda>x. True)"
+      using valid
+      by auto
+    moreover have "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> (proj_tuple maskL as) \<in> l)"
+      using valid
+      by auto
+    moreover have "(\<forall>as. (case Mapping.lookup tuple_since_hist''' as of
+      Some idx \<Rightarrow> tuple_since_tp args as (linearize data_in'') idx_oldest' idx_mid'' idx
+      | None   \<Rightarrow> \<forall>idx. \<not>tuple_since_tp args as (linearize data_in'') idx_oldest' idx_mid'' idx)
+    )"
+    proof -
+      have before: "(\<forall>as. (case Mapping.lookup tuple_since_hist' as of
+        Some idx \<Rightarrow> tuple_since_tp args as (linearize data_in') idx_oldest' idx_mid' idx
+        | None   \<Rightarrow> \<forall>idx. \<not>tuple_since_tp args as (linearize data_in') idx_oldest' idx_mid' idx)
+      )"
+        using valid
+        by auto
+      have non_empty: "linearize data_in'' \<noteq> []"
+        unfolding data_in''_def append_queue_rep
+        by auto
+      have data_in''_last: "last (linearize data_in'') = (nt, r)"
+        unfolding data_in''_def append_queue_rep
+        by auto
+      have before_len:
+        "length (linearize data_in') + idx_oldest' = idx_mid'"
+        using valid
+        by auto
+      {
+        fix as
+        have "(case Mapping.lookup tuple_since_hist''' as of
+          Some idx \<Rightarrow> tuple_since_tp args as (linearize data_in'') idx_oldest' idx_mid'' idx
+          | None   \<Rightarrow> \<forall>idx. \<not>tuple_since_tp args as (linearize data_in'') idx_oldest' idx_mid'' idx)"
+        proof (cases "Mapping.lookup tuple_since_hist''' as")
+          case None
+          then have
+            "as \<notin> (r - Mapping.keys tuple_since_hist'')"
+            unfolding tuple_since_hist'''_def
+            by (metis Mapping_lookup_upd_set option.simps(3))
+          moreover have hist'': "Mapping.lookup tuple_since_hist'' as = None"
+            using None
+            unfolding tuple_since_hist'''_def
+            by (metis Mapping_lookup_upd_set option.simps(3))
+          ultimately have not_relR: "as \<notin> r"
+            by (simp add: keys_is_none_rep)
+          
+          {
+            fix idx
+            assume "idx < idx_mid''"
+            then have "last (linearize data_in'') \<in> set (drop (idx - idx_oldest') (linearize data_in''))"
+              using non_empty data_in''_len
+              by (metis add.commute add_diff_inverse_nat add_less_cancel_left diff_is_0_eq dual_order.strict_iff_order last_drop last_in_set length_drop length_greater_0_conv zero_less_diff)
+            moreover have "as \<notin> snd (last (linearize data_in''))"
+            using not_relR data_in''_last
+              by simp
+            ultimately have "\<not>(\<forall>(t, y)\<in>set (drop (idx - idx_oldest') (linearize data_in'')). as \<in> y)"
+              by fastforce
+          }
+          then have "\<forall>idx. \<not> tuple_since_tp args as (linearize data_in'') (idx_oldest') (idx_mid'') idx"
+            unfolding tuple_since_tp_def
+            by auto
+
+          then show ?thesis using None by auto
+        next
+          case (Some idx)
+          then have "tuple_since_tp args as (linearize data_in'') idx_oldest' idx_mid'' idx"
+          proof (cases "as \<in> (r - Mapping.keys tuple_since_hist'')")
+            case True
+            then have idx_eq: "idx = idx_mid'"
+              using Some
+              unfolding tuple_since_hist'''_def
+              by (simp add: Mapping_lookup_upd_set)
+            then have drop_eq: "drop (idx - idx_oldest') (linearize data_in'') = [(nt, r)]"
+              using data_in''_len
+              unfolding idx_mid''_def data_in''_def append_queue_rep
+              by auto
+            then have "\<forall>(t, y)\<in>set (drop (idx - idx_oldest') (linearize data_in'')). as \<in> y"
+              using True
+              by auto
+            moreover have "idx_oldest' < idx \<longrightarrow> as \<notin> snd (linearize data_in'' ! (idx - idx_oldest' - 1))"
+            proof -
+              {
+                assume assm: "idx_oldest' < idx"
+                then have before_non_empty: "linearize data_in' \<noteq> []"
+                  using before_len idx_eq
+                  by auto
+                have "Mapping.lookup tuple_since_hist' as = None"
+                  using True
+                  unfolding tuple_since_hist''_def
+                  by (metis DiffD1 DiffD2 Mapping_keys_intro Mapping_lookup_filter_Some)
+                then have not_hist: "\<forall>idx. \<not> tuple_since_tp args as (linearize data_in') idx_oldest' idx_mid' idx"
+                  using before
+                  by (simp add: option.case_eq_if)
+
+                have "as \<notin> snd (last (linearize data_in'))"
+                  using no_hist_last_not_sat[OF before_len not_hist before_non_empty]
+                  by auto
+                then have "as \<notin> snd (linearize data_in'' ! (idx - idx_oldest' - 1))"
+                  using data_in'_len idx_eq
+                  unfolding data_in''_def
+                  by (metis add_diff_cancel_right' append_eq_conv_conj append_queue_rep assm before_len before_non_empty diff_less last_conv_nth leI not_one_le_zero nth_take zero_less_diff)
+              }
+              then show ?thesis by auto
+            qed
+            ultimately have "tuple_since_tp args as (linearize data_in'') idx_oldest' idx_mid'' idx"
+              using non_empty idx_eq
+              unfolding tuple_since_tp_def idx_mid''_def
+              by auto
+            then show ?thesis
+              by auto
+          next
+            case False
+            then have "Mapping.lookup tuple_since_hist'' as = Some idx"
+              using Some
+              unfolding tuple_since_hist'''_def
+              by (metis Mapping_lookup_upd_set)
+            then have as_mem:
+              "as \<in> r \<and> Mapping.lookup tuple_since_hist' as = Some idx"
+              unfolding tuple_since_hist''_def
+              by (metis Mapping_lookup_filter_None Mapping_lookup_filter_not_None option.simps(3))
+
+            then have tuple_since: "tuple_since_tp args as (linearize data_in') idx_oldest' idx_mid' idx"
+              using before
+              by (auto split: option.splits)
+            then have idx_props:
+              "idx < idx_mid'"
+              "\<forall>(t, y)\<in>set (drop (idx - idx_oldest') (linearize data_in')). as \<in> y"
+              "idx_oldest' < idx \<longrightarrow> as \<notin> snd (linearize data_in' ! (idx - idx_oldest' - 1))"
+              unfolding tuple_since_tp_def
+              by auto
+
+            have "idx - idx_oldest' \<le> length (linearize data_in')"
+              using before_len idx_props(1)
+              by auto
+            then have "\<forall>(t, y)\<in>set (drop (idx - idx_oldest') (linearize data_in'')). as \<in> y"
+              using idx_props(2) as_mem
+              unfolding data_in''_def append_queue_rep
+              by auto
+            moreover have "linearize data_in'' ! (idx - idx_oldest' - 1) = linearize data_in' ! (idx - idx_oldest' - 1)"
+              using before_len idx_props
+              unfolding data_in''_def append_queue_rep
+              by (metis (no_types, lifting) diff_is_0_eq idx_append le_def length_greater_0_conv less_diff_conv2 less_imp_diff_less less_or_eq_imp_le tuple_since tuple_since_tp_def)
+
+            ultimately have "tuple_since_tp args as (linearize data_in'') idx_oldest' idx_mid'' idx"
+              using non_empty idx_props
+              unfolding tuple_since_tp_def idx_mid''_def
+              by auto
+            then show ?thesis by auto
+          qed
+          then show ?thesis
+            using Some
+            by auto
+        qed
+      }
+      
+      then show ?thesis
+        by auto
+    qed
+    moreover have "(\<forall>tuple. tuple \<in> hist_sat'' \<longleftrightarrow>
+        (\<not>is_empty data_in'') \<and> (
+          \<forall>(t, l, r) \<in> set (auxlist_data_in args nt auxlist''). tuple \<in> r
+      ))"
+    proof -
+      have before: "(\<forall>tuple. tuple \<in> hist_sat' \<longleftrightarrow>
+        (\<not>is_empty data_in') \<and> (
+          \<forall>(t, l, r) \<in> set (auxlist_data_in args nt auxlist'). tuple \<in> r
+      ))"
+        using valid
+        by auto
+      {
+        fix tuple
+
+        {
+          assume assm: "is_empty data_in'"
+          have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args nt auxlist') = (linearize data_in')"
+            using valid
+            by auto
+          then have "(auxlist_data_in args nt auxlist') = []"
+            using assm is_empty_alt[of data_in']
+            by auto
+          then have "auxlist_data_in args nt auxlist'' = [(nt, l, r)]"
+            using auxlist_in_eq
+            by auto
+        }
+        then have empty_data_in': "is_empty data_in' \<longrightarrow> auxlist_data_in args nt auxlist'' = [(nt, l, r)]"
+          by auto
+
+        have "tuple \<in> hist_sat'' \<longleftrightarrow>
+          (\<not>is_empty data_in'') \<and> (
+            \<forall>(t, l, r) \<in> set (auxlist_data_in args nt auxlist''). tuple \<in> r
+        )"
+        proof (rule iffI)
+          assume assm: "tuple \<in> hist_sat''"
+          show "(\<not>is_empty data_in'') \<and> (
+              \<forall>(t, l, r) \<in> set (auxlist_data_in args nt auxlist''). tuple \<in> r
+          )"
+          proof (cases "is_empty data_in'")
+            case True
+            then have tuple_mem: "tuple \<in> r"
+              using assm
+              unfolding hist_sat''_def
+              by auto
+            
+            then have "\<forall>(t, l, r) \<in> set (auxlist_data_in args nt auxlist''). tuple \<in> r"
+              using empty_data_in' True tuple_mem
+              by auto
+            moreover have "linearize data_in'' \<noteq> []"
+              unfolding data_in''_def append_queue_rep
+              by auto
+            ultimately show ?thesis
+              using is_empty_alt
+              by auto
+          next
+            case False
+            then have tuple_mem:
+              "tuple \<in> hist_sat'"
+              "tuple \<in> r"
+              using assm
+              unfolding hist_sat''_def
+              by auto
+            then have props: "(\<not>is_empty data_in') \<and> (
+                \<forall>(t, l, r) \<in> set (auxlist_data_in args nt auxlist'). tuple \<in> r
+            )"
+              using before
+              by auto
+            then have all: "\<forall>(t, l, r) \<in> set (auxlist_data_in args nt auxlist''). tuple \<in> r"
+              using tuple_mem(2)
+              unfolding auxlist_in_eq set_append
+              by auto
+  
+            have "linearize data_in' \<noteq> []"
+              using props is_empty_alt
+              by auto
+            then have "linearize data_in'' \<noteq> []"
+              unfolding data_in''_def append_queue_rep
+              by auto
+            then show ?thesis
+              using all is_empty_alt
+              by auto
+          qed
+        next
+          assume assm: "(\<not>is_empty data_in'') \<and> (
+              \<forall>(t, l, r) \<in> set (auxlist_data_in args nt auxlist''). tuple \<in> r
+          )"
+          then show "tuple \<in> hist_sat''"
+          proof (cases "is_empty data_in'")
+            case True
+            then have "tuple \<in> r"
+              using assm empty_data_in'
+              by auto
+            then show ?thesis
+              unfolding hist_sat''_def
+              using True
+              by auto
+          next
+            case False
+            then have tuple_mem:
+              "tuple \<in> r"
+              "\<forall>(t, l, r) \<in> set (auxlist_data_in args nt auxlist'). tuple \<in> r"
+              using assm auxlist_in_eq
+              by auto
+            then have "tuple \<in> hist_sat'"
+              using before False
+              by auto
+            then show ?thesis
+              unfolding hist_sat''_def
+              using False tuple_mem(1)
+              by auto
+          qed
+        qed
+      }
+      then show ?thesis by auto
+    qed
+    moreover have "(\<forall>tuple. tuple \<in> since_sat'' \<longrightarrow>
+        ((tuple \<in> hist_sat'') \<or> tuple_since_lhs tuple (linearize data_in'') args maskL (auxlist_data_in args nt auxlist''))
+      )"
+    proof -
+      have before: "(\<forall>tuple. tuple \<in> since_sat' \<longrightarrow>
+          ((tuple \<in> hist_sat') \<or> tuple_since_lhs tuple (linearize data_in') args maskL (auxlist_data_in args nt auxlist'))
+        )"
+        using valid
+        unfolding valid_mmtaux.simps
+        apply -
+        apply (erule conjE)+
+        apply assumption
+        done
+      {
+        fix tuple
+        assume assm: "tuple \<in> since_sat''"
+        have non_empty: "linearize data_in'' \<noteq> []"
+          unfolding data_in''_def append_queue_rep
+          by auto
+        have "tuple \<in> (since_sat' \<inter> r) \<union> {as \<in> r. proj_tuple_in_join True maskL as l}"
+          using assm since_sat''_def
+          by auto
+        moreover {
+          assume assm: "tuple \<in> (since_sat' \<inter> r)"
+          then have "tuple \<in> hist_sat' \<or> tuple_since_lhs tuple (linearize data_in') args maskL (auxlist_data_in args nt auxlist')"
+            using before
+            by auto
+          moreover {
+            assume hist: "tuple \<in> hist_sat'"
+            moreover have "(\<forall>tuple. tuple \<in> hist_sat' \<longleftrightarrow>
+              (\<not>is_empty data_in') \<and> (
+                \<forall>(t, l, r) \<in> set (auxlist_data_in args nt auxlist'). tuple \<in> r
+            ))"
+              using valid
+              by auto
+            ultimately have "(\<not>is_empty data_in')"
+              by auto
+            then have "tuple \<in> hist_sat''"
+              using assm hist
+              unfolding hist_sat''_def
+              by auto
+          }
+          moreover {
+            assume since: "tuple_since_lhs tuple (linearize data_in') args maskL (auxlist_data_in args nt auxlist')"
+            then have "linearize data_in' \<noteq> []"
+              unfolding tuple_since_lhs_def
+              by auto
+            obtain n where n_props:
+              "n\<in>{0..<length (linearize data_in')}"
+              "let suffix = drop n (auxlist_data_in args nt auxlist') in (\<forall>(t, l, y)\<in>set suffix. tuple \<in> y) \<and> proj_tuple maskL tuple \<in> relL (hd suffix)"
+              using since
+              unfolding tuple_since_lhs_def
+              by auto
+            
+            have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args nt auxlist') = (linearize data_in')"
+              using valid
+              by auto
+            then have len_eq: "length (auxlist_data_in args nt auxlist') = length (linearize data_in')"
+              using length_map
+              by metis
+            then have "n \<le> length (auxlist_data_in args nt auxlist')"
+              using n_props(1)
+              by auto
+            moreover have "(auxlist_data_in args nt auxlist'') = (auxlist_data_in args nt auxlist') @ [(nt, l, r)]"
+              using auxlist_in_eq
+              by auto
+            ultimately have "drop n (auxlist_data_in args nt auxlist') @ [(nt, l, r)] = drop n (auxlist_data_in args nt auxlist'')"
+              by auto
+            then have "let suffix = drop n (auxlist_data_in args nt auxlist'') in (\<forall>(t, l, y)\<in>set suffix. tuple \<in> y) \<and> proj_tuple maskL tuple \<in> relL (hd suffix)"
+              using n_props(2) len_eq assm
+              by (metis (no_types, lifting) Int_iff UnE atLeastLessThan_iff case_prod_beta' drop_eq_Nil hd_append2 in_set_simps(2) le_def n_props(1) prod.sel(2) set_append)
+            moreover have "n\<in>{0..<length (linearize data_in'')}"
+              using n_props(1)
+              unfolding data_in''_def append_queue_rep
+              by auto
+            ultimately have "tuple_since_lhs tuple (linearize data_in'') args maskL (auxlist_data_in args nt auxlist'')"
+              using non_empty
+              unfolding tuple_since_lhs_def
+              by auto
+          }
+          ultimately have "tuple \<in> hist_sat'' \<or> tuple_since_lhs tuple (linearize data_in'') args maskL (auxlist_data_in args nt auxlist'')"
+            by auto
+        }
+        moreover {
+          define n where "n = length (auxlist_data_in args nt auxlist'') - 1"
+          assume "tuple \<in> {as \<in> r. proj_tuple_in_join True maskL as l}"
+          then have tuple_props: "tuple \<in> r" "proj_tuple_in_join True maskL tuple l"
+            by auto
+          have drop_eq: "drop n (auxlist_data_in args nt auxlist'') = [(nt, l, r)]"
+            unfolding n_def
+            using auxlist_in_eq
+            by auto
+          have "\<forall>(t, l, y)\<in>set (drop n (auxlist_data_in args nt auxlist'')). tuple \<in> y"
+            using drop_eq tuple_props
+            by auto
+          moreover have "proj_tuple maskL tuple \<in> relL (hd (drop n (auxlist_data_in args nt auxlist'')))"
+            using tuple_props
+            unfolding drop_eq relL_def
+            by (simp add: proj_tuple_in_join_def)
+          moreover have "n\<in>{0..<length (linearize data_in'')}"
+          proof -
+            have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args nt auxlist') = (linearize data_in')"
+              using valid
+              by auto
+            then show ?thesis
+              using auxlist_in_eq length_map[of "(\<lambda>(t, l, r). (t, r))" "(auxlist_data_in args nt auxlist')"]
+              unfolding data_in''_def append_queue_rep n_def
+              by auto
+          qed
+          ultimately have "tuple_since_lhs tuple (linearize data_in'') args maskL (auxlist_data_in args nt auxlist'')"
+            using non_empty
+            unfolding tuple_since_lhs_def
+            by (auto simp add: Let_def)
+        }
+        ultimately have "tuple \<in> hist_sat'' \<or> tuple_since_lhs tuple (linearize data_in'') args maskL (auxlist_data_in args nt auxlist'')"
+          by auto
+      }
+      then show ?thesis by auto
+    qed
+    moreover have "(\<forall>tuple. tuple_since_lhs tuple (linearize data_in'') args maskL (auxlist_data_in args nt auxlist'') \<longrightarrow>
+        tuple \<in> since_sat''
+      )"
+    proof -
+      have before: "(\<forall>tuple. tuple_since_lhs tuple (linearize data_in') args maskL (auxlist_data_in args nt auxlist') \<longrightarrow>
+        tuple \<in> since_sat'
+      )"
+        using valid
+        by auto
+      {
+        fix tuple
+        assume assm: "tuple_since_lhs tuple (linearize data_in'') args maskL (auxlist_data_in args nt auxlist'')"
+        then have non_empty: "linearize data_in'' \<noteq> []"
+          unfolding tuple_since_lhs_def
+          by auto
+        obtain n where n_props:
+          "n\<in>{0..<length (linearize data_in'')}"
+          "let suffix = drop n (auxlist_data_in args nt auxlist'') in (\<forall>(t, l, y)\<in>set suffix. tuple \<in> y) \<and> proj_tuple maskL tuple \<in> relL (hd suffix)"
+          using assm
+          unfolding tuple_since_lhs_def
+          by auto
+        {
+          assume n_l: "n\<in>{0..<length (linearize data_in')}"
+          then have "let suffix = drop n (auxlist_data_in args nt auxlist') in (\<forall>(t, l, y)\<in>set suffix. tuple \<in> y) \<and> proj_tuple maskL tuple \<in> relL (hd suffix)"
+            using n_props(2) auxlist_in_eq Let_def
+            by (simp add: data_in'_len)
+          moreover have "linearize data_in' \<noteq> []"
+            using n_l
+            by auto
+          ultimately have "tuple \<in> since_sat'"
+            using n_l before
+            unfolding tuple_since_lhs_def
+            by blast
+          moreover have "tuple \<in> r"
+            using n_l n_props auxlist_in_eq
+            by (simp add: data_in'_len)
+          ultimately have "tuple \<in> since_sat' \<inter> r"
+            by auto
+        }
+        moreover {
+          assume "n \<notin> {0..<length (linearize data_in')}"
+          then have "n = length (linearize data_in')"
+            using n_props
+            unfolding data_in''_def append_queue_rep
+            by auto
+          moreover have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args nt auxlist') = (linearize data_in')"
+            using valid
+            by auto
+          ultimately have "drop n (auxlist_data_in args nt auxlist'') = [(nt, l, r)]"
+            using auxlist_in_eq length_map[of "(\<lambda>(t, l, r). (t, r))" "(auxlist_data_in args nt auxlist')"]
+            by auto
+          then have "tuple \<in> r" "proj_tuple maskL tuple \<in> l"
+            using n_props(2)
+            unfolding relL_def
+            by auto
+          then have "tuple \<in> {as \<in> r. proj_tuple_in_join True maskL as l}"
+            unfolding proj_tuple_in_join_def
+            by auto
+        }
+        ultimately have "tuple \<in> since_sat''"
+          unfolding since_sat''_def
+          by auto
+      }
+      then show ?thesis by auto
+    qed
+    moreover have "time (nt, l, r) \<le> nt"
+      unfolding time_def
+      by auto
+    ultimately show ?thesis
+      unfolding res_eq[symmetric] auxlist''_def auxlist'_def
+      by auto
   next
     case False
     define data_prev'' where "data_prev'' = (append_queue (nt, l, r) data_prev')"
     define idx_next'' where "idx_next'' = idx_next+1"
     define tuple_in_once'' where "tuple_in_once'' = upd_set tuple_in_once' (\<lambda>_. nt) l"
-    define auxlist'' where "auxlist'' = auxlist' @ [(nt, l, r)]"
-
-    have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args nt auxlist') = (linearize data_in')"
-      using valid
-      by auto
-    then have data_in'_len_leq: "length (linearize data_in') \<le> length auxlist'"
-      unfolding auxlist_data_in_def
-      by (metis (no_types, lifting) length_filter_le length_map)
 
     have auxlist_in_eq: "(auxlist_data_in args nt auxlist'') = (auxlist_data_in args nt auxlist')"
       using False
@@ -5799,19 +6448,5 @@ proof -
       by auto
   qed
 qed
-
-lemma valid_update_mmtaux: "
-    nt \<ge> cur \<Longrightarrow>
-    table (args_n args) (args_L args) l \<Longrightarrow>
-    table (args_n args) (args_R args) r \<Longrightarrow>
-    valid_mmtaux args cur cur aux auxlist \<Longrightarrow>
-    valid_mmtaux
-      args
-      nt
-      nt
-      (update_mmtaux args nt l r aux)
-      (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) (auxlist @ [(nt, l, r)]))
-  "
-  by auto
 
 end
