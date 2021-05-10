@@ -677,7 +677,8 @@ type_synonym ts = nat
 
 type_synonym 'a mbuf2 = "'a table list \<times> 'a table list"
 type_synonym 'a mbufn = "'a table list list"
-type_synonym 'a msaux = "(ts \<times> 'a table) list"
+type_synonym 'a l = "(ts \<times> 'a table) list"
+type_synonym 'a mtaux = "(ts \<times> 'a table \<times> 'a table) list"
 type_synonym 'a muaux = "(ts \<times> 'a table \<times> 'a table) list"
 type_synonym 'a mr\<delta>aux = "(ts \<times> (mregex, 'a table) mapping) list"
 type_synonym 'a ml\<delta>aux = "(ts \<times> 'a table list \<times> 'a table) list"
@@ -691,28 +692,29 @@ record args =
   args_R :: "nat set"
   args_pos :: bool
 
-datatype (dead 'msaux, dead 'muaux) mformula =
+datatype (dead 'msaux, dead 'muaux, dead 'mtaux) mformula =
   MRel "event_data table"
   | MPred Formula.name "Formula.trm list"
-  | MLet Formula.name nat "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula"
-  | MAnd "nat set" "('msaux, 'muaux) mformula" bool "nat set" "('msaux, 'muaux) mformula" "event_data mbuf2"
-  | MAndAssign "('msaux, 'muaux) mformula" "nat \<times> Formula.trm"
-  | MAndRel "('msaux, 'muaux) mformula" "Formula.trm \<times> bool \<times> mconstraint \<times> Formula.trm"
-  | MAnds "nat set list" "nat set list" "('msaux, 'muaux) mformula list" "event_data mbufn"
-  | MOr "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data mbuf2"
-  | MNeg "('msaux, 'muaux) mformula"
-  | MExists "('msaux, 'muaux) mformula"
-  | MAgg bool nat Formula.agg_op nat "Formula.trm" "('msaux, 'muaux) mformula"
-  | MPrev \<I> "('msaux, 'muaux) mformula" bool "event_data table list" "ts list"
-  | MNext \<I> "('msaux, 'muaux) mformula" bool "ts list"
-  | MSince args "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data mbuf2" "ts list" "'msaux"
-  | MUntil args "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data mbuf2" "ts list" ts "'muaux"
-  | MMatchP \<I> "mregex" "mregex list" "('msaux, 'muaux) mformula list" "event_data mbufn" "ts list" "event_data mr\<delta>aux"
-  | MMatchF \<I> "mregex" "mregex list" "('msaux, 'muaux) mformula list" "event_data mbufn" "ts list" ts "event_data ml\<delta>aux"
+  | MLet Formula.name nat "('msaux, 'muaux, 'mtaux) mformula" "('msaux, 'muaux, 'mtaux) mformula"
+  | MAnd "nat set" "('msaux, 'muaux, 'mtaux) mformula" bool "nat set" "('msaux, 'muaux, 'mtaux) mformula" "event_data mbuf2"
+  | MAndAssign "('msaux, 'muaux, 'mtaux) mformula" "nat \<times> Formula.trm"
+  | MAndRel "('msaux, 'muaux, 'mtaux) mformula" "Formula.trm \<times> bool \<times> mconstraint \<times> Formula.trm"
+  | MAnds "nat set list" "nat set list" "('msaux, 'muaux, 'mtaux) mformula list" "event_data mbufn"
+  | MOr "('msaux, 'muaux, 'mtaux) mformula" "('msaux, 'muaux, 'mtaux) mformula" "event_data mbuf2"
+  | MNeg "('msaux, 'muaux, 'mtaux) mformula"
+  | MExists "('msaux, 'muaux, 'mtaux) mformula"
+  | MAgg bool nat Formula.agg_op nat "Formula.trm" "('msaux, 'muaux, 'mtaux) mformula"
+  | MPrev \<I> "('msaux, 'muaux, 'mtaux) mformula" bool "event_data table list" "ts list"
+  | MNext \<I> "('msaux, 'muaux, 'mtaux) mformula" bool "ts list"
+  | MSince args "('msaux, 'muaux, 'mtaux) mformula" "('msaux, 'muaux, 'mtaux) mformula" "event_data mbuf2" "ts list" "'msaux"
+  | MUntil args "('msaux, 'muaux, 'mtaux) mformula" "('msaux, 'muaux, 'mtaux) mformula" "event_data mbuf2" "ts list" ts "'muaux"
+  | MTrigger args "('msaux, 'muaux, 'mtaux) mformula" "('msaux, 'muaux, 'mtaux) mformula" "event_data mbuf2" "ts list" "'mtaux"
+  | MMatchP \<I> "mregex" "mregex list" "('msaux, 'muaux, 'mtaux) mformula list" "event_data mbufn" "ts list" "event_data mr\<delta>aux"
+  | MMatchF \<I> "mregex" "mregex list" "('msaux, 'muaux, 'mtaux) mformula list" "event_data mbufn" "ts list" ts "event_data ml\<delta>aux"
 
-record ('msaux, 'muaux) mstate =
+record ('msaux, 'muaux, 'mtaux) mstate =
   mstate_i :: nat
-  mstate_m :: "('msaux, 'muaux) mformula"
+  mstate_m :: "('msaux, 'muaux, 'mtaux) mformula"
   mstate_n :: nat
 
 fun eq_rel :: "nat \<Rightarrow> Formula.trm \<Rightarrow> Formula.trm \<Rightarrow> event_data table" where
@@ -764,6 +766,59 @@ locale msaux =
     | ((t, y) # ts) \<Rightarrow> if t = cur then (t, y \<union> rel2) # ts else (cur, rel2) # auxlist)"
     and valid_result_msaux: "valid_msaux args cur aux auxlist \<Longrightarrow> result_msaux args aux =
     foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist, memL (args_ivl args) (cur - t)] {}"
+
+fun trigger_results :: "args \<Rightarrow> ts \<Rightarrow> 'a mtaux \<Rightarrow> 'a table" where
+  "trigger_results args cur auxlist = {
+    tuple. wf_tuple (args_n args) (args_R args) tuple \<and>
+      (length (filter (\<lambda> (t, _, _). mem (args_ivl args) (cur - t)) auxlist) > 0) \<and>
+      \<comment> \<open>pretty much the definition of trigger\<close>
+      (\<forall>i \<in> {0..<(length auxlist)}.
+        let (t, l, r) = auxlist!i in
+        mem (args_ivl args) (cur - t) \<longrightarrow> 
+        \<comment> \<open>either \<psi> holds or there is a later database where the same tuple satisfies \<phi>\<close>
+        (
+          tuple \<in> r \<or>
+          (\<exists>j \<in> {i<..<(length auxlist)}.
+            (proj_tuple (join_mask (args_n args) (args_L args)) tuple) \<in> relL (auxlist!j) \<comment> \<open>t < t' is given as the list is sorted\<close>
+          )
+        )
+      )
+}"
+
+locale mtaux =
+  fixes valid_mtaux :: "args \<Rightarrow> ts \<Rightarrow> 'mtaux \<Rightarrow> 'a mtaux \<Rightarrow> bool"
+    and init_mtaux :: "args \<Rightarrow> 'mtaux"
+    and update_mtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> 'mtaux \<Rightarrow> 'mtaux"
+    and result_mtaux :: "args \<Rightarrow> 'mtaux \<Rightarrow> 'a table"
+
+  (* the initial state should be valid *)
+  assumes valid_init_mtaux: "(
+    if (mem I 0)
+      then
+        L \<subseteq> R
+      else 
+        L = R
+    ) \<Longrightarrow>
+    let args = init_args I n L R false in
+    valid_mtaux args 0 (init_mtaux args) []"
+
+  (* assuming the previous state outputted the same result, the next will as well *)
+  assumes valid_update_mtaux: "
+    nt \<ge> cur \<Longrightarrow>
+    table (args_n args) (args_L args) l \<Longrightarrow>
+    table (args_n args) (args_R args) r \<Longrightarrow>
+    valid_mtaux args cur aux auxlist \<Longrightarrow>
+    valid_mtaux
+      args
+      nt
+      (update_mtaux args nt l r aux)
+      ((filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist) @ [(nt, l, r)])
+  "
+
+  and valid_result_mtaux: "
+    valid_mtaux args cur aux auxlist \<Longrightarrow>
+    result_mtaux args aux = trigger_results args cur auxlist
+  "
 
 fun check_before :: "\<I> \<Rightarrow> ts \<Rightarrow> (ts \<times> 'a \<times> 'b) \<Rightarrow> bool" where
   "check_before I dt (t, a, b) \<longleftrightarrow> \<not> memR I (dt - t)"
