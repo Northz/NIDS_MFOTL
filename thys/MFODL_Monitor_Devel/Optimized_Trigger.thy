@@ -17,9 +17,9 @@ definition relL :: "(ts \<times> 'a table \<times> 'a table) \<Rightarrow> 'a ta
 definition relR :: "(ts \<times> 'a table \<times> 'a table) \<Rightarrow> 'a table" where
   "relR = (snd o snd)"
 
-fun trigger_results :: "args \<Rightarrow> bool list \<Rightarrow> ts \<Rightarrow> 'a mtaux \<Rightarrow> 'a table" where
-  "trigger_results args maskL cur auxlist = {
-    tuple.
+fun trigger_results :: "args \<Rightarrow> ts \<Rightarrow> 'a mtaux \<Rightarrow> 'a table" where
+  "trigger_results args cur auxlist = {
+    tuple. wf_tuple (args_n args) (args_R args) tuple \<and>
       (length (filter (\<lambda> (t, _, _). mem (args_ivl args) (cur - t)) auxlist) > 0) \<and>
       \<comment> \<open>pretty much the definition of trigger\<close>
       (\<forall>i \<in> {0..<(length auxlist)}.
@@ -29,7 +29,7 @@ fun trigger_results :: "args \<Rightarrow> bool list \<Rightarrow> ts \<Rightarr
         (
           tuple \<in> r \<or>
           (\<exists>j \<in> {i<..<(length auxlist)}.
-            (proj_tuple maskL tuple) \<in> relL (auxlist!j) \<comment> \<open>t < t' is given as the list is sorted\<close>
+            (proj_tuple (join_mask (args_n args) (args_L args)) tuple) \<in> relL (auxlist!j) \<comment> \<open>t < t' is given as the list is sorted\<close>
           )
         )
       )
@@ -67,7 +67,7 @@ locale mtaux =
 
   and valid_result_mtaux: "
     valid_mtaux args cur aux auxlist \<Longrightarrow>
-    result_mtaux args aux = trigger_results args maskL cur auxlist
+    result_mtaux args aux = trigger_results args cur auxlist
   "
 
 type_synonym 'a mmtaux = "
@@ -150,7 +150,7 @@ fun valid_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow>
     \<comment> \<open>also all tuples in auxlist (and hence data_prev/data_in) satisfy memR \<close>
     (\<forall>db \<in> set auxlist. time db \<le> mt \<and> memR (args_ivl args) (mt - time db)) \<and>
      \<comment> \<open>check whether tuple_in once contains the newest occurence of the tuple satisfying the lhs\<close>
-    newest_tuple_in_mapping fst (proj_tuple maskL) data_prev tuple_in_once (\<lambda>x. True) \<and>
+    newest_tuple_in_mapping fst id data_prev tuple_in_once (\<lambda>x. True) \<and>
     (\<forall>as \<in> Mapping.keys tuple_in_once. case Mapping.lookup tuple_in_once as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> (proj_tuple maskL as) \<in> l) \<and>
     (\<forall>as. (case Mapping.lookup tuple_since_hist as of
       Some idx \<Rightarrow> tuple_since_tp args as (linearize data_in) idx_oldest idx_mid idx
@@ -173,7 +173,7 @@ definition init_mmtaux :: "args \<Rightarrow> 'a mmtaux" where
   "init_mmtaux args = (0, 0, 0, 0, join_mask (args_n args) (args_L args),
   join_mask (args_n args) (args_R args), empty_queue, empty_queue, Mapping.empty, Mapping.empty, {}, {})"
 
-lemma valid_init_mtaux: "(
+lemma valid_init_mmtaux: "(
     if (mem I 0)
       then
         L \<subseteq> R
@@ -770,9 +770,9 @@ proof -
     qed
   qed
 
-lemma valid_result_mmtaux: 
+lemma valid_result_mmtaux_unfolded: 
   assumes "valid_mmtaux args cur (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat) auxlist"
-  shows "result_mmtaux args (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat) = trigger_results args maskL cur auxlist"
+  shows "result_mmtaux args (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat) = trigger_results args cur auxlist"
 proof -
   define aux where "aux = (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat)"
   define I where "I = args_ivl args"
@@ -794,8 +794,21 @@ proof -
 
     {
       assume "tuple \<in> hist_sat"
-      then have hist: "\<forall>(t, l, r) \<in> set (auxlist_data_in args mt auxlist). tuple \<in> r"
+      then have hist:
+        "\<forall>(t, l, r) \<in> set (auxlist_data_in args mt auxlist). tuple \<in> r"
+        "(\<not>is_empty data_in)"
+        "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
+        "(\<forall>as \<in> \<Union>((snd) ` (set (linearize data_in))). wf_tuple (args_n args) (args_R args) as)"
         using assms(1)
+        by auto
+      then obtain t l r where "(t, l, r) \<in> set (auxlist_data_in args mt auxlist)"
+        using is_empty_alt[of data_in]
+        by (metis length_greater_0_conv length_map nth_mem proj_thd.cases)
+      then have "tuple \<in> r" "(t, r) \<in> set (linearize data_in)"
+        using hist(1) set_map[of "(\<lambda> (t, l, r). (t, r))" "(auxlist_data_in args mt auxlist)", unfolded hist(3)]
+        by (auto simp add: rev_image_eqI)
+      then have wf: "wf_tuple (args_n args) (args_R args) tuple"
+        using hist(4)
         by auto
       {
         fix i
@@ -808,25 +821,25 @@ proof -
         let (t, l, r) = auxlist!i in
         mem (args_ivl args) (mt - t) \<longrightarrow> tuple \<in> r
       )" by (simp add: case_prod_beta')
-      then have "tuple \<in> trigger_results args maskL mt auxlist"
-        using non_empty
+      then have "tuple \<in> trigger_results args mt auxlist"
+        using non_empty wf
         by auto
     }
-    then have hist_sat_mem: "tuple \<in> hist_sat \<Longrightarrow> tuple \<in> trigger_results args maskL mt auxlist"
+    then have hist_sat_mem: "tuple \<in> hist_sat \<Longrightarrow> tuple \<in> trigger_results args mt auxlist"
       by auto
     
     from assm have "tuple \<in> (Mapping.keys tuple_in_once) \<or> tuple \<in> hist_sat \<or> tuple \<in> since_sat"
       by (simp add: aux_def split: if_splits)
     moreover {
       assume assm: "tuple \<in> (Mapping.keys tuple_in_once)"
-      then have "newest_tuple_in_mapping fst (proj_tuple maskL) data_prev tuple_in_once (\<lambda>x. True)"
+      then have "newest_tuple_in_mapping fst id data_prev tuple_in_once (\<lambda>x. True)"
         using assms(1)
         by auto
       then have "Mapping.lookup tuple_in_once tuple =
         safe_max (
           fst ` {
            tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev)).
-           proj_tuple maskL tuple = snd tas
+           tuple = snd tas
           }
         )"
         unfolding newest_tuple_in_mapping_def
@@ -882,15 +895,41 @@ proof -
         using relL_def
         by metis
       }
-      then have "(\<forall>i \<in> {0..<(length auxlist)}.
+      moreover have "maskL = join_mask (args_n args) (args_L args)"
+        using assms(1)
+        by auto
+      ultimately have "(\<forall>i \<in> {0..<(length auxlist)}.
         let (t, l, r) = auxlist!i in
         mem (args_ivl args) (mt - t) \<longrightarrow>
           (\<exists>j \<in> {i<..<(length auxlist)}.
-            (proj_tuple maskL tuple) \<in> relL (auxlist!j)
+            (proj_tuple (join_mask (args_n args) (args_L args)) tuple) \<in> relL (auxlist!j)
           )
       )"
         by (simp add: case_prod_beta' time_def)
-      then have "tuple \<in> trigger_results args maskL mt auxlist"
+      moreover have "wf_tuple (args_n args) (args_R args) tuple"
+      proof -
+        have "auxlist_data_prev args mt auxlist = (linearize data_prev)"
+          using assms(1)
+          by auto
+        then have "auxlist_data_prev args mt auxlist \<noteq> []"
+          using db_props
+          by auto
+        then have "\<not>mem (args_ivl args) 0"
+          using memL_mono[of "args_ivl args" 0]
+          unfolding auxlist_data_prev_def
+          by auto
+        then have "(args_L args) = (args_R args)"
+          using assms(1)
+          by auto
+        then have "table (args_n args) (args_R args) (Mapping.keys tuple_in_once)"
+          using assms(1)
+          by auto
+        then show ?thesis
+          using assm
+          unfolding table_def
+          by blast
+      qed                
+      ultimately have "tuple \<in> trigger_results args mt auxlist"
         using non_empty
         by auto
     }
@@ -927,7 +966,7 @@ proof -
         by auto
       moreover {
         assume "tuple \<in> hist_sat"
-        then have "tuple \<in> trigger_results args maskL mt auxlist"
+        then have "tuple \<in> trigger_results args mt auxlist"
           using hist_sat_mem by auto
       }
       moreover {
@@ -957,9 +996,28 @@ proof -
         then have suffix_rhs: "\<forall>(t, l, r) \<in> set suffix. tuple \<in> r"
           using n_def(2)
           by meson
+        
+
         have suffix_length: "length suffix > 0" "length suffix = length (auxlist_data_in args mt auxlist) - n"
           using suffix_def n_def(1)
           by auto
+        then obtain t l r where tlr:
+          "(t, l, r) \<in> set (auxlist_data_in args mt auxlist)"
+          "tuple \<in> r"
+          using suffix_rhs
+          unfolding suffix_def
+          by (metis case_prodE hd_in_set in_set_dropD length_greater_0_conv)
+        moreover have in_props:
+          "(\<forall>as \<in> \<Union>((snd) ` (set (linearize data_in))). wf_tuple (args_n args) (args_R args) as)"
+          "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
+          using assms(1)
+          by auto
+        ultimately have "(t, r) \<in> set (linearize data_in)"
+          by (metis (no_types, lifting) case_prod_conv list.set_map pair_imageI)
+        then have wf: "wf_tuple (args_n args) (args_R args) tuple"
+          using tlr in_props(1)
+          by auto
+
         have idx_shift: "\<forall>i\<in>{0..<length suffix}. suffix!i = (auxlist_data_in args mt auxlist)!(i+n)"
           using suffix_def n_def(1)
           by (simp add: add.commute)
@@ -1098,30 +1156,38 @@ proof -
         )"
           using trigger_res_1
           by (meson atLeastLessThan_iff le_def)
-        then have "tuple \<in> trigger_results args maskL mt auxlist"
-          using non_empty
+        moreover have "maskL = join_mask (args_n args) (args_L args)"
+          using assms(1)
+          by auto
+        ultimately have "tuple \<in> trigger_results args mt auxlist"
+          using non_empty wf
           by auto
       }
-      ultimately have "tuple \<in> trigger_results args maskL mt auxlist"
+      ultimately have "tuple \<in> trigger_results args mt auxlist"
         by blast
     }
-    ultimately have "tuple \<in> trigger_results args maskL mt auxlist"
+    ultimately have "tuple \<in> trigger_results args mt auxlist"
       using hist_sat_mem
       by blast
-    then have "tuple \<in> trigger_results args maskL cur auxlist"
+    then have "tuple \<in> trigger_results args cur auxlist"
       using time
       by auto
   }
-  then have subset: "result_mmtaux args aux \<subseteq> trigger_results args maskL cur auxlist"
+  then have subset: "result_mmtaux args aux \<subseteq> trigger_results args cur auxlist"
     by blast
   {
     fix tuple
-    assume el: "tuple \<in> trigger_results args maskL cur auxlist"
+    assume el: "tuple \<in> trigger_results args cur auxlist"
     then have data_in_nonempty: "\<not> is_empty (data_in)"
       using data_in_auxlist_nonempty[OF assms(1)] I_def time
       by auto
-    
-    from el have tuple_props: "(\<forall>i \<in> {0..<(length auxlist)}.
+    have wf: "wf_tuple (args_n args) (args_R args) tuple"
+      using el
+      by auto
+    have maskL: "maskL = join_mask (args_n args) (args_L args)"
+      using assms(1)
+      by auto
+    then have tuple_props: "(\<forall>i \<in> {0..<(length auxlist)}.
         mem (args_ivl args) (cur - time (auxlist!i)) \<longrightarrow> 
         (
           tuple \<in> relR (auxlist!i) \<or>
@@ -1130,6 +1196,7 @@ proof -
           )
         )
       )"
+      using el
       unfolding time_def relR_def
       by auto
     {
@@ -1241,7 +1308,7 @@ proof -
                 (proj_tuple maskL tuple) \<in> relL (auxlist!j)
               )
             )"
-            using el
+            using el maskL
             unfolding relR_def time_def
             by auto
           ultimately have cond: "
@@ -1343,13 +1410,25 @@ proof -
         moreover have data_prev_props: "auxlist_data_prev args mt auxlist = drop (length (linearize data_in)) auxlist"
           using assms(1)
           by auto
-        ultimately have "auxlist!j = (auxlist_data_prev args mt auxlist)!j'"
+        ultimately have prev: "auxlist!j = (auxlist_data_prev args mt auxlist)!j'"
           using j_props(1)
           unfolding j'_def
           by auto
         then have idx_shift: "auxlist!j = (linearize data_prev)!j'"
           using data_props(1)
           by auto
+        have "j' < length (auxlist_data_prev args mt auxlist)"
+          using data_prev_props j_props i_props j_geq
+          unfolding j'_def
+          by auto
+        then have "\<not>mem (args_ivl args) 0"
+          using memL_mono[of "args_ivl args" 0]
+          unfolding auxlist_data_prev_def
+          by auto
+        then have mask_eq: "(args_L args) = (args_R args)"
+          using assms(1)
+          by auto
+
         have data_in_props: "auxlist_data_in args mt auxlist = take (length (linearize data_in)) auxlist"
           using assms(1)
           by auto
@@ -1360,19 +1439,22 @@ proof -
           using j_geq j_props(1)
           unfolding j'_def
           by auto
-        define r_tuple where "r_tuple = proj_tuple maskL tuple"
+        
         define B where "B = fst ` {
           tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev)).
-          r_tuple = snd tas
+          tuple = snd tas
         }"
-        from assms(1) have "newest_tuple_in_mapping fst (proj_tuple maskL) data_prev tuple_in_once (\<lambda>x. True)"
+        from assms(1) have "newest_tuple_in_mapping fst id data_prev tuple_in_once (\<lambda>x. True)"
           by auto
         then have mapping_val: "Mapping.lookup tuple_in_once tuple = safe_max B"
-          unfolding newest_tuple_in_mapping_def B_def r_tuple_def
+          unfolding newest_tuple_in_mapping_def B_def
           by auto
 
         define t where "t = fst ((linearize data_prev) ! j')"
         define X where "X = snd ((linearize data_prev) ! j')"
+        have tuple_eq: "proj_tuple maskL tuple = tuple"
+          using mask_eq wf wf_tuple_proj_idle[of "args_n args" "args_L args" tuple] maskL
+          by auto
         have "proj_tuple maskL tuple \<in> fst X"
           using j_props idx_shift
           unfolding relL_def X_def
@@ -1382,11 +1464,12 @@ proof -
           using j'_le
           unfolding t_def X_def
           by auto
-        ultimately have "(t, r_tuple) \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev))"
-          unfolding r_tuple_def ts_tuple_rel_f_def
+        ultimately have "(t, proj_tuple maskL tuple) \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev))"
+          unfolding ts_tuple_rel_f_def
           by blast
         then have t_mem_B: "t \<in> B"
           unfolding B_def
+          using tuple_eq
           by (simp add: image_iff)
         then have B_props: "B \<noteq> {}" "finite B"
           using B_def
@@ -1401,24 +1484,27 @@ proof -
           by (simp add: Mapping_keys_intro)
         then have "tuple \<in> result_mmtaux args aux"
           using data_in_nonempty
-          unfolding aux_def r_tuple_def
+          unfolding aux_def
           by auto
       }
       ultimately have "tuple \<in> result_mmtaux args aux" using le_def by blast
     }
     ultimately have "tuple \<in> result_mmtaux args aux" by blast
   }
-  then have "trigger_results args maskL cur auxlist \<subseteq> result_mmtaux args aux"
+  then have "trigger_results args cur auxlist \<subseteq> result_mmtaux args aux"
     by auto
-  then have "trigger_results args maskL cur auxlist = result_mmtaux args aux"
+  then have "trigger_results args cur auxlist = result_mmtaux args aux"
     using subset
     by blast
   then show ?thesis using aux_def by auto
 qed
 
+lemma valid_result_mmtaux: "valid_mmtaux args cur aux auxlist \<Longrightarrow> result_mmtaux args aux = trigger_results args cur auxlist"
+  using valid_result_mmtaux_unfolded
+  by (cases aux) (fast)
+
 lemma drop_list_shift: "n \<ge> m \<Longrightarrow> drop n xs = drop (n - m) (drop m xs)"
   by simp
-
 
 fun update_mmtaux' :: "args \<Rightarrow> ts \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> (ts \<times> 'a table \<times> 'a table) queue \<Rightarrow> (ts \<times> 'a table) queue \<Rightarrow> (('a tuple, ts) mapping) \<Rightarrow> (('a tuple, nat) mapping) \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> (nat \<times> nat \<times> (ts \<times> 'a table \<times> 'a table) queue \<times> (ts \<times> 'a table) queue \<times> (('a tuple, ts) mapping) \<times> (('a tuple, nat) mapping) \<times> 'a table \<times> 'a table)" where
   "update_mmtaux' args nt idx_mid idx_oldest maskL maskR data_prev data_in tuple_in_once tuple_since_hist hist_sat since_sat = (
@@ -1429,7 +1515,7 @@ fun update_mmtaux' :: "args \<Rightarrow> ts \<Rightarrow> nat \<Rightarrow> nat
       (flip_int_less_lower (args_ivl args)) \<comment> \<open>[0, a-1]\<close>
       nt  \<comment> \<open>the new timestamp\<close>
       fst \<comment> \<open>here we look at the lhs tuples / \<phi>\<close>
-      (proj_tuple maskL) \<comment> \<open>we have to restrict the tuples of the lhs to the respective cols\<close>
+      id
       (empty_queue::(ts \<times> 'a option list set \<times> 'a option list set) queue, data_prev, tuple_in_once); \<comment> \<open>add type\<close>
     \<comment> \<open>pass empty_queue as the first argument as it would filter out all: [0, a-1] \<inter> [a, b] = {}.
        idx_mid can be moved forward by the number of all tuples dropped from data_prev (move)\<close>
@@ -2121,7 +2207,7 @@ lemma valid_update_mmtaux'_unfolded:
     "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_L args) as)"
     "(\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_R args) as)"
     "auxlist_data_prev args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist) = (linearize data_prev')"
-    "newest_tuple_in_mapping fst (proj_tuple maskL) data_prev' tuple_in_once' (\<lambda>x. True)"
+    "newest_tuple_in_mapping fst id data_prev' tuple_in_once' (\<lambda>x. True)"
     "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> (proj_tuple maskL as) \<in> l)"
     "length (linearize data_prev') + idx_mid' = idx_next"
 
@@ -2153,7 +2239,7 @@ proof -
       (flip_int_less_lower (args_ivl args))
       nt
       fst
-      (proj_tuple maskL)
+      id
       (empty_queue::(ts \<times> 'a option list set \<times> 'a option list set) queue, data_prev, tuple_in_once)"
   define empty_queue' where "empty_queue' = fst shift_res"
   
@@ -2198,7 +2284,7 @@ proof -
       (flip_int_less_lower (args_ivl args))
       nt
       fst
-      (proj_tuple maskL)
+      id
       (empty_queue::(ts \<times> 'a option list set \<times> 'a option list set) queue, data_prev, tuple_in_once)"
     using empty_queue'_def data_prev'_def move_def tuple_in_once'_def shift_res_def
     by auto
@@ -2295,7 +2381,7 @@ proof -
     by (auto simp add: empty_queue_rep)
 
   from assms(1) have max_ts_tuple_in:
-    "newest_tuple_in_mapping fst (proj_tuple maskL) data_prev tuple_in_once (\<lambda>x. True)"
+    "newest_tuple_in_mapping fst id data_prev tuple_in_once (\<lambda>x. True)"
     by auto
 
   (*
@@ -2308,18 +2394,18 @@ proof -
   have nt_mono: "nt \<ge> cur" "nt \<le> nt" using nt_mono by auto
   have shift_end_props:
     "table (args_n args) (args_L args) (Mapping.keys tuple_in_once')"
-    "newest_tuple_in_mapping fst (proj_tuple maskL) data_prev' tuple_in_once' (\<lambda>x. True)"
+    "newest_tuple_in_mapping fst id data_prev' tuple_in_once' (\<lambda>x. True)"
     "sorted (map fst (linearize data_prev'))"
     "\<forall>t\<in>fst ` set (linearize data_prev'). t \<le> nt \<and> mem (flip_int_less_lower (args_ivl args)) (cur - t)"
     "move = snd (takedropWhile_queue (\<lambda>(t, X). \<not> memR (flip_int_less_lower (args_ivl args)) (nt - t)) data_prev)"
     "linearize data_prev' = filter (\<lambda>(t, X). memR (flip_int_less_lower (args_ivl args)) (nt - t)) (linearize data_prev)"
     "tuple_in_once' =
-    fold (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond_r (fst X) (proj_tuple maskL) tuple_in t) tuple_in) move tuple_in_once"
+    fold (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond (fst X) tuple_in t) tuple_in) move tuple_in_once"
     unfolding relL_def relR_def
     using valid_shift_end_unfolded [of
         "(args_n args)" "(args_L args)" tuple_in_once "(\<lambda>_. {})" "(auxlist_data_prev args mt)" auxlist
         "(\<lambda>_. {})" empty_queue fst data_prev "(\<lambda>db. False)" fst "(args_L args)"
-        nt "flip_int_less_lower (args_ivl args)" cur fst "(proj_tuple maskL)" "(\<lambda>x. True)" nt empty_queue' data_prev' move tuple_in_once',
+        nt "flip_int_less_lower (args_ivl args)" cur fst id "(\<lambda>x. True)" nt empty_queue' data_prev' move tuple_in_once',
         OF table_tuple_in auxlist_tuples_lhs empty_queue_props(1, 3-4) 
         data_prev_props max_ts_tuple_in nt_mono shift_end_res
       ]
@@ -2327,7 +2413,7 @@ proof -
 
   show
     "table (args_n args) (args_L args) (Mapping.keys tuple_in_once')"
-    "newest_tuple_in_mapping fst (proj_tuple maskL) data_prev' tuple_in_once' (\<lambda>x. True)"
+    "newest_tuple_in_mapping fst id data_prev' tuple_in_once' (\<lambda>x. True)"
     using shift_end_props(1,2)
     by auto
 
@@ -2433,15 +2519,15 @@ proof -
   {
     assume assm: "mem (args_ivl args) 0"
     then have tuple_in_once_empty: "tuple_in_once = Mapping.empty" using tuple_in_once_mem0[OF assms(1)] by auto
-    have filter_simp:"(\<lambda>el tuple_in. Mapping.filter ((case el of (t, X) \<Rightarrow> \<lambda>tuple_in. filter_cond_r (fst X) (proj_tuple maskL) tuple_in t) tuple_in) tuple_in) =
-      (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond_r (fst X) (proj_tuple maskL) tuple_in t) tuple_in)"
+    have filter_simp:"(\<lambda>el tuple_in. Mapping.filter ((case el of (t, X) \<Rightarrow> \<lambda>tuple_in. filter_cond_r (fst X) id tuple_in t) tuple_in) tuple_in) =
+      (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond_r (fst X) id tuple_in t) tuple_in)"
       by auto
-    have "fold (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond_r (fst X) (proj_tuple maskL) tuple_in t) tuple_in)
+    have "fold (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond_r (fst X) id tuple_in t) tuple_in)
    (snd (takedropWhile_queue (\<lambda>(t, X). \<not> memR (flip_int_less_lower (args_ivl args)) (nt - t)) data_prev)) Mapping.empty = Mapping.empty"
       (* Mapping.filter (filter_cond_r (fst X) (proj_tuple maskL) tuple_in t) *)
       using 
         fold_Mapping_filter_empty[of
-          "\<lambda>(t, X) tuple_in. (filter_cond_r (fst X) (proj_tuple maskL) tuple_in t)"
+          "\<lambda>(t, X) tuple_in. (filter_cond_r (fst X) id tuple_in t)"
           "(snd (takedropWhile_queue (\<lambda>(t, X). \<not> memR (flip_int_less_lower (args_ivl args)) (nt - t)) data_prev))"]
       by (auto simp only: filter_simp)
    
@@ -2456,17 +2542,17 @@ proof -
     assume "\<not>mem (args_ivl args) 0"
     then have False: "\<not>memL (args_ivl args) 0" by auto
 
-    have "tuple_in_once' = fold (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond_r (fst X) (proj_tuple maskL) tuple_in t) tuple_in)
+    have "tuple_in_once' = fold (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond (fst X) tuple_in t) tuple_in)
         move tuple_in_once"
       using shift_end_props(7)
       by auto
-    then have tuple_in_once'_eq: "tuple_in_once' = fold (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond_r (fst X) (proj_tuple maskL) tuple_in t) tuple_in)
+    then have tuple_in_once'_eq: "tuple_in_once' = fold (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond (fst X) tuple_in t) tuple_in)
       (snd (takedropWhile_queue (\<lambda>(t, X). memL (args_ivl args) (nt - t)) data_prev)) tuple_in_once"
       unfolding move_def
       using flip_int_less_lower_memR[OF False]
       by auto
     define fold_fn :: "(nat \<times> 'a option list set \<times> 'a option list set) \<Rightarrow> ('a option list, nat) mapping \<Rightarrow> ('a option list, nat) mapping"
-      where "fold_fn = (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond_r (fst X) (proj_tuple maskL) tuple_in t) tuple_in)"
+      where "fold_fn = (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond (fst X) tuple_in t) tuple_in)"
     define fold_list where "fold_list = (snd (takedropWhile_queue (\<lambda>(t, X). memL (args_ivl args) (nt - t)) data_prev))"
     then have tuple_in_once'_eq: "tuple_in_once' = fold fold_fn fold_list tuple_in_once"
       using tuple_in_once'_eq
@@ -2483,7 +2569,7 @@ proof -
       fix tuple
       assume t'_props: "Mapping.lookup tuple_in_once tuple = None"     
       then have "Mapping.lookup (fold fold_fn fold_list tuple_in_once) tuple = None"
-        using fold_Mapping_filter_None[of tuple_in_once tuple "(proj_tuple maskL)" fst fold_list]
+        using fold_Mapping_filter_None[of tuple_in_once tuple "id" fst fold_list]
         unfolding fold_fn_def
         by auto
       then have "Mapping.lookup tuple_in_once tuple = Mapping.lookup tuple_in_once' tuple"
@@ -2535,8 +2621,20 @@ proof -
         unfolding fold_list_def
         using takedropWhile_queue_snd[of "(\<lambda>(t, X). memL (args_ivl args) (nt - t))" data_prev]
         by auto
-      then have "Mapping.lookup (fold fold_fn fold_list tuple_in_once) tuple = None"
-        using fold_Mapping_filter_Some_None[of tuple_in_once tuple t "(proj_tuple maskL)" fst _ fold_list] t_props(1) X_props(2)
+      moreover have "tuple \<in> fst X"
+      proof -
+        have maskL:
+          "maskL = join_mask (args_n args) (args_L args)"
+          using assms(1)
+          by auto
+        have "wf_tuple (args_n args) (args_L args) tuple"
+          by (metis Mapping_keys_intro option.simps(3) t_props(1) table_def table_tuple_in)
+        then show ?thesis 
+          using X_props(2) maskL wf_tuple_proj_idle[of "args_n args" "args_L args" tuple]
+          by auto
+      qed
+      ultimately have "Mapping.lookup (fold fold_fn fold_list tuple_in_once) tuple = None"
+        using fold_Mapping_filter_Some_None[of tuple_in_once tuple t "id" fst _ fold_list] t_props(1) X_props(2)
         unfolding fold_fn_def
         by auto
       then have "Mapping.lookup tuple_in_once' tuple = None"
@@ -2558,10 +2656,10 @@ proof -
           by auto
         then have "False" using t_props by auto
       }
-      then have "(\<And>X. (t, X) \<in> set fold_list \<Longrightarrow> proj_tuple maskL tuple \<notin> fst X)" by auto
+      then have "(\<And>X. (t, X) \<in> set fold_list \<Longrightarrow> tuple \<notin> fst X)" by auto
       moreover have "Mapping.lookup tuple_in_once tuple = Some t" using t_props by auto
       ultimately have "Mapping.lookup (fold fold_fn fold_list tuple_in_once) tuple = Mapping.lookup tuple_in_once tuple"
-        using fold_Mapping_filter_Some_Some[of tuple_in_once tuple t fold_list "(proj_tuple maskL)" fst]
+        using fold_Mapping_filter_Some_Some[of tuple_in_once tuple t fold_list "id" fst]
         unfolding fold_fn_def
         by auto
       then have "Mapping.lookup tuple_in_once tuple = Mapping.lookup tuple_in_once' tuple"
@@ -5302,7 +5400,7 @@ proof -
     }
     then show ?thesis by auto
   qed
-  moreover have "newest_tuple_in_mapping fst (proj_tuple maskL) data_prev' tuple_in_once' (\<lambda>x. True)"
+  moreover have "newest_tuple_in_mapping fst id data_prev' tuple_in_once' (\<lambda>x. True)"
     using valid_update_mmtaux'_unfolded[OF assms]
     by auto
   moreover have "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> (proj_tuple maskL as) \<in> l) \<and>
@@ -5375,7 +5473,7 @@ fun update_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a table \<Rightarrow>
       )
   ))"
 
-lemma valid_add_new_ts_unfolded:
+lemma valid_update_mmtaux_unfolded:
   assumes "nt \<ge> cur"
   assumes "table (args_n args) (args_L args) l"
   assumes "table (args_n args) (args_R args) r"
@@ -5383,7 +5481,7 @@ lemma valid_add_new_ts_unfolded:
     shows "valid_mmtaux
       args
       nt
-      (update_mmtaux args nt l r (cur, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat))
+      (update_mmtaux args nt l r (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat))
       ((filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist) @ [(nt, l, r)])
   "
 proof -
@@ -5423,6 +5521,16 @@ proof -
     unfolding auxlist_data_in_def
     by (metis (no_types, lifting) length_filter_le length_map)
 
+  from assms(4) have maskL: "maskL = join_mask (args_n args) (args_L args)"
+    by auto
+
+  then have proj_l: "\<forall>as \<in> l. as = proj_tuple maskL as"
+    using assms(2)
+    unfolding table_def
+    using wf_tuple_proj_idle[of "args_n args" "args_L args"]
+    by metis
+
+
   show ?thesis
   proof (cases "mem (args_ivl args) 0")    
     case True
@@ -5448,7 +5556,7 @@ proof -
         tuple_since_hist''',
         hist_sat'',
         since_sat''
-      ) = update_mmtaux args nt l r (cur, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat)"
+      ) = update_mmtaux args nt l r (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat)"
       unfolding update_mmtaux_res_def idx_mid''_def idx_next''_def data_in''_def tuple_since_hist'''_def tuple_since_hist''_def hist_sat''_def since_sat''_def
       using True
       by (auto simp only: update_mmtaux.simps Let_def update_eq[symmetric] split: if_splits)
@@ -5614,7 +5722,7 @@ proof -
         unfolding auxlist''_def time_def
         by auto
     qed
-    moreover have "newest_tuple_in_mapping fst (proj_tuple maskL) data_prev' tuple_in_once' (\<lambda>x. True)"
+    moreover have "newest_tuple_in_mapping fst id data_prev' tuple_in_once' (\<lambda>x. True)"
       using valid
       by auto
     moreover have "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> (proj_tuple maskL as) \<in> l)"
@@ -6126,7 +6234,7 @@ proof -
         by auto
       then show ?thesis using assms(2-3) unfolding auxlist''_def by auto
     qed
-    moreover have "table (args_n args) (args_L args) (Mapping.keys tuple_in_once'')"
+    moreover have table_in_once'': "table (args_n args) (args_L args) (Mapping.keys tuple_in_once'')"
     proof -
       have "table (args_n args) (args_L args) (Mapping.keys tuple_in_once')"
         using valid
@@ -6139,7 +6247,7 @@ proof -
     moreover have "table (args_n args) (args_R args) (Mapping.keys tuple_since_hist')"
       using valid
       by auto
-    moreover have "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev''))). wf_tuple (args_n args) (args_L args) as)"
+    moreover have data_prev''_relL: "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev''))). wf_tuple (args_n args) (args_L args) as)"
     proof -
       have "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_L args) as)"
         using valid
@@ -6234,57 +6342,64 @@ proof -
         unfolding auxlist''_def time_def
         by auto
     qed
-    moreover have "newest_tuple_in_mapping fst (proj_tuple maskL) data_prev'' tuple_in_once'' (\<lambda>x. True)"
+    moreover have "newest_tuple_in_mapping fst id data_prev'' tuple_in_once'' (\<lambda>x. True)"
     proof -
-      have before: "newest_tuple_in_mapping fst (proj_tuple maskL) data_prev' tuple_in_once' (\<lambda>x. True)"
+      have before: "newest_tuple_in_mapping fst id data_prev' tuple_in_once' (\<lambda>x. True)"
         using valid
         by auto
       {
-        fix tuple
+        fix tuple::"'a option list"
+        assume wf: "wf_tuple (args_n args) (args_L args) tuple"
 
         have ts_rel_union: "ts_tuple_rel_binary_lhs (set (linearize data_prev'')) = ts_tuple_rel_binary_lhs (set (linearize data_prev')) \<union> ts_tuple_rel_binary_lhs (set [(nt, l, r)])"
           unfolding ts_tuple_rel_f_def data_prev''_def append_queue_rep
           by auto
 
-        have tuple_not_mem_empty: "tuple \<notin> l \<longrightarrow> {tas \<in> ts_tuple_rel_binary_lhs (set [(nt, l, r)]). True \<and> proj_tuple maskL tuple = snd tas} = {}"
+        have tuple_not_mem_empty: "tuple \<notin> l \<longrightarrow> {tas \<in> ts_tuple_rel_binary_lhs (set [(nt, l, r)]). proj_tuple maskL tuple = snd tas} = {}"
           proof -
             {
               assume tuple_not_mem: "tuple \<notin> l"
               assume "{tas \<in> ts_tuple_rel_binary_lhs (set [(nt, l, r)]). True \<and> proj_tuple maskL tuple = snd tas} \<noteq> {}"
               then obtain t as where as_props: "(t, as) \<in> ts_tuple_rel_binary_lhs (set [(nt, l, r)])" "proj_tuple maskL tuple = as"
                 by auto
-              then obtain l' r' where "as \<in> l'" "(t, l', r') \<in> set [(nt, l, r)]"
+              then have as_eq: "tuple = as"
+                using maskL wf_tuple_proj_idle[OF wf]
+                by auto
+              obtain l' r' where "as \<in> l'" "(t, l', r') \<in> set [(nt, l, r)]"
+                using as_props 
                 unfolding ts_tuple_rel_f_def
                 by auto
               then have "as \<in> l"
                 by auto
               then have "False"
-                using tuple_not_mem as_props(2)
+                using as_eq tuple_not_mem
                 by auto
             }
             then show ?thesis by auto
           qed
 
-        have "Mapping.lookup tuple_in_once'' tuple = safe_max (fst ` {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')). True \<and> proj_tuple maskL tuple = snd tas})"
+        have "Mapping.lookup tuple_in_once'' tuple = safe_max (fst ` {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')). tuple = snd tas})"
         proof (cases "Mapping.lookup tuple_in_once'' tuple")
           case None
           have tuple_not_mem: "tuple \<notin> l"
             using None
             unfolding tuple_in_once''_def
             by (metis Mapping_lookup_upd_set option.distinct(1))
+
+          
           
           have "Mapping.lookup tuple_in_once' tuple = None"
             using None
             unfolding tuple_in_once''_def
             by (metis Mapping_lookup_upd_set option.distinct(1))
-          then have "{tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')). proj_tuple maskL tuple = snd tas} = {}"
+          then have "{tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')). tuple = snd tas} = {}"
             using before
             unfolding newest_tuple_in_mapping_def safe_max_def
             apply (auto split: option.splits)
             by (metis (no_types) option.distinct(1))
-          then have "\<forall>tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')). proj_tuple maskL tuple \<noteq> snd tas" 
+          then have "\<forall>tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')). tuple \<noteq> snd tas" 
             by blast
-          then have "fst ` {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')). True \<and> proj_tuple maskL tuple = snd tas} = {}"
+          then have "fst ` {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')). tuple = snd tas} = {}"
             using tuple_not_mem tuple_not_mem_empty
             unfolding data_prev''_def append_queue_rep ts_tuple_rel_f_def
             by auto
@@ -6308,10 +6423,11 @@ proof -
             then have "(nt, tuple) \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev''))"
               using ts_rel_union
               by auto
-            then have nt_mem: "nt \<in> fst ` {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')). True \<and> proj_tuple maskL tuple = snd tas}"
-              by auto
+            then have nt_mem: "nt \<in> fst ` {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')). tuple = snd tas}"
+              using proj_l True
+              by (metis (mono_tags) fst_conv imageI mem_Collect_eq snd_conv)
 
-            then have non_empty: "fst ` {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')). True \<and> proj_tuple maskL tuple = snd tas} \<noteq> {}"
+            then have non_empty: "fst ` {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')). tuple = snd tas} \<noteq> {}"
               by auto
 
             have "\<forall>t \<in> fst ` ts_tuple_rel_binary_lhs (set [(nt, l, r)]). t \<le> nt"
@@ -6334,9 +6450,9 @@ proof -
             ultimately have "\<forall>t \<in> fst ` ts_tuple_rel_binary_lhs (set (linearize data_prev'')). t \<le> nt"
               using ts_rel_union
               by auto
-            then have "\<forall>t \<in> (fst ` {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')). True \<and> proj_tuple maskL tuple = snd tas}). t \<le> nt"
+            then have "\<forall>t \<in> (fst ` {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')). tuple = snd tas}). t \<le> nt"
               by auto
-            then have "Max (fst ` {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')). True \<and> proj_tuple maskL tuple = snd tas}) = nt"
+            then have "Max (fst ` {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')). tuple = snd tas}) = nt"
               using nt_mem
               by (meson Max_eqI finite_nat_set_iff_bounded_le)
             then show ?thesis
@@ -6349,7 +6465,7 @@ proof -
               using Some
               unfolding tuple_in_once''_def
               by (simp add: Mapping_lookup_upd_set)
-            moreover have "fst ` {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')). True \<and> proj_tuple maskL tuple = snd tas} = fst ` {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')). True \<and> proj_tuple maskL tuple = snd tas}"
+            moreover have "fst ` {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')). tuple = snd tas} = fst ` {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev')). tuple = snd tas}"
               using False tuple_not_mem_empty ts_rel_union
               unfolding ts_tuple_rel_f_def
               by auto
@@ -6360,7 +6476,36 @@ proof -
           qed
         qed
       }
-      then show ?thesis
+      moreover {
+        fix tuple::"'a option list"
+        assume wf: "\<not>wf_tuple (args_n args) (args_L args) tuple"
+
+        then have lookup: "Mapping.lookup tuple_in_once'' tuple = None"
+          using table_in_once''
+          unfolding table_def
+          by (meson Mapping_keys_intro)
+
+        {
+          assume "{tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')). tuple = snd tas} \<noteq> {}"
+          then obtain t l r where "tuple \<in> l" "(t, l, r) \<in> set (linearize data_prev'')"
+            unfolding ts_tuple_rel_f_def
+            by auto
+          then have "wf_tuple (args_n args) (args_L args) tuple"
+            using data_prev''_relL
+            unfolding relL_def
+            by auto
+          then have "False"
+            using wf
+            by auto
+        }
+        then have "{tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')). tuple = snd tas} = {}"
+          by auto
+        then have "Mapping.lookup tuple_in_once'' tuple = safe_max (fst ` {tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev'')). tuple = snd tas})"
+          using lookup
+          unfolding safe_max_def
+          by auto
+      }
+      ultimately show ?thesis
         unfolding newest_tuple_in_mapping_def
         by auto
     qed
@@ -6385,7 +6530,7 @@ proof -
             unfolding data_prev''_def append_queue_rep
             by auto
           moreover have "proj_tuple maskL as \<in> l"
-            using True
+            using True proj_l
             by auto
           ultimately show ?thesis using t_props by auto
         next
@@ -6448,5 +6593,24 @@ proof -
       by auto
   qed
 qed
+
+lemma valid_update_mmtaux: "
+    nt \<ge> cur \<Longrightarrow>
+    table (args_n args) (args_L args) l \<Longrightarrow>
+    table (args_n args) (args_R args) r \<Longrightarrow>
+    valid_mmtaux args cur aux auxlist \<Longrightarrow>
+    valid_mmtaux
+      args
+      nt
+      (update_mmtaux args nt l r aux)
+      ((filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist) @ [(nt, l, r)])
+  "
+  using valid_update_mmtaux_unfolded
+  by (cases aux) (fast)
+
+interpretation mmtaux: mtaux valid_mmtaux init_mmtaux update_mmtaux result_mmtaux
+  using valid_init_mmtaux valid_update_mmtaux valid_result_mmtaux
+  by unfold_locales
+    
 
 end
