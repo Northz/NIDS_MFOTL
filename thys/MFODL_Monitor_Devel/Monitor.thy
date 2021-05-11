@@ -42,8 +42,8 @@ fun mmonitorable_exec :: "Formula.formula \<Rightarrow> bool" where
     y + b \<notin> Formula.fv \<phi> \<and> {0..<b} \<subseteq> Formula.fv \<phi> \<and> Formula.fv_trm f \<subseteq> Formula.fv \<phi>)"
 | "mmonitorable_exec (Formula.Prev I \<phi>) = (mmonitorable_exec \<phi>)"
 | "mmonitorable_exec (Formula.Next I \<phi>) = (mmonitorable_exec \<phi>)"
-| "mmonitorable_exec (Formula.Historically I \<phi>) = (mmonitorable_exec \<phi>)"
-| "mmonitorable_exec (Formula.Always I \<phi>) = (mmonitorable_exec \<phi> \<and> bounded I)"
+| "mmonitorable_exec (Formula.Historically I \<phi>) = (mmonitorable_exec \<phi> \<and> mem I 0)" (* TODO add detection for once *)
+| "mmonitorable_exec (Formula.Always I \<phi>) = (mmonitorable_exec \<phi> \<and> bounded I  \<and> mem I 0)"
 | "mmonitorable_exec (Formula.Since \<phi> I \<psi>) = (Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and>
     (mmonitorable_exec \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False)) \<and> mmonitorable_exec \<psi>)"
 | "mmonitorable_exec (Formula.Until \<phi> I \<psi>) = (Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and> bounded I \<and>
@@ -677,7 +677,7 @@ type_synonym ts = nat
 
 type_synonym 'a mbuf2 = "'a table list \<times> 'a table list"
 type_synonym 'a mbufn = "'a table list list"
-type_synonym 'a l = "(ts \<times> 'a table) list"
+type_synonym 'a msaux = "(ts \<times> 'a table) list"
 type_synonym 'a mtaux = "(ts \<times> 'a table \<times> 'a table) list"
 type_synonym 'a muaux = "(ts \<times> 'a table \<times> 'a table) list"
 type_synonym 'a mr\<delta>aux = "(ts \<times> (mregex, 'a table) mapping) list"
@@ -779,7 +779,7 @@ fun trigger_results :: "args \<Rightarrow> ts \<Rightarrow> 'a mtaux \<Rightarro
         (
           tuple \<in> r \<or>
           (\<exists>j \<in> {i<..<(length auxlist)}.
-            (proj_tuple (join_mask (args_n args) (args_L args)) tuple) \<in> relL (auxlist!j) \<comment> \<open>t < t' is given as the list is sorted\<close>
+            (proj_tuple (join_mask (args_n args) (args_L args)) tuple) \<in> (fst o snd) (auxlist!j) \<comment> \<open>t < t' is given as the list is sorted\<close>
           )
         )
       )
@@ -883,18 +883,25 @@ locale muaux =
     res = res' \<and> valid_muaux args cur aux' auxlist'"
 
 locale maux = msaux valid_msaux init_msaux add_new_ts_msaux join_msaux add_new_table_msaux result_msaux +
-  muaux valid_muaux init_muaux add_new_muaux length_muaux eval_muaux
+  muaux valid_muaux init_muaux add_new_muaux length_muaux eval_muaux + 
+  mtaux valid_mtaux init_mtaux update_mtaux result_mtaux
   for valid_msaux :: "args \<Rightarrow> ts \<Rightarrow> 'msaux \<Rightarrow> event_data msaux \<Rightarrow> bool"
     and init_msaux :: "args \<Rightarrow> 'msaux"
     and add_new_ts_msaux :: "args \<Rightarrow> ts \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
     and join_msaux :: "args \<Rightarrow> event_data table \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
     and add_new_table_msaux :: "args \<Rightarrow> event_data table \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
     and result_msaux :: "args \<Rightarrow> 'msaux \<Rightarrow> event_data table"
+
     and valid_muaux :: "args \<Rightarrow> ts \<Rightarrow> 'muaux \<Rightarrow> event_data muaux \<Rightarrow> bool"
     and init_muaux :: "args \<Rightarrow> 'muaux"
     and add_new_muaux :: "args \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> 'muaux \<Rightarrow> 'muaux"
     and length_muaux :: "args \<Rightarrow> 'muaux \<Rightarrow> nat"
     and eval_muaux :: "args \<Rightarrow> nat \<Rightarrow> 'muaux \<Rightarrow> event_data table list \<times> 'muaux"
+
+    and valid_mtaux :: "args \<Rightarrow> ts \<Rightarrow> 'mtaux \<Rightarrow> event_data mtaux \<Rightarrow> bool"
+    and init_mtaux :: "args \<Rightarrow> 'mtaux"
+    and update_mtaux :: "args \<Rightarrow> ts \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> 'mtaux \<Rightarrow> 'mtaux"
+    and result_mtaux :: "args \<Rightarrow> 'mtaux \<Rightarrow> event_data table"
 
 fun split_assignment :: "nat set \<Rightarrow> Formula.formula \<Rightarrow> nat \<times> Formula.trm" where
   "split_assignment X (Formula.Eq t1 t2) = (case (t1, t2) of
@@ -912,7 +919,7 @@ fun split_constraint :: "Formula.formula \<Rightarrow> Formula.trm \<times> bool
 | "split_constraint (Formula.Neg (Formula.LessEq t1 t2)) = (t1, False, MLessEq, t2)"
 | "split_constraint _ = undefined"
 
-function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<Rightarrow> ('msaux, 'muaux) mformula" where
+function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<Rightarrow> ('msaux, 'muaux, 'mtaux) mformula" where
   "minit0 n (Formula.Neg \<phi>) = (if fv \<phi> = {} then MNeg (minit0 n \<phi>) else MRel empty_table)"
 | "minit0 n (Formula.Eq t1 t2) = MRel (eq_rel n t1 t2)"
 | "minit0 n (Formula.Pred e ts) = MPred e ts"
@@ -946,6 +953,9 @@ function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<R
     else (case \<phi> of
       Formula.Neg \<phi> \<Rightarrow> MUntil (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] 0 (init_muaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False))
     | _ \<Rightarrow> undefined))"
+| "minit0 n (Formula.Trigger \<phi> I \<psi>) =
+    MTrigger (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] (init_mtaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True))
+"
 | "minit0 n (Formula.MatchP I r) =
     (let (mr, \<phi>s) = to_mregex r
     in MMatchP I mr (sorted_list_of_set (RPDs mr)) (map (minit0 n) \<phi>s) (replicate (length \<phi>s) []) [] [])"
@@ -959,7 +969,7 @@ termination (in maux)
     (auto simp: less_Suc_eq_le size_list_estimation' size_remove_neg
       dest!: to_mregex_ok[OF sym] atms_size)
 
-definition (in maux) minit :: "Formula.formula \<Rightarrow> ('msaux, 'muaux) mstate" where
+definition (in maux) minit :: "Formula.formula \<Rightarrow> ('msaux, 'muaux, 'mtaux) mstate" where
   "minit \<phi> = (let n = Formula.nfv \<phi> in \<lparr>mstate_i = 0, mstate_m = minit0 n \<phi>, mstate_n = n\<rparr>)"
 
 definition (in maux) minit_safe where
@@ -1153,8 +1163,8 @@ lemma lookahead_ts_code[code]: "lookahead_ts nts' nts ts t =
                    | [] \<Rightarrow> t)))"
   by (auto simp: lookahead_ts_def hd_append hd_rev split: list.splits)
 
-primrec (in maux) meval :: "nat \<Rightarrow> ts list \<Rightarrow> Formula.database \<Rightarrow> ('msaux, 'muaux) mformula \<Rightarrow>
-    event_data table list \<times> ('msaux, 'muaux) mformula" where
+primrec (in maux) meval :: "nat \<Rightarrow> ts list \<Rightarrow> Formula.database \<Rightarrow> ('msaux, 'muaux, 'mtaux) mformula \<Rightarrow>
+    event_data table list \<times> ('msaux, 'muaux, 'mtaux) mformula" where
   "meval n ts db (MRel rel) = (replicate (length ts) rel, MRel rel)"
 | "meval n ts db (MPred e tms) = (map (\<lambda>X. (\<lambda>f. Table.tabulate f 0 n) ` Option.these
     (match tms ` X)) (case Mapping.lookup db e of None \<Rightarrow> replicate (length ts) {} | Some xs \<Rightarrow> xs), MPred e tms)"
@@ -1206,6 +1216,13 @@ primrec (in maux) meval :: "nat \<Rightarrow> ts list \<Rightarrow> Formula.data
       nt = lookahead_ts nts' nts ts t;
       (zs, aux) = eval_muaux args nt aux
     in (zs, MUntil args \<phi> \<psi> buf nts' nt aux))"
+| "meval n ts db (MTrigger args \<phi> \<psi> buf nts aux) =
+    (let (xs, \<phi>) = meval n ts db \<phi>; (ys, \<psi>) = meval n ts db \<psi>;
+      ((zs, aux), buf, nts) = mbuf2t_take (\<lambda>r1 r2 t (zs, aux).
+        let aux = update_mtaux args t r1 r2 aux;
+            z   = result_mtaux args aux
+        in (zs @ [z], aux)) ([], aux) (mbuf2_add xs ys buf) (nts @ ts)
+    in (zs, MTrigger args \<phi> \<psi> buf nts aux))"
 | "meval n ts db (MMatchP I mr mrs \<phi>s buf nts aux) =
     (let (xss, \<phi>s) = map_split id (map (meval n ts db) \<phi>s);
       ((zs, aux), buf, nts) = mbufnt_take (\<lambda>rels t (zs, aux).
@@ -1219,7 +1236,7 @@ primrec (in maux) meval :: "nat \<Rightarrow> ts list \<Rightarrow> Formula.data
       (zs, aux) = eval_matchF I mr nt aux
     in (zs, MMatchF I mr mrs \<phi>s buf nts' nt aux))"
 
-definition (in maux) mstep :: "Formula.database \<times> ts \<Rightarrow> ('msaux, 'muaux) mstate \<Rightarrow> (nat \<times> event_data table) list \<times> ('msaux, 'muaux) mstate" where
+definition (in maux) mstep :: "Formula.database \<times> ts \<Rightarrow> ('msaux, 'muaux, 'mtaux) mstate \<Rightarrow> (nat \<times> event_data table) list \<times> ('msaux, 'muaux, 'mtaux) mstate" where
   "mstep tdb st =
      (let (xs, m) = meval (mstate_n st) [snd tdb] (fst tdb) (mstate_m st)
      in (List.enumerate (mstate_i st) xs,
@@ -1243,9 +1260,15 @@ fun progress :: "(Formula.name \<rightharpoonup> nat) \<Rightarrow> Formula.form
 | "progress P (Formula.Agg y \<omega> b f \<phi>) j = progress P \<phi> j"
 | "progress P (Formula.Prev I \<phi>) j = (if j = 0 then 0 else min (Suc (progress P \<phi> j)) j)"
 | "progress P (Formula.Next I \<phi>) j = progress P \<phi> j - 1"
+| "progress P (Formula.Historically I \<phi>) j = (progress P \<phi> j)" (* ? *)
+| "progress P (Formula.Always I \<phi>) j =
+    Inf {i. \<forall>k. k < j \<and> k \<le> (progress P \<phi> j) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}" (* ? *)
 | "progress P (Formula.Since \<phi> I \<psi>) j = min (progress P \<phi> j) (progress P \<psi> j)"
 | "progress P (Formula.Until \<phi> I \<psi>) j =
     Inf {i. \<forall>k. k < j \<and> k \<le> min (progress P \<phi> j) (progress P \<psi> j) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
+| "progress P (Formula.Trigger \<phi> I \<psi>) j = min (progress P \<phi> j) (progress P \<psi> j)" (* ? *)
+| "progress P (Formula.Release \<phi> I \<psi>) j =
+    Inf {i. \<forall>k. k < j \<and> k \<le> min (progress P \<phi> j) (progress P \<psi> j) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}" (* ? *)
 | "progress P (Formula.MatchP I r) j = min_regex_default (progress P) r j"
 | "progress P (Formula.MatchF I r) j =
     Inf {i. \<forall>k. k < j \<and> k \<le> min_regex_default (progress P) r j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
@@ -1294,8 +1317,16 @@ next
   then show ?case
     by (auto simp: image_iff intro!: Min.coboundedI[THEN order_trans])
 next
+  case (Always I \<phi>)
+  from Always(1)[of P P'] Always.prems show ?case
+    by (auto 0 3 dest: memR_nonzeroD less_\<tau>D spec[of _ j'] intro!: cInf_superset_mono)
+next
   case (Until \<phi> I \<psi>)
   from Until(1,2)[of P P'] Until.prems show ?case
+    by (auto 0 3 dest: memR_nonzeroD less_\<tau>D spec[of _ j'] intro!: cInf_superset_mono)
+next
+  case (Release \<phi> I \<psi>)
+  from Release(1,2)[of P P'] Release.prems show ?case
     by (auto 0 3 dest: memR_nonzeroD less_\<tau>D spec[of _ j'] intro!: cInf_superset_mono)
 next
   case (MatchF I r)
@@ -1319,7 +1350,15 @@ next
   then show ?case
     by (auto simp: image_iff intro!: Min.coboundedI[where a="progress \<sigma> P (hd l) j", THEN order_trans])
 next
+  case (Always I \<phi>)
+  then show ?case
+    by (auto intro!: cInf_lower)
+next
   case (Until \<phi> I \<psi>)
+  then show ?case
+    by (auto intro!: cInf_lower)
+next
+  case (Release \<phi> I \<psi>)
   then show ?case
     by (auto intro!: cInf_lower)
 next
@@ -1536,6 +1575,43 @@ next
   then show ?case
     by (intro exI[of _ P] exI[of _ j]) (auto 0 3 simp: pred_mapping_alt dom_def)
 next
+  case (Historically I \<phi>)
+  from Historically(2) obtain P1 j1 where P1: "dom P1 = S" "range_mapping i j1 P1"  "i \<le> progress \<sigma> P1 \<phi> j1"
+    using Historically(1)[of S i] by auto
+  then have "i \<le> progress \<sigma> P1 (Formula.Historically I \<phi>) j1"
+    by (auto elim!: order.trans[OF _ progress_mono_gen] simp: max_mapping_cobounded1 max_mapping_cobounded2)
+  with P1 show ?case by (intro exI[of _ "P1"] exI[of _ "j1"])
+      (auto elim!: pred_mapping_le intro: max_mapping_cobounded1)
+next
+  case (Always I \<phi>)
+  from Always.prems obtain m where "\<not> memR I m"
+    by (auto simp: bounded_memR)
+  then obtain i' where "i < i'" and 1: "\<not> memR I (\<tau> \<sigma> i' - \<tau> \<sigma> i)"
+    using ex_le_\<tau>[where x="\<tau> \<sigma> i + m" and s=\<sigma> and i="Suc i"]
+    by atomize_elim (auto simp add: less_eq_Suc_le memR_antimono)
+  from Always.prems obtain P1 j1 where P1: "dom P1 = S" "range_mapping (Suc i') j1 P1" "Suc i' \<le> progress \<sigma> P1 \<phi> j1"
+    by (atomize_elim, intro Always(1)) (auto simp: pred_mapping_alt dom_def)
+  have "i \<le> progress \<sigma> P1 (Formula.Always I \<phi>) j1"
+    unfolding progress.simps
+  proof (intro cInf_greatest, goal_cases nonempty greatest)
+    case nonempty
+    then show ?case
+      by (auto simp: trans_le_add1[OF \<tau>_mono] intro!: exI[of _ "j1"])
+  next
+    case (greatest x)
+    from P1(2,3) have "i' < j1"
+      by (auto simp: less_eq_Suc_le intro!: progress_le_gen elim!: order.trans pred_mapping_mono_strong)
+    have "i' \<le> min (progress \<sigma> P1 \<phi> j1) (progress \<sigma> P1 \<phi> j1)"
+      using P1(3) by simp
+    with greatest \<open>i' < j1\<close> have "memR I (\<tau> \<sigma> i' - \<tau> \<sigma> x)"
+      by simp
+    with 1 have "\<tau> \<sigma> i < \<tau> \<sigma> x"
+      by (auto 0 3 elim: contrapos_np)
+    then show ?case by (auto dest!: less_\<tau>D)
+  qed
+  with P1 \<open>i < i'\<close> show ?case
+    by (intro exI[of _ "P1"] exI[of _ "j1"]) (auto simp: range_mapping_relax)
+next
   case (Since \<phi>1 I \<phi>2)
   from Since(3) obtain P1 j1 where P1: "dom P1 = S" "range_mapping i j1 P1"  "i \<le> progress \<sigma> P1 \<phi>1 j1"
     using Since(1)[of S i] by auto
@@ -1557,6 +1633,54 @@ next
     by (atomize_elim, intro Until(1)) (auto simp: pred_mapping_alt dom_def)
   from Until.prems obtain P2 j2 where P2: "dom P2 = S" "range_mapping (Suc i') j2 P2" "Suc i' \<le> progress \<sigma> P2 \<phi>2 j2"
     by (atomize_elim, intro Until(2)) (auto simp: pred_mapping_alt dom_def)
+  let ?P12 = "max_mapping P1 P2"
+  have "i \<le> progress \<sigma> ?P12 (Formula.Until \<phi>1 I \<phi>2) (max j1 j2)"
+    unfolding progress.simps
+  proof (intro cInf_greatest, goal_cases nonempty greatest)
+    case nonempty
+    then show ?case
+      by (auto simp: trans_le_add1[OF \<tau>_mono] intro!: exI[of _ "max j1 j2"])
+  next
+    case (greatest x)
+    from P1(2,3) have "i' < j1"
+      by (auto simp: less_eq_Suc_le intro!: progress_le_gen elim!: order.trans pred_mapping_mono_strong)
+    then have "i' < max j1 j2" by simp
+    have "progress \<sigma> P1 \<phi>1 j1 \<le> progress \<sigma> ?P12 \<phi>1 (max j1 j2)"
+      using P1(1) P2(1) by (auto intro!: progress_mono_gen max_mapping_cobounded1)
+    moreover have "progress \<sigma> P2 \<phi>2 j2 \<le> progress \<sigma> ?P12 \<phi>2 (max j1 j2)"
+      using P1(1) P2(1) by (auto intro!: progress_mono_gen max_mapping_cobounded2)
+    ultimately have "i' \<le> min (progress \<sigma> ?P12 \<phi>1 (max j1 j2)) (progress \<sigma> ?P12 \<phi>2 (max j1 j2))"
+      using P1(3) P2(3) by simp
+    with greatest \<open>i' < max j1 j2\<close> have "memR I (\<tau> \<sigma> i' - \<tau> \<sigma> x)"
+      by simp
+    with 1 have "\<tau> \<sigma> i < \<tau> \<sigma> x"
+      by (auto 0 3 elim: contrapos_np)
+    then show ?case by (auto dest!: less_\<tau>D)
+  qed
+  with P1 P2 \<open>i < i'\<close> show ?case
+    by (intro exI[of _ "max_mapping P1 P2"] exI[of _ "max j1 j2"]) (auto simp: range_mapping_relax)
+next
+  case (Trigger \<phi>1 I \<phi>2)
+  from Trigger(3) obtain P1 j1 where P1: "dom P1 = S" "range_mapping i j1 P1"  "i \<le> progress \<sigma> P1 \<phi>1 j1"
+    using Trigger(1)[of S i] by auto
+  moreover
+  from Trigger(3) obtain P2 j2 where P2: "dom P2 = S" "range_mapping i j2 P2" "i \<le> progress \<sigma> P2 \<phi>2 j2"
+    using Trigger(2)[of S i] by auto
+  ultimately have "i \<le> progress \<sigma> (max_mapping P1 P2) (Formula.Since \<phi>1 I \<phi>2) (max j1 j2)"
+    by (auto elim!: order.trans[OF _ progress_mono_gen] simp: max_mapping_cobounded1 max_mapping_cobounded2)
+  with P1 P2 show ?case by (intro exI[of _ "max_mapping P1 P2"] exI[of _ "max j1 j2"])
+      (auto elim!: pred_mapping_le intro: max_mapping_cobounded1)
+next
+  case (Release \<phi>1 I \<phi>2)
+  from Release.prems obtain m where "\<not> memR I m"
+    by (auto simp: bounded_memR)
+  then obtain i' where "i < i'" and 1: "\<not> memR I (\<tau> \<sigma> i' - \<tau> \<sigma> i)"
+    using ex_le_\<tau>[where x="\<tau> \<sigma> i + m" and s=\<sigma> and i="Suc i"]
+    by atomize_elim (auto simp add: less_eq_Suc_le memR_antimono)
+  from Release.prems obtain P1 j1 where P1: "dom P1 = S" "range_mapping (Suc i') j1 P1" "Suc i' \<le> progress \<sigma> P1 \<phi>1 j1"
+    by (atomize_elim, intro Release(1)) (auto simp: pred_mapping_alt dom_def)
+  from Release.prems obtain P2 j2 where P2: "dom P2 = S" "range_mapping (Suc i') j2 P2" "Suc i' \<le> progress \<sigma> P2 \<phi>2 j2"
+    by (atomize_elim, intro Release(2)) (auto simp: pred_mapping_alt dom_def)
   let ?P12 = "max_mapping P1 P2"
   have "i \<le> progress \<sigma> ?P12 (Formula.Until \<phi>1 I \<phi>2) (max j1 j2)"
     unfolding progress.simps
@@ -1668,7 +1792,25 @@ lemma cInf_restrict_nat:
 lemma progress_time_conv:
   assumes "\<forall>i<j. \<tau> \<sigma> i = \<tau> \<sigma>' i"
   shows "progress \<sigma> P \<phi> j = progress \<sigma>' P \<phi> j"
-  using assms proof (induction \<phi> arbitrary: P)
+  using assms
+proof (induction \<phi> arbitrary: P)
+  case (Always I \<phi>)
+  have *: "i \<le> j - 1 \<longleftrightarrow> i < j" if "j \<noteq> 0" for i
+    using that by auto
+  with Always show ?case
+  proof (cases "bounded I")
+    case True
+    then show ?thesis
+    proof (cases "j")
+      case (Suc n)
+      with * Always show ?thesis
+        using \<tau>_mono[THEN trans_le_add1]
+        by (auto 6 0
+            intro!: box_equals[OF arg_cong[where f=Inf]
+              cInf_restrict_nat[symmetric, where x=n] cInf_restrict_nat[symmetric, where x=n]])
+    qed simp
+  qed (simp add: bounded_memR)
+next
   case (Until \<phi>1 I \<phi>2)
   have *: "i \<le> j - 1 \<longleftrightarrow> i < j" if "j \<noteq> 0" for i
     using that by auto
@@ -1679,6 +1821,23 @@ lemma progress_time_conv:
     proof (cases "j")
       case (Suc n)
       with * Until show ?thesis
+        using \<tau>_mono[THEN trans_le_add1]
+        by (auto 6 0
+            intro!: box_equals[OF arg_cong[where f=Inf]
+              cInf_restrict_nat[symmetric, where x=n] cInf_restrict_nat[symmetric, where x=n]])
+    qed simp
+  qed (simp add: bounded_memR)
+next
+  case (Release \<phi>1 I \<phi>2)
+  have *: "i \<le> j - 1 \<longleftrightarrow> i < j" if "j \<noteq> 0" for i
+    using that by auto
+  with Release show ?case
+  proof (cases "bounded I")
+    case True
+    then show ?thesis
+    proof (cases "j")
+      case (Suc n)
+      with * Release show ?thesis
         using \<tau>_mono[THEN trans_le_add1]
         by (auto 6 0
             intro!: box_equals[OF arg_cong[where f=Inf]
@@ -1789,6 +1948,14 @@ next
     unfolding sat.simps
     by (intro conj_cong Next) auto
 next
+  case (Historically I \<phi>)
+  show ?case
+    by blast
+next
+  case (Always I \<phi>)
+  show ?case
+    by blast
+next
   case (Since \<phi>1 I \<phi>2)
   then have "i < plen \<pi>"
     by (auto elim!: order.strict_trans2[OF _ progress_le_gen])
@@ -1835,6 +2002,14 @@ next
     with Until.IH(1)[OF 11] Until.IH(2)[OF 21] \<tau>_prefix_conv[OF assms(1,2) 31] Until.prems show ?case
       by (auto 0 4 simp: le_diff_conv add.commute memR_antimono dest: less_imp_le order.trans[OF \<tau>_mono, rotated])
   qed
+next
+  case (Trigger \<phi>1 I \<phi>2)
+  show ?case
+    by blast
+next
+  case (Release \<phi>1 I \<phi>2)
+  show ?case
+    by blast
 next
   case (MatchP I r)
   then have "i < plen \<pi>"
@@ -1964,6 +2139,14 @@ next
     unfolding progress.simps convert_multiway.simps
     by (force simp: list.pred_set convert_multiway_remove_neg intro!: Sup.SUP_cong)
 next
+  case (Trigger_0 I \<psi>)
+  show ?case
+    by blast
+next
+  case (Release_0 I \<psi>)
+  show ?case
+    by blast
+next
   case (MatchP I r)
   from MatchP show ?case
     unfolding progress.simps regex.map convert_multiway.simps regex.set_map image_image
@@ -1976,7 +2159,7 @@ next
     by (intro if_cong arg_cong[of _ _ Min] arg_cong[of _ _ Inf] arg_cong[of _ _ "(\<le>) _"]
       image_cong Collect_cong all_cong1 imp_cong conj_cong image_cong)
       (auto 0 4 simp: atms_def elim!: disjE_Not2 dest: safe_regex_safe_formula)
-qed auto
+qed (auto)
 
 
 subsection \<open>Specification\<close>
@@ -2229,7 +2412,7 @@ fun formula_of_constraint :: "Formula.trm \<times> bool \<times> mconstraint \<t
 | "formula_of_constraint (t1, False, MLessEq, t2) = Formula.Neg (Formula.LessEq t1 t2)"
 
 inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow>
-  nat \<Rightarrow> event_data list set \<Rightarrow> ('msaux, 'muaux) mformula \<Rightarrow> Formula.formula \<Rightarrow> bool"
+  nat \<Rightarrow> event_data list set \<Rightarrow> ('msaux, 'muaux, 'mtaux) mformula \<Rightarrow> Formula.formula \<Rightarrow> bool"
   for \<sigma> j where
     Eq: "is_simple_eq t1 t2 \<Longrightarrow>
     \<forall>x\<in>Formula.fv_trm t1. x < n \<Longrightarrow> \<forall>x\<in>Formula.fv_trm t2. x < n \<Longrightarrow>
@@ -2337,7 +2520,7 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
     progress \<sigma> P (Formula.MatchF I r) j + length aux = progress_regex \<sigma> P r j \<Longrightarrow>
     wf_mformula \<sigma> j P V n R (MMatchF I mr mrs \<phi>s buf nts t aux) (Formula.MatchF I r)"
 
-definition (in maux) wf_mstate :: "Formula.formula \<Rightarrow> Formula.prefix \<Rightarrow> event_data list set \<Rightarrow> ('msaux, 'muaux) mstate \<Rightarrow> bool" where
+definition (in maux) wf_mstate :: "Formula.formula \<Rightarrow> Formula.prefix \<Rightarrow> event_data list set \<Rightarrow> ('msaux, 'muaux, 'mtaux) mstate \<Rightarrow> bool" where
   "wf_mstate \<phi> \<pi> R st \<longleftrightarrow> mstate_n st = Formula.nfv \<phi> \<and> (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow>
     mstate_i st = progress \<sigma> Map.empty \<phi> (plen \<pi>) \<and>
     wf_mformula \<sigma> (plen \<pi>) Map.empty Map.empty (mstate_n st) R (mstate_m st) \<phi>)"
@@ -2469,6 +2652,12 @@ next
   case (Next I \<phi>)
   then show ?case by (auto intro!: wf_mformula.Next)
 next
+  case (Historically I \<phi>)
+  then show ?case by (auto intro!: wf_mformula.Next)
+next
+  case (Always I \<phi>)
+  then show ?case by (auto intro!: wf_mformula.Next)
+next
   case (Since \<phi> I \<psi>)
   then show ?case
     using wf_since_aux_Nil
@@ -2488,6 +2677,26 @@ next
   then show ?case
     using valid_length_muaux[OF valid_init_muaux[OF Not_Until(1)]] wf_until_aux_Nil
     by (auto simp add: init_args_def simp del: progress_simps intro!: wf_mformula.Until wf_mbuf2'_0 wf_ts_0)
+next
+  case (Trigger_0 \<phi> I \<psi>)
+  then show ?case
+    using wf_since_aux_Nil
+    by (auto simp add: init_args_def intro!: wf_mformula.Since wf_mbuf2'_0 wf_ts_0)
+next
+  case (Trigger \<phi> I \<psi>)
+  then show ?case
+    using wf_since_aux_Nil
+    by (auto simp add: init_args_def intro!: wf_mformula.Since wf_mbuf2'_0 wf_ts_0)
+next
+  case (Release_0 \<phi> I \<psi>)
+  then show ?case
+    using wf_since_aux_Nil
+    by (auto simp add: init_args_def intro!: wf_mformula.Since wf_mbuf2'_0 wf_ts_0)
+next
+  case (Release \<phi> I \<psi>)
+  then show ?case
+    using wf_since_aux_Nil
+    by (auto simp add: init_args_def intro!: wf_mformula.Since wf_mbuf2'_0 wf_ts_0)
 next
   case (MatchP I r)
   then show ?case
@@ -5358,6 +5567,9 @@ next
         elim: mbuf2t_take_add'(1)[OF _ wf_envs_P_simps[OF MUntil.prems(2)] buf nts_snoc]
         mbuf2t_take_add'(2)[OF _ wf_envs_P_simps[OF MUntil.prems(2)] buf nts_snoc])
 next
+  case (MTrigger args \<phi> \<psi> buf nts t aux)
+  show ?case by blast
+next
   case (MMatchP I mr mrs \<phi>s buf nts aux)
   note sat.simps[simp del] mbufnt_take.simps[simp del] mbufn_add.simps[simp del]
   from MMatchP.prems obtain r \<psi>s where eq: "\<phi>' = Formula.MatchP I r"
@@ -5622,10 +5834,10 @@ primrec msteps0_stateless where
 lemma msteps0_msteps0_stateless: "fst (msteps0 w st) = msteps0_stateless w st"
   by (induct w arbitrary: st) (auto simp: split_beta)
 
-lift_definition msteps :: "Formula.prefix \<Rightarrow> ('msaux, 'muaux) mstate \<Rightarrow> (nat \<times> event_data table) list \<times> ('msaux, 'muaux) mstate"
+lift_definition msteps :: "Formula.prefix \<Rightarrow> ('msaux, 'muaux, 'mtaux) mstate \<Rightarrow> (nat \<times> event_data table) list \<times> ('msaux, 'muaux, 'mtaux) mstate"
   is msteps0 .
 
-lift_definition msteps_stateless :: "Formula.prefix \<Rightarrow> ('msaux, 'muaux) mstate \<Rightarrow> (nat \<times> event_data table) list"
+lift_definition msteps_stateless :: "Formula.prefix \<Rightarrow> ('msaux, 'muaux, 'mtaux) mstate \<Rightarrow> (nat \<times> event_data table) list"
   is msteps0_stateless .
 
 lemma msteps_msteps_stateless: "fst (msteps w st) = msteps_stateless w st"
