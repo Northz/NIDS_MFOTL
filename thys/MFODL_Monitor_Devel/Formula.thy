@@ -697,6 +697,17 @@ lemma "sat \<sigma> V v i (Trigger \<phi> I \<psi>) = sat \<sigma> V v i (Neg (S
 lemma "sat \<sigma> V v i (Release \<phi> I \<psi>) = sat \<sigma> V v i (Neg (Until (Neg \<phi>) I (Neg \<psi>)))"
   by auto
 
+definition release :: "formula \<Rightarrow> \<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "release \<phi> I \<psi> = Neg (Until (Neg \<phi>) I (Neg \<psi>))"
+
+lemma sat_release[simp]:
+  "sat \<sigma> V v i (release \<phi> I \<psi>) = (\<forall>j\<ge>i. (mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)) \<longrightarrow> (sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. sat \<sigma> V v k \<phi>)))"
+  unfolding release_def
+  by auto
+
+lemma sat_release_eq[simp]: "sat \<sigma> V v i (Release \<phi> I \<psi>) = sat \<sigma> V v i (release \<phi> I \<psi>)"
+  by auto
+
 definition once :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
   "once I \<phi> = Since TT I \<phi>"
 
@@ -706,25 +717,36 @@ lemma sat_once[simp] : "sat \<sigma> V v i (once I \<phi>) = (\<exists>j\<le>i. 
 lemma once_fvi[simp] : "fvi b (once I \<phi>) = fvi b \<phi>"
   by (auto simp: once_def)
 
-(* definition historically :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "historically I \<phi> = (Neg (once I (Neg \<phi>)))" *)
+definition historically :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "historically I \<phi> = (Neg (once I (Neg \<phi>)))"
 
-lemma "sat \<sigma> V v i (Historically I \<phi>) = sat \<sigma> V v i (Neg (once I (Neg \<phi>)))"
+lemma sat_historically[simp]: "sat \<sigma> V v i (historically I \<phi>) = (\<forall>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> sat \<sigma> V v j \<phi>)"
+  unfolding historically_def
+  by auto
+
+lemma sat_historically_eq[simp]: "sat \<sigma> V v i (Historically I \<phi>) = sat \<sigma> V v i (historically I \<phi>)"
   by auto
 
 definition eventually :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
   "eventually I \<phi> = Until TT I \<phi>"
 
-lemma eventually_fvi[simp] : "fvi b (eventually I \<phi>) = fvi b \<phi>"
+lemma eventually_fvi[simp]: "fvi b (eventually I \<phi>) = fvi b \<phi>"
   by (auto simp: eventually_def)
 
-lemma sat_eventually[simp] : "sat \<sigma> V v i (eventually I \<phi>) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j \<phi>)"
+lemma sat_eventually[simp]: "sat \<sigma> V v i (eventually I \<phi>) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j \<phi>)"
   by (auto simp: eventually_def)
 
-(*definition always :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
-  "always I \<phi> = (Neg (eventually I (Neg \<phi>)))"*)
+definition always :: "\<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "always I \<phi> = (Neg (eventually I (Neg \<phi>)))"
 
 lemma "sat \<sigma> V v i (Always I \<phi>) = sat \<sigma> V v i (Neg (eventually I (Neg \<phi>)))"
+  by auto
+
+lemma sat_always[simp]: "sat \<sigma> V v i (always I \<phi>) = (\<forall>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v j \<phi>)"
+  unfolding always_def
+  by auto
+
+lemma sat_always_eq[simp]: "sat \<sigma> V v i (Always I \<phi>) = sat \<sigma> V v i (always I \<phi>)"
   by auto
 
 (* case distrinction since intervals aren't allowed to be empty and flip_int [0, \<infinity>] would be *)
