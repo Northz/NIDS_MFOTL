@@ -29,7 +29,7 @@ fun trigger_results :: "args \<Rightarrow> ts \<Rightarrow> 'a mtaux \<Rightarro
         (
           tuple \<in> r \<or>
           (\<exists>j \<in> {i<..<(length auxlist)}.
-            (proj_tuple (join_mask (args_n args) (args_L args)) tuple) \<in> relL (auxlist!j) \<comment> \<open>t < t' is given as the list is sorted\<close>
+            join_cond (args_pos args) (relL (auxlist!j)) (proj_tuple (join_mask (args_n args) (args_L args)) tuple) \<comment> \<open>t < t' is given as the list is sorted\<close>
           )
         )
       )
@@ -49,7 +49,8 @@ locale mtaux =
       else 
         L = R
     ) \<Longrightarrow>
-    let args = init_args I n L R false in
+    \<not>mem I 0 \<longrightarrow> pos \<Longrightarrow>
+    let args = init_args I n L R pos in
     valid_mtaux args 0 (init_mtaux args) []"
 
   (* assuming the previous state outputted the same result, the next will as well *)
@@ -119,7 +120,7 @@ definition tuple_since_lhs where
           tuple \<in> r
         ) \<and>
         (
-          (proj_tuple maskL tuple) \<in> relL (hd suffix)
+          join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL tuple)
         )
     )
   ))"
@@ -127,6 +128,7 @@ definition tuple_since_lhs where
 fun valid_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow> 'a mtaux \<Rightarrow> bool" where
   "valid_mmtaux args cur (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat) auxlist \<longleftrightarrow>
     (if mem (args_ivl args) 0 then (args_L args) \<subseteq> (args_R args) else (args_L args) = (args_R args)) \<and>
+    (\<not>mem (args_ivl args) 0 \<longrightarrow> args_pos args) \<and>
     maskL = join_mask (args_n args) (args_L args) \<and>
     maskR = join_mask (args_n args) (args_R args) \<and>
     (\<forall>(t, relL, relR) \<in> set auxlist. table (args_n args) (args_L args) relL \<and> table (args_n args) (args_R args) relR) \<and>
@@ -151,7 +153,7 @@ fun valid_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow>
     (\<forall>db \<in> set auxlist. time db \<le> mt \<and> memR (args_ivl args) (mt - time db)) \<and>
      \<comment> \<open>check whether tuple_in once contains the newest occurence of the tuple satisfying the lhs\<close>
     newest_tuple_in_mapping fst id data_prev tuple_in_once (\<lambda>x. True) \<and>
-    (\<forall>as \<in> Mapping.keys tuple_in_once. case Mapping.lookup tuple_in_once as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> (proj_tuple maskL as) \<in> l) \<and>
+    (\<forall>as \<in> Mapping.keys tuple_in_once. case Mapping.lookup tuple_in_once as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> join_cond (args_pos args) l (proj_tuple maskL as)) \<and>
     (\<forall>as. (case Mapping.lookup tuple_since_hist as of
       Some idx \<Rightarrow> tuple_since_tp args as (linearize data_in) idx_oldest idx_mid idx
       | None   \<Rightarrow> \<forall>idx. \<not>tuple_since_tp args as (linearize data_in) idx_oldest idx_mid idx)
@@ -180,7 +182,8 @@ lemma valid_init_mmtaux: "(
       else 
         L = R
     ) \<Longrightarrow>
-    let args = init_args I n L R false in
+    \<not>mem I 0 \<longrightarrow> pos \<Longrightarrow>
+    let args = init_args I n L R pos in
     valid_mmtaux args 0 (init_mmtaux args) []"
   unfolding init_mmtaux_def
   by (auto simp add: init_args_def empty_queue_rep
@@ -487,7 +490,7 @@ proof -
     using memL_all
     unfolding auxlist_data_prev_def
     by auto
-  moreover from assms(1) have "(\<forall>as \<in> Mapping.keys tuple_in_once. case Mapping.lookup tuple_in_once as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> (proj_tuple maskL as) \<in> l)"
+  moreover from assms(1) have "(\<forall>as \<in> Mapping.keys tuple_in_once. case Mapping.lookup tuple_in_once as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> join_cond (args_pos args) l (proj_tuple maskL as))"
     by simp
   ultimately have "Mapping.keys tuple_in_once = {}"
     using Mapping_keys_dest
@@ -849,12 +852,12 @@ proof -
         by (simp add: Mapping_keys_dest)
       then obtain t where t_props: "Mapping.lookup tuple_in_once tuple = Some t"
         by auto
-      from assms(1) have "\<forall>as \<in> Mapping.keys tuple_in_once. case Mapping.lookup tuple_in_once as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> (proj_tuple maskL as) \<in> l"
+      from assms(1) have "\<forall>as \<in> Mapping.keys tuple_in_once. case Mapping.lookup tuple_in_once as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> join_cond (args_pos args) l (proj_tuple maskL as)"
         by auto
-      then have "\<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> (proj_tuple maskL tuple) \<in> l"
+      then have "\<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> join_cond (args_pos args) l (proj_tuple maskL tuple)"
         using assm t_props
-        by auto
-      then obtain db l r where db_props: "db = (t, l, r)" "db \<in> set (linearize data_prev)" "(proj_tuple maskL tuple) \<in> l"
+        by fastforce
+      then obtain db l r where db_props: "db = (t, l, r)" "db \<in> set (linearize data_prev)" "join_cond (args_pos args) l (proj_tuple maskL tuple)"
         unfolding ts_tuple_rel_f_def
         by auto
       then obtain j where j_props: "db = auxlist!j" "j \<in> {0..<(length auxlist)}"
@@ -886,11 +889,11 @@ proof -
         then have j_ge_i: "i < j" using le_def by blast
         then have "j \<in> {i<..<(length auxlist)}" using j_props(2)
           by simp
-        moreover have "(proj_tuple maskL tuple) \<in> (fst o snd) (auxlist!j)"
+        moreover have "join_cond (args_pos args) ((fst o snd) (auxlist!j)) (proj_tuple maskL tuple)"
           using db_props j_props(1)
           by auto
         ultimately have "(\<exists>j \<in> {i<..<(length auxlist)}.
-            (proj_tuple maskL tuple) \<in> relL (auxlist!j)
+            join_cond (args_pos args) (relL (auxlist!j)) (proj_tuple maskL tuple)
           )"
         using relL_def
         by metis
@@ -902,10 +905,10 @@ proof -
         let (t, l, r) = auxlist!i in
         mem (args_ivl args) (mt - t) \<longrightarrow>
           (\<exists>j \<in> {i<..<(length auxlist)}.
-            (proj_tuple (join_mask (args_n args) (args_L args)) tuple) \<in> relL (auxlist!j)
+            join_cond (args_pos args) (relL (auxlist!j)) (proj_tuple (join_mask (args_n args) (args_L args)) tuple)
           )
       )"
-        by (simp add: case_prod_beta' time_def)
+        by (fastforce simp add: case_prod_beta' time_def)
       moreover have "wf_tuple (args_n args) (args_R args) tuple"
       proof -
         have "auxlist_data_prev args mt auxlist = (linearize data_prev)"
@@ -931,7 +934,7 @@ proof -
       qed                
       ultimately have "tuple \<in> trigger_results args mt auxlist"
         using non_empty
-        by auto
+        by fastforce
     }
     moreover {
       assume "tuple \<in> since_sat"
@@ -958,12 +961,11 @@ proof -
             tuple \<in> r
           ) \<and>
           (
-            (proj_tuple maskL tuple) \<in> relL (hd suffix)
-            
+            join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL tuple)
           )
         ))"
         unfolding tuple_since_lhs_def
-        by auto
+        by fastforce
       moreover {
         assume "tuple \<in> hist_sat"
         then have "tuple \<in> trigger_results args mt auxlist"
@@ -976,8 +978,7 @@ proof -
             tuple \<in> r
           ) \<and>
           (
-            (proj_tuple maskL tuple) \<in> relL (hd suffix)
-            
+            join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL tuple)
           )
         )"
 
@@ -988,7 +989,7 @@ proof -
                 tuple \<in> r
               ) \<and>
               (
-                (proj_tuple maskL tuple) \<in> relL (hd suffix)
+                join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL tuple)
               )
           )"
           by blast
@@ -1021,7 +1022,7 @@ proof -
         have idx_shift: "\<forall>i\<in>{0..<length suffix}. suffix!i = (auxlist_data_in args mt auxlist)!(i+n)"
           using suffix_def n_def(1)
           by (simp add: add.commute)
-        have suffix_lhs: "(proj_tuple maskL tuple) \<in> relL (hd suffix)"
+        have suffix_lhs: "join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL tuple)"
           using suffix_def n_def(2)
           by meson
         
@@ -1031,10 +1032,10 @@ proof -
         moreover have "(auxlist_data_in args mt auxlist)!n = auxlist!n"
           using n_def(1)
           by (simp add: calculation(2))
-        ultimately have since: "(proj_tuple maskL tuple) \<in> relL (auxlist!n)"
+        ultimately have since: "join_cond (args_pos args) (relL (auxlist!n)) (proj_tuple maskL tuple)"
           using idx_shift suffix_length
           unfolding suffix_def
-          by (simp add: hd_drop_conv_nth)
+          by (auto simp add: hd_drop_conv_nth)
         
         have n_le_auxlist: "n < (length auxlist)"
           using n_def(1)
@@ -1047,11 +1048,11 @@ proof -
             using n_le_auxlist
             by auto
           moreover have
-            "(proj_tuple maskL tuple) \<in> relL (auxlist!n)"
+            "join_cond (args_pos args) (relL (auxlist!n)) (proj_tuple maskL tuple)"
             using since
             by auto
           ultimately have "(\<exists>j \<in> {i<..<(length auxlist)}.
-              (proj_tuple maskL tuple) \<in> relL (auxlist!j)
+              join_cond (args_pos args) (relL (auxlist!j)) (proj_tuple maskL tuple)
             )"
             using relL_def by blast
         }
@@ -1059,7 +1060,7 @@ proof -
           let (t, l, r) = auxlist!i in
           mem (args_ivl args) (mt - t) \<longrightarrow> 
             (\<exists>j \<in> {i<..<(length auxlist)}.
-              (proj_tuple maskL tuple) \<in> relL (auxlist!j)
+              join_cond (args_pos args) (relL (auxlist!j)) (proj_tuple maskL tuple)
             )
         )"
           by (simp add: case_prod_beta')
@@ -1069,10 +1070,10 @@ proof -
           (
             tuple \<in> r \<or>
             (\<exists>j \<in> {i<..<(length auxlist)}.
-              (proj_tuple maskL tuple) \<in> relL (auxlist!j)
+              join_cond (args_pos args) (relL (auxlist!j)) (proj_tuple maskL tuple)
             )
           )
-        )" by auto
+        )" by fastforce
         {
           fix i
           assume i_props: "i \<in> {n..<(length auxlist)}" "mem (args_ivl args) (mt - time (auxlist!i))"
@@ -1139,7 +1140,7 @@ proof -
           (
             tuple \<in> r \<or>
             (\<exists>j \<in> {i<..<(length auxlist)}.
-              (proj_tuple maskL tuple) \<in> relL (auxlist!j)
+              join_cond (args_pos args) (relL (auxlist!j)) (proj_tuple maskL tuple)
             )
           )
         )"
@@ -1150,7 +1151,7 @@ proof -
           (
             tuple \<in> r \<or>
             (\<exists>j \<in> {i<..<(length auxlist)}.
-              (proj_tuple maskL tuple) \<in> relL (auxlist!j)
+              join_cond (args_pos args) (relL (auxlist!j)) (proj_tuple maskL tuple)
             )
           )
         )"
@@ -1161,7 +1162,7 @@ proof -
           by auto
         ultimately have "tuple \<in> trigger_results args mt auxlist"
           using non_empty wf
-          by auto
+          by fastforce
       }
       ultimately have "tuple \<in> trigger_results args mt auxlist"
         by blast
@@ -1187,18 +1188,30 @@ proof -
     have maskL: "maskL = join_mask (args_n args) (args_L args)"
       using assms(1)
       by auto
+    then have "(\<forall>i \<in> {0..<(length auxlist)}.
+        let (t, l, r) = auxlist!i in
+        mem (args_ivl args) (cur - t) \<longrightarrow> 
+        (
+          tuple \<in> r \<or>
+          (\<exists>j \<in> {i<..<(length auxlist)}.
+            join_cond (args_pos args) (relL (auxlist!j)) (proj_tuple maskL tuple)
+          )
+        )
+      )"
+      using el
+      by fastforce
     then have tuple_props: "(\<forall>i \<in> {0..<(length auxlist)}.
         mem (args_ivl args) (cur - time (auxlist!i)) \<longrightarrow> 
         (
           tuple \<in> relR (auxlist!i) \<or>
           (\<exists>j \<in> {i<..<(length auxlist)}.
-            (proj_tuple maskL tuple) \<in> relL (auxlist!j)
+            join_cond (args_pos args) (relL (auxlist!j)) (proj_tuple maskL tuple)
           )
         )
       )"
       using el
-      unfolding time_def relR_def
-      by auto
+      unfolding relR_def time_def
+      by (fastforce simp add: Let_def)
     {
       assume hist: "\<forall>i \<in> {0..<(length auxlist)}.
         mem (args_ivl args) (cur - time (auxlist!i)) \<longrightarrow> tuple \<in> relR (auxlist!i)"
@@ -1243,20 +1256,20 @@ proof -
         "tuple \<notin> relR (auxlist!i)"
         by auto
 
-      define A where "A = {j \<in> {i<..<(length auxlist)}. (proj_tuple maskL tuple) \<in> relL (auxlist!j)}"
+      define A where "A = {j \<in> {i<..<(length auxlist)}. join_cond (args_pos args) (relL (auxlist!j)) (proj_tuple maskL tuple)}"
       define j where "j = Max A"
 
       have "\<exists>j \<in> {i<..<(length auxlist)}.
-        (proj_tuple maskL tuple) \<in> relL (auxlist!j)
+        join_cond (args_pos args) (relL (auxlist!j)) (proj_tuple maskL tuple)
       "
         using i_props el tuple_props
         unfolding time_def relR_def
-        by auto
+        by fastforce
       then have A_props: "A \<noteq> {}" "finite A" unfolding A_def by auto
       then have "j \<in> A" unfolding j_def by auto
       then have j_props:
         "j \<in> {i<..<(length auxlist)}"
-        "(proj_tuple maskL tuple) \<in> relL (auxlist!j)"
+        "join_cond (args_pos args) (relL (auxlist!j)) (proj_tuple maskL tuple)"
         using A_def
         by auto
 
@@ -1273,7 +1286,7 @@ proof -
           by (metis (no_types, lifting) hd_drop_conv_nth length_map nth_take)
         
 
-        then have suffix_first: "(proj_tuple maskL tuple) \<in> relL (hd suffix)"
+        then have suffix_first: "join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL tuple)"
           using j_props
           by auto
 
@@ -1300,25 +1313,14 @@ proof -
             unfolding auxlist_data_in_def
             by (simp add: less_le_trans)
 
-          moreover have "\<forall>i \<in> {0..<(length auxlist)}.
-            mem (args_ivl args) (cur - time (auxlist!i)) \<longrightarrow> 
-            (
-              tuple \<in> relR (auxlist!i) \<or>
-              (\<exists>j \<in> {i<..<(length auxlist)}.
-                (proj_tuple maskL tuple) \<in> relL (auxlist!j)
-              )
-            )"
-            using el maskL
-            unfolding relR_def time_def
-            by auto
-          ultimately have cond: "
+          then have cond: "
             mem (args_ivl args) (cur - time (auxlist!(k+j))) \<longrightarrow> 
             (
               tuple \<in> relR (auxlist!(k+j)) \<or>
               (\<exists>j \<in> {(k+j)<..<(length auxlist)}.
-                (proj_tuple maskL tuple) \<in> relL (auxlist!j)
+                join_cond (args_pos args) (relL (auxlist!j)) (proj_tuple maskL tuple)
               )
-            )" by auto
+            )" using tuple_props by auto
 
 
           have "db \<in> set (auxlist_data_in args mt auxlist)"
@@ -1337,18 +1339,18 @@ proof -
           
           then have "tuple \<in> relR (auxlist!(k+j)) \<or>
               (\<exists>j \<in> {(k+j)<..<(length auxlist)}.
-                (proj_tuple maskL tuple) \<in> relL (auxlist!j)
+                join_cond (args_pos args) (relL (auxlist!j)) (proj_tuple maskL tuple)
               )"
             using cond
             by auto
 
           moreover {
             assume "(\<exists>j \<in> {(k+j)<..<(length auxlist)}.
-                (proj_tuple maskL tuple) \<in> relL (auxlist!j)
+                join_cond (args_pos args) (relL (auxlist!j)) (proj_tuple maskL tuple)
               )"
             then obtain j' where j'_props:
               "j' \<in> {(k+j)<..<(length auxlist)}"
-              "(proj_tuple maskL tuple) \<in> relL (auxlist!j')"
+              "join_cond (args_pos args) (relL (auxlist!j')) (proj_tuple maskL tuple)"
               by blast
 
             then have "j' \<in> A" using A_def j_props by auto
@@ -1362,7 +1364,7 @@ proof -
         then have "(\<forall>(t, l, r) \<in> set suffix.
               tuple \<in> r
             )"
-            "(proj_tuple maskL tuple) \<in> relL (hd suffix)"
+            "join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL tuple)"
           using suffix_first
           unfolding relR_def
           by (auto simp add: relR_def case_prod_beta')
@@ -1371,7 +1373,7 @@ proof -
             (\<forall>(t, l, r) \<in> set suffix.
               tuple \<in> r
             ) \<and>
-            (proj_tuple maskL tuple) \<in> relL (hd suffix)
+            join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL tuple)
         )"
           using j_le suffix_def
           by (meson atLeastLessThan_iff less_eq_nat.simps(1))
@@ -1381,7 +1383,7 @@ proof -
                   tuple \<in> r
                 ) \<and>
                 (
-                  (proj_tuple maskL tuple) \<in> relL (hd suffix)
+                  join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL tuple)
                 )
             )
           )"
@@ -1421,7 +1423,7 @@ proof -
           using data_prev_props j_props i_props j_geq
           unfolding j'_def
           by auto
-        then have "\<not>mem (args_ivl args) 0"
+        then have not_mem_0: "\<not>mem (args_ivl args) 0"
           using memL_mono[of "args_ivl args" 0]
           unfolding auxlist_data_prev_def
           by auto
@@ -1455,7 +1457,10 @@ proof -
         have tuple_eq: "proj_tuple maskL tuple = tuple"
           using mask_eq wf wf_tuple_proj_idle[of "args_n args" "args_L args" tuple] maskL
           by auto
-        have "proj_tuple maskL tuple \<in> fst X"
+        have "args_pos args"
+          using not_mem_0 assms(1)
+          by auto
+        then have "proj_tuple maskL tuple \<in> fst X"
           using j_props idx_shift
           unfolding relL_def X_def
           by auto
@@ -1547,7 +1552,7 @@ fun update_mmtaux' :: "args \<Rightarrow> ts \<Rightarrow> nat \<Rightarrow> nat
         upd_set tuple_since_hist (\<lambda>_. idx_move) (r - Mapping.keys tuple_since_hist), \<comment> \<open>then add entries for the ones that are present in the current db\<close>
         hist_sat,
         idx_move+1, \<comment> \<open>increase index by one every db\<close>
-        since_sat \<union> {as \<in> r. proj_tuple_in_join True maskL as l} \<comment> \<open>TODO: optimize proj_tuple_in_join to join_filter_cond if maskL = masR, see mmsaux_join\<close>
+        since_sat \<union> {as \<in> r. proj_tuple_in_join (args_pos args) maskL as l} \<comment> \<open>TODO: optimize proj_tuple_in_join to join_filter_cond if maskL = masR, see mmsaux_join\<close>
       ) 
     ) move (tuple_since_hist, hist_sat, idx_mid, since_sat); \<comment> \<open>use original idx_mid, not idx_mid' where the length of move already is included\<close>
     tuple_since_hist'' = (if (idx_mid' = idx_oldest') then Mapping.empty else tuple_since_hist'); \<comment> \<open>if data_in'' is empty, empty the mapping\<close>
@@ -2208,7 +2213,7 @@ lemma valid_update_mmtaux'_unfolded:
     "(\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_R args) as)"
     "auxlist_data_prev args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist) = (linearize data_prev')"
     "newest_tuple_in_mapping fst id data_prev' tuple_in_once' (\<lambda>x. True)"
-    "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> (proj_tuple maskL as) \<in> l)"
+    "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> join_cond (args_pos args) l (proj_tuple maskL as))"
     "length (linearize data_prev') + idx_mid' = idx_next"
 
     "auxlist_data_prev args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist) = drop (length (linearize data_in'')) (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist)"
@@ -2298,7 +2303,7 @@ proof -
         upd_set tuple_since_hist (\<lambda>_. idx_move) (r - Mapping.keys tuple_since_hist),
         hist_sat,
         idx_move+1, 
-        since_sat \<union> {as \<in> r. proj_tuple_in_join True maskL as l}
+        since_sat \<union> {as \<in> r. proj_tuple_in_join (args_pos args) maskL as l}
       ) 
     )"
 
@@ -2582,12 +2587,23 @@ proof -
     {
       fix t tuple
       assume t_props: "Mapping.lookup tuple_in_once tuple = Some t" "memL (args_ivl args) (nt - t)"
-      from assms(1) have "(\<forall>as \<in> Mapping.keys tuple_in_once. case Mapping.lookup tuple_in_once as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> (proj_tuple maskL as) \<in> l)"
+      from assms(1) have "(\<forall>as \<in> Mapping.keys tuple_in_once. case Mapping.lookup tuple_in_once as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> join_cond (args_pos args) l (proj_tuple maskL as))"
         by auto
-      then obtain X where X_props: "(t, X) \<in> set (linearize data_prev)" "(proj_tuple maskL tuple) \<in> fst X"
+      then obtain X where X_props: "(t, X) \<in> set (linearize data_prev)" "join_cond (args_pos args) (fst X) (proj_tuple maskL tuple)"
         using t_props
         by (smt Mapping_keys_intro fst_conv option.simps(3) option.simps(5))
-      then obtain i where i_props: "i \<in> {0..<length (linearize data_prev)}" "(linearize data_prev)!i = (t, X)"
+      moreover have
+        "(\<not>mem (args_ivl args) 0 \<longrightarrow> args_pos args)"
+        "auxlist_data_prev args mt auxlist = (linearize data_prev)"
+        using assms(1)
+        by auto
+      ultimately have pos: "args_pos args"
+        using memL_mono[of "args_ivl args" "0"]
+        unfolding auxlist_data_prev_def
+        by auto
+
+      obtain i where i_props: "i \<in> {0..<length (linearize data_prev)}" "(linearize data_prev)!i = (t, X)"
+        using X_props
         by (meson atLeastLessThan_iff leI not_less0 nth_the_index the_index_bounded)
       {
         assume assm: "(t, X) \<notin> set (takeWhile (\<lambda>(t, X). memL (args_ivl args) (nt - t)) (linearize data_prev))"
@@ -2630,7 +2646,7 @@ proof -
         have "wf_tuple (args_n args) (args_L args) tuple"
           by (metis Mapping_keys_intro option.simps(3) t_props(1) table_def table_tuple_in)
         then show ?thesis 
-          using X_props(2) maskL wf_tuple_proj_idle[of "args_n args" "args_L args" tuple]
+          using X_props(2) maskL wf_tuple_proj_idle[of "args_n args" "args_L args" tuple] pos
           by auto
       qed
       ultimately have "Mapping.lookup (fold fold_fn fold_list tuple_in_once) tuple = None"
@@ -2720,12 +2736,12 @@ proof -
     by auto
 
   from assms(1) have tuple_in_once_props:
-    "(\<forall>as \<in> Mapping.keys tuple_in_once. case Mapping.lookup tuple_in_once as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> (proj_tuple maskL as) \<in> l)"
+    "(\<forall>as \<in> Mapping.keys tuple_in_once. case Mapping.lookup tuple_in_once as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> join_cond (args_pos args) l (proj_tuple maskL as))"
     by auto
   {
     fix as t
     assume assm: "Mapping.lookup tuple_in_once' as = Some t"
-    then have "\<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> (proj_tuple maskL as) \<in> l"
+    then have "\<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> join_cond (args_pos args) l (proj_tuple maskL as)"
     proof (cases "mem (args_ivl args) 0")
       case True
       then show ?thesis
@@ -2756,19 +2772,19 @@ proof -
         then have t_eq: "t=t'" "Mapping.lookup tuple_in_once as = Some t"
           using assm t'_props
           by auto
-        then obtain l r where tlr_props: "(t, l, r) \<in> set (linearize data_prev)" "(proj_tuple maskL as) \<in> l"
+        then obtain l r where tlr_props: "(t, l, r) \<in> set (linearize data_prev)" "(join_cond (args_pos args) l (proj_tuple maskL as))"
           using as_mem tuple_in_once_props
           by fastforce
         then have "(t, l, r) \<in> set (linearize data_prev')"
           using False not_memL data_prev'_eq t_eq(1)
           by auto
         then show ?thesis
-          using tlr_props  
+          using tlr_props
           by auto
       qed
     qed
   }
-  then show "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> (proj_tuple maskL as) \<in> l)"
+  then show "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> join_cond (args_pos args) l (proj_tuple maskL as))"
     using Mapping_keys_dest
     by fastforce
 
@@ -3793,7 +3809,7 @@ proof -
             assume "tuple_since_lhs as (linearize data_in) args maskL (auxlist_data_in args mt auxlist)"
             then obtain n where n_props:
               "n\<in>{0..<length (linearize data_in)}"
-              "let suffix = drop n (auxlist_data_in args mt auxlist) in (\<forall>(t, l, y)\<in>set suffix. as \<in> y) \<and> proj_tuple maskL as \<in> relL (hd suffix)"
+              "let suffix = drop n (auxlist_data_in args mt auxlist) in (\<forall>(t, l, y)\<in>set suffix. as \<in> y) \<and> join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL as)"
               "linearize data_in \<noteq> []"
               unfolding tuple_since_lhs_def
               by auto
@@ -3810,7 +3826,7 @@ proof -
 
             then have suffix_props:
               "(\<forall>(t, l, y)\<in>set suffix. as \<in> y)"
-              "proj_tuple maskL as \<in> relL (hd suffix)"
+              "join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL as)"
               "suffix \<noteq> []"
               using n_props n_l
               unfolding suffix_def
@@ -3821,7 +3837,7 @@ proof -
               unfolding suffix_def
               by (simp add: hd_drop_conv_nth)
 
-            ultimately have relL: "proj_tuple maskL as \<in> relL ((auxlist_data_in args mt auxlist)!n)"
+            ultimately have relL: "join_cond (args_pos args) (relL ((auxlist_data_in args mt auxlist)!n)) (proj_tuple maskL as)"
               by auto
 
             {
@@ -3860,13 +3876,13 @@ proof -
               then have "\<forall>(t, l, r)\<in>set (drop (n-l) (lin_data_in''_aux_mv [])). as \<in> r"
                 using lin_data_in''_eq
                 by auto
-              moreover have "proj_tuple maskL as \<in> relL (hd (drop (n-l) (lin_data_in''_aux_mv [])))"
+              moreover have "join_cond (args_pos args) (relL (hd (drop (n-l) (lin_data_in''_aux_mv [])))) (proj_tuple maskL as)"
                 using lin_data_in''_eq l_leq suffix_props(2)
                 unfolding suffix_def
                 by auto
               ultimately have "(
                 let suffix = drop n' (lin_data_in''_aux_mv [])
-                in (\<forall>(t, l, y)\<in>set suffix. as \<in> y) \<and> proj_tuple maskL as \<in> relL (hd suffix))"
+                in (\<forall>(t, l, y)\<in>set suffix. as \<in> y) \<and> join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL as))"
                 by (simp only: Let_def n'_def)
               moreover have "n'\<in>{0..<length (lin_data_in''_mv [])}"
                 unfolding n'_def
@@ -3875,7 +3891,7 @@ proof -
               ultimately have "tuple_since_lhs as (lin_data_in''_mv []) args maskL (lin_data_in''_aux_mv [])"
                 using non_empty
                 unfolding tuple_since_lhs_def
-                by auto
+                by blast
             }
             moreover {
               assume assm: "\<not>(\<lambda>(t, _). memR (args_ivl args) (nt - t)) ((auxlist_data_in args mt auxlist)!n)"
@@ -3969,14 +3985,14 @@ proof -
 
           moreover obtain n where n_props:
             "n\<in>{0..<length (lin_data_in''_mv [])}"
-            "let suffix = drop n (lin_data_in''_aux_mv []) in (\<forall>(t, l, y)\<in>set suffix. as \<in> y) \<and> proj_tuple maskL as \<in> relL (hd suffix)"
+            "let suffix = drop n (lin_data_in''_aux_mv []) in (\<forall>(t, l, y)\<in>set suffix. as \<in> y) \<and> join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL as)"
             using assm
             unfolding tuple_since_lhs_def
             by auto
 
           ultimately have "let suffix = drop (l+n) (auxlist_data_in args mt auxlist) in (
             (\<forall>(t, l, y)\<in>set suffix. as \<in> y) \<and>
-            proj_tuple maskL as \<in> relL (hd suffix)
+            join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL as)
           )"
             by (simp add: add.commute)
 
@@ -3987,7 +4003,7 @@ proof -
           ultimately have "tuple_since_lhs as (linearize data_in) args maskL (auxlist_data_in args mt auxlist)"
             using non_empty
             unfolding tuple_since_lhs_def
-            by auto
+            by fastforce
           then have "as \<in> since_sat"
             using tuple_init_props_since(2)
             by auto
@@ -4077,7 +4093,7 @@ proof -
         by (auto simp add: Let_def case_prod_beta')
 
       define since_sat' where "since_sat' = (snd o snd o snd) tuple"
-      have fold_IH_since_sat: "(snd o snd o snd) (fold_op_f x tuple) = (since_sat' \<inter> (relR x)) \<union> {as \<in> (relR x). proj_tuple_in_join True maskL as (relL x)}"
+      have fold_IH_since_sat: "(snd o snd o snd) (fold_op_f x tuple) = (since_sat' \<inter> (relR x)) \<union> {as \<in> (relR x). proj_tuple_in_join (args_pos args) maskL as (relL x)}"
         unfolding fold_op_f_def relR_def relL_def since_sat'_def
         by (auto simp add: Let_def case_prod_beta')
 
@@ -4703,7 +4719,7 @@ proof -
           then have "as \<in> (snd \<circ> snd \<circ> snd) (fold_op_f x (fold fold_op_f xs init_tuple))"
             using fold_alt[of fold_op_f xs x init_tuple]
             by auto
-          then have as_mem: "as \<in> (since_sat' \<inter> relR x) \<union> {as \<in> relR x. proj_tuple_in_join True maskL as (relL x)}"
+          then have as_mem: "as \<in> (since_sat' \<inter> relR x) \<union> {as \<in> relR x. proj_tuple_in_join (args_pos args) maskL as (relL x)}"
             using fold_IH_since_sat
             unfolding tuple_def
             by auto
@@ -4763,7 +4779,7 @@ proof -
                 then obtain n where n_props:
                   "n\<in>{0..<length (lin_data_in''_mv xs)}"
                   "\<forall>(t, l, y)\<in>set (drop n (lin_data_in''_aux_mv xs)). as \<in> y"
-                  "proj_tuple maskL as \<in> relL (hd (drop n (lin_data_in''_aux_mv xs)))"
+                  "join_cond (args_pos args) (relL (hd (drop n (lin_data_in''_aux_mv xs)))) (proj_tuple maskL as)"
                   unfolding tuple_since_lhs_def
                   by (auto simp add: Let_def)
                 have n_l: "n < length (lin_data_in''_aux_mv xs)"
@@ -4781,10 +4797,10 @@ proof -
                 have "hd (drop n (lin_data_in''_aux_mv xs)) = hd (drop n (lin_data_in''_aux_mv (xs @ [x])))"
                   using n_l drop_eq hd_append[of "drop n (lin_data_in''_aux_mv xs)" "[x]"]
                   by auto
-                then have "proj_tuple maskL as \<in> relL (hd (drop n (lin_data_in''_aux_mv (xs @ [x]))))"
+                then have "join_cond (args_pos args) (relL (hd (drop n (lin_data_in''_aux_mv (xs @ [x]))))) (proj_tuple maskL as)"
                   using n_props(3)
                   by auto
-                then have "let suffix = drop n (lin_data_in''_aux_mv (xs @ [x])) in (\<forall>(t, l, y)\<in>set suffix. as \<in> y) \<and> proj_tuple maskL as \<in> relL (hd suffix)"
+                then have "let suffix = drop n (lin_data_in''_aux_mv (xs @ [x])) in (\<forall>(t, l, y)\<in>set suffix. as \<in> y) \<and> join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL as)"
                   using non_empty all_relR
                   by auto
                 moreover have "n\<in>{0..<length (lin_data_in''_mv (xs @ [x]))}"
@@ -4794,23 +4810,23 @@ proof -
                 ultimately have "tuple_since_lhs as (lin_data_in''_mv (xs @ [x])) args maskL (lin_data_in''_aux_mv (xs @ [x]))"
                   using non_empty
                   unfolding tuple_since_lhs_def
-                  by auto
+                  by blast
                 then have ?thesis by auto
               }
               ultimately show ?thesis by blast
             qed
           next
             case False
-            then have as_mem: "as \<in> {as \<in> relR x. proj_tuple_in_join True maskL as (relL x)}"
+            then have as_mem: "as \<in> {as \<in> relR x. proj_tuple_in_join (args_pos args) maskL as (relL x)}"
               using as_mem
               by auto
             then have
               "as \<in> relR x"
-              "proj_tuple_in_join True maskL as (relL x)"
+              "proj_tuple_in_join (args_pos args) maskL as (relL x)"
               by auto
             then have x_props:
               "as \<in> relR x"
-              "proj_tuple maskL as \<in> relL x"
+              "join_cond (args_pos args) (relL x) (proj_tuple maskL as)"
               unfolding proj_tuple_in_join_def
               by auto
             define n where "n = length (lin_data_in''_aux_mv (xs @ [x])) - 1"
@@ -4822,12 +4838,12 @@ proof -
               using x_props(1)
               unfolding relR_def
               by auto
-            moreover have "proj_tuple maskL as \<in> relL (hd (drop n (lin_data_in''_aux_mv (xs @ [x]))))"
+            moreover have "join_cond (args_pos args) (relL (hd (drop n (lin_data_in''_aux_mv (xs @ [x]))))) (proj_tuple maskL as)"
               using drop_eq x_props(2)
               by auto
             ultimately have "(let suffix = drop n (lin_data_in''_aux_mv (xs @ [x])) in
               (\<forall>(t, l, y)\<in>set suffix. as \<in> y) \<and>
-              proj_tuple maskL as \<in> relL (hd suffix)
+              join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL as)
             )"
               by auto
             moreover have "n\<in>{0..<length (lin_data_in''_mv (xs @ [x]))}"
@@ -4836,7 +4852,7 @@ proof -
             ultimately have "tuple_since_lhs as (lin_data_in''_mv (xs @ [x])) args maskL (lin_data_in''_aux_mv (xs @ [x]))"
               using non_empty
               unfolding tuple_since_lhs_def
-              by auto
+              by blast
             then show ?thesis by auto
           qed
         }
@@ -4855,12 +4871,12 @@ proof -
           obtain n where n_props:
             "n\<in>{0..<length (lin_data_in''_mv (xs @ [x]))}"
             "(\<forall>(t, l, r)\<in>set (drop n (lin_data_in''_aux_mv (xs @ [x]))). as \<in> r)"
-            "proj_tuple maskL as \<in> relL (hd (drop n (lin_data_in''_aux_mv (xs @ [x]))))"
+            "join_cond (args_pos args) (relL (hd (drop n (lin_data_in''_aux_mv (xs @ [x]))))) (proj_tuple maskL as)"
             using assm 
             unfolding tuple_since_lhs_def
             by (auto simp add: Let_def)
           
-          have "as \<in> (since_sat' \<inter> relR x) \<union> {as \<in> relR x. proj_tuple_in_join True maskL as (relL x)}"
+          have "as \<in> (since_sat' \<inter> relR x) \<union> {as \<in> relR x. proj_tuple_in_join (args_pos args) maskL as (relL x)}"
           proof (cases "lin_data_in''_mv xs = []")
             case True
             then have lin_data_in''_eq: "lin_data_in''_mv (xs @ [x]) = [(\<lambda>(t, l, r). (t, r)) x]"
@@ -4873,11 +4889,11 @@ proof -
               by auto
             then have
               "as \<in> relR x"
-              "proj_tuple maskL as \<in> relL x"
+              "join_cond (args_pos args) (relL x) (proj_tuple maskL as)"
               using n_props lin_data_in''_eq
               unfolding relR_def
               by auto
-            then have "as \<in> {as \<in> relR x. proj_tuple_in_join True maskL as (relL x)}"
+            then have "as \<in> {as \<in> relR x. proj_tuple_in_join (args_pos args) maskL as (relL x)}"
               unfolding proj_tuple_in_join_def
               by auto
             then show ?thesis by auto
@@ -4918,17 +4934,17 @@ proof -
               then have "hd (drop n (lin_data_in''_aux_mv xs)) = hd (drop n (lin_data_in''_aux_mv (xs @ [x])))"
                 unfolding lin_data_in''_aux_mv_def
                 by auto
-              then have "proj_tuple maskL as \<in> relL (hd (drop n (lin_data_in''_aux_mv xs)))"
+              then have "join_cond (args_pos args) (relL (hd (drop n (lin_data_in''_aux_mv xs)))) (proj_tuple maskL as)"
                 using n_props(3)
                 by auto
 
-              then have "(let suffix = drop n (lin_data_in''_aux_mv xs) in (\<forall>(t, l, y)\<in>set suffix. as \<in> y) \<and> proj_tuple maskL as \<in> relL (hd suffix))"
+              then have "(let suffix = drop n (lin_data_in''_aux_mv xs) in (\<forall>(t, l, y)\<in>set suffix. as \<in> y) \<and> join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL as))"
                 using relR
                 by auto
               then have "tuple_since_lhs as (lin_data_in''_mv xs) args maskL (lin_data_in''_aux_mv xs)"
                 using n_l False
                 unfolding tuple_since_lhs_def
-                by auto
+                by blast
               then have "as \<in> (snd \<circ> snd \<circ> snd) (fold fold_op_f xs init_tuple)"
                 using IH(6) mv_ln_eq False
                 unfolding since_sat_mv_def
@@ -4953,7 +4969,7 @@ proof -
                   by auto
                 then show ?thesis using n_props(2) unfolding relR_def by auto
               qed
-              ultimately have "as \<in> (since_sat' \<inter> relR x) \<union> {as \<in> relR x. proj_tuple_in_join True maskL as (relL x)}"
+              ultimately have "as \<in> (since_sat' \<inter> relR x) \<union> {as \<in> relR x. proj_tuple_in_join (args_pos args) maskL as (relL x)}"
                 by auto
             }
             moreover {
@@ -4978,11 +4994,11 @@ proof -
                 by auto
               then have
                 "as \<in> relR x"
-                "proj_tuple maskL as \<in> relL x"
+                "join_cond (args_pos args) (relL x) (proj_tuple maskL as)"
                 using n_props(2-3)
                 unfolding relR_def
                 by auto
-              then have "as \<in> {as \<in> relR x. proj_tuple_in_join True maskL as (relL x)}"
+              then have "as \<in> {as \<in> relR x. proj_tuple_in_join (args_pos args) maskL as (relL x)}"
                 unfolding proj_tuple_in_join_def
                 by auto
             }
@@ -5315,6 +5331,9 @@ proof -
   have "(if mem (args_ivl args) 0 then (args_L args) \<subseteq> (args_R args) else (args_L args) = (args_R args))"
     using assms(1)
     by auto
+  moreover have "\<not>mem (args_ivl args) 0 \<longrightarrow> args_pos args"
+    using assms(1)
+    by auto
   moreover have "maskL = join_mask (args_n args) (args_L args)"
     using assms(1)
     by auto
@@ -5403,7 +5422,7 @@ proof -
   moreover have "newest_tuple_in_mapping fst id data_prev' tuple_in_once' (\<lambda>x. True)"
     using valid_update_mmtaux'_unfolded[OF assms]
     by auto
-  moreover have "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> (proj_tuple maskL as) \<in> l) \<and>
+  moreover have "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> join_cond (args_pos args) l (proj_tuple maskL as)) \<and>
     (\<forall>as. (case Mapping.lookup tuple_since_hist'' as of
       Some idx \<Rightarrow> tuple_since_tp args as (linearize data_in'') idx_oldest' idx_mid' idx
       | None   \<Rightarrow> \<forall>idx. \<not>tuple_since_tp args as (linearize data_in'') idx_oldest' idx_mid' idx)
@@ -5431,7 +5450,7 @@ proof -
     by auto
   ultimately show ?thesis
     unfolding auxlist'_def
-    by auto
+    by force
 qed
 
 fun update_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> 'a mmtaux \<Rightarrow> 'a mmtaux" where
@@ -5453,7 +5472,7 @@ fun update_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a table \<Rightarrow>
           tuple_in_once',
           upd_set tuple_since_hist'' (\<lambda>_. idx_mid') (r - Mapping.keys tuple_since_hist''),
           (if is_empty data_in' then r else hist_sat' \<inter> r),
-          (since_sat' \<inter> r) \<union> {as \<in> r. proj_tuple_in_join True maskL as l}
+          (since_sat' \<inter> r) \<union> {as \<in> r. proj_tuple_in_join (args_pos args) maskL as l}
         )
       )
     else
@@ -5541,7 +5560,7 @@ proof -
     define tuple_since_hist'' where "tuple_since_hist'' = Mapping.filter (\<lambda>as _. as \<in> r) tuple_since_hist'"
     define tuple_since_hist''' where "tuple_since_hist''' = upd_set tuple_since_hist'' (\<lambda>_. idx_mid') (r - Mapping.keys tuple_since_hist'')"
     define hist_sat'' where "hist_sat'' = (if is_empty data_in' then r else hist_sat' \<inter> r)"
-    define since_sat'' where "since_sat'' = (since_sat' \<inter> r) \<union> {as \<in> r. proj_tuple_in_join True maskL as l}"
+    define since_sat'' where "since_sat'' = (since_sat' \<inter> r) \<union> {as \<in> r. proj_tuple_in_join (args_pos args) maskL as l}"
 
     have res_eq: "(
         nt,
@@ -5598,6 +5617,9 @@ proof -
       by auto
 
     have "(if mem (args_ivl args) 0 then (args_L args) \<subseteq> (args_R args) else (args_L args) = (args_R args))"
+      using assms(4)
+      by auto
+    moreover have "\<not>mem (args_ivl args) 0 \<longrightarrow> args_pos args"
       using assms(4)
       by auto
     moreover have "maskL = join_mask (args_n args) (args_L args)"
@@ -5725,7 +5747,7 @@ proof -
     moreover have "newest_tuple_in_mapping fst id data_prev' tuple_in_once' (\<lambda>x. True)"
       using valid
       by auto
-    moreover have "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> (proj_tuple maskL as) \<in> l)"
+    moreover have "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> join_cond (args_pos args) l (proj_tuple maskL as))"
       using valid
       by auto
     moreover have "(\<forall>as. (case Mapping.lookup tuple_since_hist''' as of
@@ -6013,7 +6035,7 @@ proof -
         have non_empty: "linearize data_in'' \<noteq> []"
           unfolding data_in''_def append_queue_rep
           by auto
-        have "tuple \<in> (since_sat' \<inter> r) \<union> {as \<in> r. proj_tuple_in_join True maskL as l}"
+        have "tuple \<in> (since_sat' \<inter> r) \<union> {as \<in> r. proj_tuple_in_join (args_pos args) maskL as l}"
           using assm since_sat''_def
           by auto
         moreover {
@@ -6043,7 +6065,7 @@ proof -
               by auto
             obtain n where n_props:
               "n\<in>{0..<length (linearize data_in')}"
-              "let suffix = drop n (auxlist_data_in args nt auxlist') in (\<forall>(t, l, y)\<in>set suffix. tuple \<in> y) \<and> proj_tuple maskL tuple \<in> relL (hd suffix)"
+              "let suffix = drop n (auxlist_data_in args nt auxlist') in (\<forall>(t, l, y)\<in>set suffix. tuple \<in> y) \<and> join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL tuple)"
               using since
               unfolding tuple_since_lhs_def
               by auto
@@ -6062,7 +6084,7 @@ proof -
               by auto
             ultimately have "drop n (auxlist_data_in args nt auxlist') @ [(nt, l, r)] = drop n (auxlist_data_in args nt auxlist'')"
               by auto
-            then have "let suffix = drop n (auxlist_data_in args nt auxlist'') in (\<forall>(t, l, y)\<in>set suffix. tuple \<in> y) \<and> proj_tuple maskL tuple \<in> relL (hd suffix)"
+            then have "let suffix = drop n (auxlist_data_in args nt auxlist'') in (\<forall>(t, l, y)\<in>set suffix. tuple \<in> y) \<and> join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL tuple)"
               using n_props(2) len_eq assm
               by (metis (no_types, lifting) Int_iff UnE atLeastLessThan_iff case_prod_beta' drop_eq_Nil hd_append2 in_set_simps(2) le_def n_props(1) prod.sel(2) set_append)
             moreover have "n\<in>{0..<length (linearize data_in'')}"
@@ -6072,15 +6094,15 @@ proof -
             ultimately have "tuple_since_lhs tuple (linearize data_in'') args maskL (auxlist_data_in args nt auxlist'')"
               using non_empty
               unfolding tuple_since_lhs_def
-              by auto
+              by blast
           }
           ultimately have "tuple \<in> hist_sat'' \<or> tuple_since_lhs tuple (linearize data_in'') args maskL (auxlist_data_in args nt auxlist'')"
             by auto
         }
         moreover {
           define n where "n = length (auxlist_data_in args nt auxlist'') - 1"
-          assume "tuple \<in> {as \<in> r. proj_tuple_in_join True maskL as l}"
-          then have tuple_props: "tuple \<in> r" "proj_tuple_in_join True maskL tuple l"
+          assume "tuple \<in> {as \<in> r. proj_tuple_in_join (args_pos args) maskL as l}"
+          then have tuple_props: "tuple \<in> r" "proj_tuple_in_join (args_pos args) maskL tuple l"
             by auto
           have drop_eq: "drop n (auxlist_data_in args nt auxlist'') = [(nt, l, r)]"
             unfolding n_def
@@ -6089,7 +6111,7 @@ proof -
           have "\<forall>(t, l, y)\<in>set (drop n (auxlist_data_in args nt auxlist'')). tuple \<in> y"
             using drop_eq tuple_props
             by auto
-          moreover have "proj_tuple maskL tuple \<in> relL (hd (drop n (auxlist_data_in args nt auxlist'')))"
+          moreover have "join_cond (args_pos args) (relL (hd (drop n (auxlist_data_in args nt auxlist'')))) (proj_tuple maskL tuple)"
             using tuple_props
             unfolding drop_eq relL_def
             by (simp add: proj_tuple_in_join_def)
@@ -6130,15 +6152,19 @@ proof -
           by auto
         obtain n where n_props:
           "n\<in>{0..<length (linearize data_in'')}"
-          "let suffix = drop n (auxlist_data_in args nt auxlist'') in (\<forall>(t, l, y)\<in>set suffix. tuple \<in> y) \<and> proj_tuple maskL tuple \<in> relL (hd suffix)"
+          "let suffix = drop n (auxlist_data_in args nt auxlist'') in (\<forall>(t, l, y)\<in>set suffix. tuple \<in> y) \<and> join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL tuple)"
           using assm
           unfolding tuple_since_lhs_def
           by auto
         {
           assume n_l: "n\<in>{0..<length (linearize data_in')}"
-          then have "let suffix = drop n (auxlist_data_in args nt auxlist') in (\<forall>(t, l, y)\<in>set suffix. tuple \<in> y) \<and> proj_tuple maskL tuple \<in> relL (hd suffix)"
-            using n_props(2) auxlist_in_eq Let_def
-            by (simp add: data_in'_len)
+          then have "set (drop n (auxlist_data_in args nt auxlist')) \<subseteq> set (drop n (auxlist_data_in args nt auxlist''))"
+            using auxlist_in_eq Let_def
+            by (auto simp add: data_in'_len)
+          then have "let suffix = drop n (auxlist_data_in args nt auxlist') in (\<forall>(t, l, y)\<in>set suffix. tuple \<in> y) \<and> join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL tuple)"
+            using n_props(2) auxlist_in_eq n_l
+            by (smt atLeastLessThan_iff data_in'_len drop_append drop_eq_Nil hd_append2 le_def subsetD)
+          
           moreover have "linearize data_in' \<noteq> []"
             using n_l
             by auto
@@ -6148,7 +6174,8 @@ proof -
             by blast
           moreover have "tuple \<in> r"
             using n_l n_props auxlist_in_eq
-            by (simp add: data_in'_len)
+            apply (auto simp add: data_in'_len)
+            by meson
           ultimately have "tuple \<in> since_sat' \<inter> r"
             by auto
         }
@@ -6164,11 +6191,11 @@ proof -
           ultimately have "drop n (auxlist_data_in args nt auxlist'') = [(nt, l, r)]"
             using auxlist_in_eq length_map[of "(\<lambda>(t, l, r). (t, r))" "(auxlist_data_in args nt auxlist')"]
             by auto
-          then have "tuple \<in> r" "proj_tuple maskL tuple \<in> l"
+          then have "tuple \<in> r" "join_cond (args_pos args) l (proj_tuple maskL tuple)"
             using n_props(2)
             unfolding relL_def
-            by auto
-          then have "tuple \<in> {as \<in> r. proj_tuple_in_join True maskL as l}"
+            by (auto simp add: Let_def)
+          then have "tuple \<in> {as \<in> r. proj_tuple_in_join (args_pos args) maskL as l}"
             unfolding proj_tuple_in_join_def
             by auto
         }
@@ -6183,7 +6210,7 @@ proof -
       by auto
     ultimately show ?thesis
       unfolding res_eq[symmetric] auxlist''_def auxlist'_def
-      by auto
+      by (auto simp only: valid_mmtaux.simps)
   next
     case False
     define data_prev'' where "data_prev'' = (append_queue (nt, l, r) data_prev')"
@@ -6213,12 +6240,15 @@ proof -
         tuple_since_hist',
         hist_sat',
         since_sat'
-      ) = update_mmtaux args nt l r (cur, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat)"
+      ) = update_mmtaux args nt l r (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_since_hist, hist_sat, since_sat)"
       unfolding update_mmtaux_res_def data_prev''_def idx_next''_def tuple_in_once''_def
       using False
       by (auto simp only: update_mmtaux.simps Let_def update_eq[symmetric] split: if_splits)
   
     have "(if mem (args_ivl args) 0 then (args_L args) \<subseteq> (args_R args) else (args_L args) = (args_R args))"
+      using assms(4)
+      by auto
+    moreover have "\<not>mem (args_ivl args) 0 \<longrightarrow> args_pos args"
       using assms(4)
       by auto
     moreover have "maskL = join_mask (args_n args) (args_L args)"
@@ -6287,7 +6317,7 @@ proof -
         using sorted_append[of "map fst auxlist'" "map fst [(nt, l, r)]"]
         by auto
     qed
-    moreover have "auxlist_data_prev args nt auxlist'' = (linearize data_prev'')"
+    moreover have data_prev''_auxlist: "auxlist_data_prev args nt auxlist'' = (linearize data_prev'')"
     proof -
       have "auxlist_data_prev args nt auxlist' = (linearize data_prev')"
         using valid
@@ -6385,9 +6415,6 @@ proof -
             using None
             unfolding tuple_in_once''_def
             by (metis Mapping_lookup_upd_set option.distinct(1))
-
-          
-          
           have "Mapping.lookup tuple_in_once' tuple = None"
             using None
             unfolding tuple_in_once''_def
@@ -6509,9 +6536,9 @@ proof -
         unfolding newest_tuple_in_mapping_def
         by auto
     qed
-    moreover have "(\<forall>as \<in> Mapping.keys tuple_in_once''. case Mapping.lookup tuple_in_once'' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev'') \<and> (proj_tuple maskL as) \<in> l)"
+    moreover have "(\<forall>as \<in> Mapping.keys tuple_in_once''. case Mapping.lookup tuple_in_once'' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev'') \<and> join_cond (args_pos args) l (proj_tuple maskL as))"
     proof -
-      have before: "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> (proj_tuple maskL as) \<in> l)"
+      have before: "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> join_cond (args_pos args) l (proj_tuple maskL as))"
         using valid
         by auto
       {
@@ -6519,26 +6546,34 @@ proof -
         assume "as \<in> Mapping.keys tuple_in_once''"
         then obtain t where t_props: "Mapping.lookup tuple_in_once'' as = Some t"
           by (meson Mapping_keys_dest)
-        have "case Mapping.lookup tuple_in_once'' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev'') \<and> (proj_tuple maskL as) \<in> l"
+        have "case Mapping.lookup tuple_in_once'' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev'') \<and> join_cond (args_pos args) l (proj_tuple maskL as)"
         proof (cases "as \<in> l")
           case True
-          then have "t = nt"
+          then have t_eq: "t = nt"
             using t_props
             unfolding tuple_in_once''_def
             by (simp add: Mapping_lookup_upd_set)
-          moreover have "(nt, l, r) \<in> set (linearize data_prev'')"
+          have tlr: "(nt, l, r) \<in> set (linearize data_prev'')"
             unfolding data_prev''_def append_queue_rep
             by auto
-          moreover have "proj_tuple maskL as \<in> l"
+          have pos: "args_pos args"
+            using valid False
+            by auto
+          have "proj_tuple maskL as \<in> l"
             using True proj_l
             by auto
-          ultimately show ?thesis using t_props by auto
+          then have "join_cond (args_pos args) l (proj_tuple maskL as)"
+            using pos
+            by auto
+          then show ?thesis
+            using t_props tlr pos t_eq
+            by auto
         next
           case False
           then have "Mapping.lookup tuple_in_once'' as = Mapping.lookup tuple_in_once' as"
             unfolding tuple_in_once''_def
             by (simp add: Mapping_lookup_upd_set)
-          then have "\<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> (proj_tuple maskL as) \<in> l"
+          then have "\<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> join_cond (args_pos args) l (proj_tuple maskL as)"
             using before t_props
             by (smt Mapping_keys_intro option.distinct(1) option.simps(5))
           then show ?thesis
@@ -6547,7 +6582,8 @@ proof -
             by auto
         qed
       }
-      then show ?thesis by auto
+      then show ?thesis
+        by auto
     qed
     moreover have "(\<forall>as. (case Mapping.lookup tuple_since_hist' as of
       Some idx \<Rightarrow> tuple_since_tp args as (linearize data_in') idx_oldest' idx_mid' idx
@@ -6590,7 +6626,7 @@ proof -
       by auto
     ultimately show ?thesis
       unfolding res_eq[symmetric] auxlist''_def auxlist'_def
-      by auto
+      by (auto simp only: valid_mmtaux.simps)
   qed
 qed
 

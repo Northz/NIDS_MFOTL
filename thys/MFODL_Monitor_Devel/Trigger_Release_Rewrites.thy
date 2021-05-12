@@ -451,12 +451,12 @@ proof (rule iffI)
   }
   ultimately have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Since \<psi> I (Formula.And \<phi> \<psi>)) (historically I (Formula.And \<psi> (Formula.Neg \<phi>))))" by blast
   then show "Formula.sat \<sigma> V v i (trigger_safe_0 \<phi> I \<psi>)"
-    using assms historically_rewrite_0[of I \<sigma> V v i "(Formula.And \<psi> (Formula.Neg \<phi>))"] trigger_safe_0_def
+    using assms historically_rewrite_0[of I \<sigma> V v i "\<psi>"] trigger_safe_0_def
     by auto
 next
   assume "Formula.sat \<sigma> V v i (trigger_safe_0 \<phi> I \<psi>)"
-  then have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Since \<psi> I (Formula.And \<phi> \<psi>)) (historically I (Formula.And \<psi> (Formula.Neg \<phi>))))"
-    using trigger_safe_0_def assms historically_rewrite_0[of I \<sigma> V v i "(Formula.And \<psi> (Formula.Neg \<phi>))"]
+  then have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Since \<psi> I (Formula.And \<phi> \<psi>)) (historically I \<psi>))"
+    using trigger_safe_0_def assms historically_rewrite_0[of I \<sigma> V v i "\<psi>"]
     by auto
   moreover {
     assume "Formula.sat \<sigma> V v i (historically I (Formula.And \<psi> (Formula.Neg \<phi>)))"
@@ -1119,7 +1119,7 @@ proof (rule iffI)
   assume release: "Formula.sat \<sigma> V v i (Formula.Release \<phi> I \<psi>)"
   {
     assume "\<forall>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> Formula.sat \<sigma> V v j (Formula.And \<psi> (Formula.Neg \<phi>))"
-    then have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Until \<psi> I (Formula.And \<phi> \<psi>)) (always I (Formula.And \<psi> (Formula.Neg \<phi>))))" by auto
+    then have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Until \<psi> I (Formula.And \<phi> \<psi>)) (always I \<psi>))" by auto
   }
   moreover {
     assume "\<not>(\<forall>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> Formula.sat \<sigma> V v j (Formula.And \<psi> (Formula.Neg \<phi>)))"
@@ -1156,7 +1156,7 @@ proof (rule iffI)
         by auto
     }
     then have "\<forall>k \<in> {i..<j}. Formula.sat \<sigma> V v k \<psi>" by blast
-    then have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Until \<psi> I (Formula.And \<phi> \<psi>)) (always I (Formula.And \<psi> (Formula.Neg \<phi>))))"
+    then have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Until \<psi> I (Formula.And \<phi> \<psi>)) (always I \<psi>))"
       using j_props
       by auto
     }
@@ -1205,22 +1205,22 @@ proof (rule iffI)
         using k_props k_sat_psi
         by auto
     }
-    ultimately have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Until \<psi> I (Formula.And \<phi> \<psi>)) (always I (Formula.And \<psi> (Formula.Neg \<phi>))))" by auto
+    ultimately have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Until \<psi> I (Formula.And \<phi> \<psi>)) (always I \<psi>))" by auto
   }
-  ultimately have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Until \<psi> I (Formula.And \<phi> \<psi>)) (always I (Formula.And \<psi> (Formula.Neg \<phi>))))" by blast
-  then have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Until \<psi> I (Formula.And \<phi> \<psi>)) (always_safe_0 I (Formula.And \<psi> (Formula.Neg \<phi>))))"
-    using assms always_rewrite_0[of I \<sigma> V v i "(Formula.And \<psi> (Formula.Neg \<phi>))"]
+  ultimately have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Until \<psi> I (Formula.And \<phi> \<psi>)) (always I \<psi>))" by blast
+  then have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Until \<psi> I (Formula.And \<phi> \<psi>)) (always_safe_0 I \<psi>))"
+    using assms always_rewrite_0[of I \<sigma> V v i "\<psi>"]
     by auto
   then show "Formula.sat \<sigma> V v i (release_safe_0 \<phi> I \<psi>)"
     using assms release_safe_0_def[of \<phi> I \<psi>]
     by auto
 next
   assume "Formula.sat \<sigma> V v i (release_safe_0 \<phi> I \<psi>)"
-  then have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Until \<psi> I (Formula.And \<phi> \<psi>)) (always_safe_0 I (Formula.And \<psi> (Formula.Neg \<phi>))))"
+  then have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Until \<psi> I (Formula.And \<phi> \<psi>)) (always_safe_0 I \<psi>))"
     using assms release_safe_0_def[of \<phi> I \<psi>]
     by auto
-  then have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Until \<psi> I (Formula.And \<phi> \<psi>)) (always I (Formula.And \<psi> (Formula.Neg \<phi>))))"
-    using assms always_rewrite_0[of I \<sigma> V v i "(Formula.And \<psi> (Formula.Neg \<phi>))"]
+  then have "Formula.sat \<sigma> V v i (Formula.Or (Formula.Until \<psi> I (Formula.And \<phi> \<psi>)) (always I \<psi>))"
+    using assms always_rewrite_0[of I \<sigma> V v i "\<psi>"]
     by auto
   moreover {
     assume "Formula.sat \<sigma> V v i (always I \<psi>)"
@@ -1568,115 +1568,12 @@ lemma
   shows "safe_formula (trigger_safe_0 \<phi> I \<psi>)"
   using assms by (auto simp add: trigger_safe_0_def)
 
-lemma trigger_safe_0_conditions: "safe_formula (trigger_safe_0 \<phi> I \<psi>) = (safe_formula \<psi> \<and> (
+lemma trigger_safe_0_conditions: "safe_formula (trigger_safe_0 \<phi> I \<psi>) = (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (
       safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-    ) \<and> (((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>)))"
-proof (rule iffI)
-  define \<alpha> where "\<alpha> = Formula.Since \<psi> I (Formula.And \<psi> \<phi>)"
-  define \<beta> where "\<beta> = historically_safe_0 I (Formula.And \<psi> (Formula.Neg \<phi>))"
-  assume "safe_formula (trigger_safe_0 \<phi> I \<psi>)"
-  then have safe: "safe_formula \<alpha>" "safe_formula \<beta>"
-    using \<alpha>_def \<beta>_def
-    by (auto simp add: trigger_safe_0_def)
-  from safe(1) have a: "safe_formula \<psi> \<and> (
-      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-  )" using \<alpha>_def by auto
-  moreover from safe(2) have b: "safe_formula \<psi> \<and>
-    (safe_formula (Formula.Neg \<phi>) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>))"
-    using \<beta>_def by (auto simp add: safe_assignment_def)
-  ultimately have "safe_formula \<psi> \<and> (
-      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-    ) \<and> (safe_formula (Formula.Neg \<phi>) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>))"
-    by auto
-  then show "safe_formula \<psi> \<and> (
-      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-    ) \<and> (((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>))"
-    using safe_formula_Neg
-    by blast
-next
-  assume assm: "safe_formula \<psi> \<and> (
-      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-    ) \<and> (((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>))"
-  then have "safe_formula \<psi> \<and> (
-      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-    ) \<and> (safe_formula (Formula.Neg \<phi>) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>))"
-    using safe_formula_Neg
-    by blast
-  then show "safe_formula (trigger_safe_0 \<phi> I \<psi>)"
-    by (simp add: trigger_safe_0_def)
-qed
+      (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+    ))"
+by (auto simp add: trigger_safe_0_def)
 
-lemma neg_phi_and_constraint: "(case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False) \<Longrightarrow> is_constraint (Formula.Neg \<phi>) \<Longrightarrow> False"
-proof (cases \<phi>)
-  case phi: (Neg \<phi>')
-  assume "is_constraint (Formula.Neg \<phi>)"
-  then show ?thesis using phi by auto
-qed (auto)
-
-lemma safe_formula_constraint_simp: "((case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False) \<and> (safe_formula \<phi> \<or> is_constraint (Formula.Neg \<phi>))) =
-       ((case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False) \<and> (safe_formula \<phi>))"
-  using neg_phi_and_constraint
-  by auto
-
-lemma trigger_release_conditions_simp:
-  "(safe_formula \<psi> \<and> (
-      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-    ) \<and> (((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>)))
-  =
-  (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> is_constraint (Formula.Neg \<phi>) \<and> (
-      (safe_assignment (fv \<psi>) \<phi>) \<or>
-      (\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or>
-      is_constraint \<phi>
-    )))"
-proof -
-  have "(safe_formula \<psi> \<and> (
-      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-    ) \<and> (((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>)))
-    =
-    (safe_formula \<psi> \<and> (
-      safe_assignment (fv \<psi>) \<phi> \<and> ((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>))) \<or>
-      safe_formula \<phi> \<and> ((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>))) \<or>
-      fv \<phi> \<subseteq> fv \<psi> \<and> ((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<and> is_constraint \<phi> \<or> (is_constraint \<phi> \<and> (safe_formula \<phi> \<or> is_constraint (Formula.Neg \<phi>)) \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False) \<and> (safe_formula \<phi> \<or> is_constraint (Formula.Neg \<phi>))))
-    ))
-" by auto
-  moreover have "(safe_formula \<psi> \<and> (
-      safe_assignment (fv \<psi>) \<phi> \<and> ((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>))) \<or>
-      safe_formula \<phi> \<and> ((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>))) \<or>
-      fv \<phi> \<subseteq> fv \<psi> \<and> ((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<and> is_constraint \<phi> \<or> (is_constraint \<phi> \<and> (safe_formula \<phi> \<or> is_constraint (Formula.Neg \<phi>)) \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False) \<and> (safe_formula \<phi> \<or> is_constraint (Formula.Neg \<phi>))))
-    ))
-= 
-      (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (safe_formula \<phi> \<or> is_constraint (Formula.Neg \<phi>) \<and> (
-        (safe_assignment (fv \<psi>) \<phi>) \<or>
-        (\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or>
-        is_constraint \<phi>
-      )))
-"
-    by (auto simp add: safe_formula_constraint_simp safe_assignment_def)
-  ultimately show ?thesis by auto
-qed
-
-lemma 
-  assumes "mem I 0"
-  shows "safe_formula (Formula.Trigger \<phi> I \<psi>) = safe_formula (trigger_safe_0 \<phi> I \<psi>)"
-proof (rule iffI)
-  assume "safe_formula (Formula.Trigger \<phi> I \<psi>)"
-  then show "safe_formula (trigger_safe_0 \<phi> I \<psi>)"
-    using assms
-    by (auto simp add: trigger_safe_0_def restricted_formula_def)
-next
-  assume assm: "safe_formula (trigger_safe_0 \<phi> I \<psi>)"
-  then show "safe_formula (Formula.Trigger \<phi> I \<psi>)" using
-      trigger_safe_0_conditions[of \<phi> I \<psi>] assms trigger_release_conditions_simp restricted_formula_def
-    by auto
-qed
 
 lemma "Formula.future_bounded (trigger_safe_0 \<phi> I \<psi>) = (Formula.future_bounded \<psi> \<and> Formula.future_bounded \<phi>)"
   by (auto simp add: trigger_safe_0_def)
@@ -1719,49 +1616,11 @@ lemma "Formula.future_bounded (trigger_safe_bounded \<phi> I \<psi>) = (bounded 
 
 (* [0, b] *)
 
-lemma release_safe_0_conditions: "safe_formula (release_safe_0 \<phi> I \<psi>) = (safe_formula \<psi> \<and> (
+lemma release_safe_0_conditions: "safe_formula (release_safe_0 \<phi> I \<psi>) = (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (
       safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-    ) \<and> (((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>)))"
-proof (rule iffI)
-  define \<alpha> where "\<alpha> = Formula.Since \<psi> I (Formula.And \<psi> \<phi>)"
-  define \<beta> where "\<beta> = always_safe_0 I (Formula.And \<psi> (Formula.Neg \<phi>))"
-  assume "safe_formula (release_safe_0 \<phi> I \<psi>)"
-  then have safe: "safe_formula \<alpha>" "safe_formula \<beta>"
-    using \<alpha>_def \<beta>_def
-    by (auto simp add: release_safe_0_def)
-  from safe(1) have a: "safe_formula \<psi> \<and> (
-      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-  )" using \<alpha>_def by auto
-  moreover from safe(2) have b: "safe_formula \<psi> \<and>
-    (safe_formula (Formula.Neg \<phi>) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>))"
-    using \<beta>_def by (auto simp add: safe_assignment_def)
-  ultimately have "safe_formula \<psi> \<and> (
-      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-    ) \<and> (safe_formula (Formula.Neg \<phi>) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>))"
-    by auto
-  then show "safe_formula \<psi> \<and> (
-      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-    ) \<and> (((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>))"
-    using safe_formula_Neg
-    by blast
-next
-  assume assm: "safe_formula \<psi> \<and> (
-      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-    ) \<and> (((\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x)) \<or> (fv \<phi> = {} \<and> safe_formula \<phi>)) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>))"
-  then have "safe_formula \<psi> \<and> (
-      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-        fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-    ) \<and> (safe_formula (Formula.Neg \<phi>) \<or> fv \<phi> \<subseteq> fv \<psi> \<and> (is_constraint (Formula.Neg \<phi>) \<or> safe_formula \<phi>))"
-    using safe_formula_Neg
-    by blast
-  then show "safe_formula (release_safe_0 \<phi> I \<psi>)"
-    by (simp add: release_safe_0_def)
-qed
+      (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
+    ))"
+  by (auto simp add: release_safe_0_def)
 
 lemma 
   assumes "mem I 0"
@@ -1770,11 +1629,11 @@ proof (rule iffI)
   assume "safe_formula (Formula.Release \<phi> I \<psi>)"
   then show "safe_formula (release_safe_0 \<phi> I \<psi>)"
     using assms
-    by (auto simp add: release_safe_0_def restricted_formula_def)
+    by (auto simp add: release_safe_0_def)
 next
   assume assm: "safe_formula (release_safe_0 \<phi> I \<psi>)"
   then show "safe_formula (Formula.Release \<phi> I \<psi>)"
-    using release_safe_0_conditions[of \<phi> I \<psi>] assms trigger_release_conditions_simp restricted_formula_def
+    using release_safe_0_conditions[of \<phi> I \<psi>] assms
     by auto
 qed
 
@@ -1833,8 +1692,6 @@ fun map_formula :: "(Formula.formula \<Rightarrow> Formula.formula) \<Rightarrow
   )"
 | "map_formula f (Formula.Prev I \<phi>) = f (Formula.Prev I (map_formula f \<phi>))"
 | "map_formula f (Formula.Next I \<phi>) = f (Formula.Next I (map_formula f \<phi>))"
-| "map_formula f (Formula.Historically I \<phi>) = f (Formula.Historically I (map_formula f \<phi>))"
-| "map_formula f (Formula.Always I \<phi>) = f (Formula.Always I (map_formula f \<phi>))"
 | "map_formula f (Formula.Since \<phi> I \<psi>) = f (
     Formula.Since (map_formula f \<phi>) I ( map_formula f \<psi>)
   )"
@@ -1914,10 +1771,10 @@ next
 qed (auto split: nat.split)
 
 fun rewrite_historically :: "Formula.formula \<Rightarrow> Formula.formula" where
-  "rewrite_historically (Formula.And (once I1 \<phi>) (Formula.Historically I2 \<psi>)) = (
+  "rewrite_historically (Formula.And (once I1 \<phi>) (historically I2 \<psi>)) = (
     if (\<phi> = \<psi> \<and> I1 = I2) then
       if (mem I1 0) then
-        Formula.And (once I1 \<phi>) (rewrite_historically (Formula.Historically I2 \<psi>))
+        Formula.And (once I1 \<phi>) (rewrite_historically (historically I2 \<psi>))
       else (
         if (bounded I1) then
           Formula.And (once I1 \<phi>) (historically_safe_bounded I1 (rewrite_historically \<phi>))
@@ -1925,9 +1782,9 @@ fun rewrite_historically :: "Formula.formula \<Rightarrow> Formula.formula" wher
           Formula.And (once I1 \<phi>) (historically_safe_unbounded I1 (rewrite_historically \<phi>))
       )
     else
-      (Formula.And (Formula.Since Formula.TT I1 \<phi>) (Formula.Historically I2 \<psi>))
+      (Formula.And (Formula.Since Formula.TT I1 \<phi>) (historically I2 \<psi>))
   )"
-| "rewrite_historically (Formula.Historically I \<phi>) = (
+| "rewrite_historically (historically I \<phi>) = (
     if (mem I 0) then
       historically_safe_0 I (rewrite_historically \<phi>)
     else (
