@@ -47,11 +47,17 @@ fun mmonitorable_exec :: "Formula.formula \<Rightarrow> bool" where
 | "mmonitorable_exec (Formula.Until \<phi> I \<psi>) = (Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and> bounded I \<and>
     (mmonitorable_exec \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False)) \<and> mmonitorable_exec \<psi>)"
 | "mmonitorable_exec (Formula.Trigger \<phi> I \<psi>) = (if (mem I 0) then
-    (mmonitorable_exec \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (mmonitorable_exec \<phi> \<or> restricted_formula \<phi> (fv \<psi>)))
+    (mmonitorable_exec \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (
+      mmonitorable_exec \<phi> \<or> safe_assignment (fv \<psi>) \<phi> \<or> is_constraint \<phi> \<or>
+      (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False)
+    ))
       else
     False \<and> (mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi> \<and> fv \<phi> = fv \<psi>))" (* TODO: remove False *)
 | "mmonitorable_exec (Formula.Release \<phi> I \<psi>) = (bounded I \<and> (if (mem I 0) then
-    (mmonitorable_exec \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (mmonitorable_exec \<phi> \<or> restricted_formula \<phi> (fv \<psi>)))
+    (mmonitorable_exec \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (
+      mmonitorable_exec \<phi> \<or> safe_assignment (fv \<psi>) \<phi> \<or> is_constraint \<phi> \<or>
+      (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False)
+    ))
       else
     False \<and> (mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi> \<and> fv \<phi> = fv \<psi>)))" (* TODO: remove False *)
 | "mmonitorable_exec (Formula.MatchP I r) = Regex.safe_regex Formula.fv (\<lambda>g \<phi>. mmonitorable_exec \<phi> \<or> (g = Lax \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False))) Past Strict r"
@@ -125,16 +131,6 @@ next
     by fastforce
   ultimately show ?case using posnegm by simp
 next
-  case (15 \<phi> I \<psi>)
-  then show ?case
-    unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
-    by (auto simp: cases_Neg_iff)
-next
-  case (16 \<phi> I \<psi>)
-  then show ?case
-    unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
-    by (auto simp: cases_Neg_iff)
-next
   case (19 I r)
   then show ?case
     by (auto elim!: safe_regex_mono[rotated] simp: cases_Neg_iff regex.pred_set)
@@ -142,7 +138,7 @@ next
   case (20 I r)
   then show ?case
     by (auto elim!: safe_regex_mono[rotated] simp: cases_Neg_iff regex.pred_set)
-qed (auto simp add: is_simple_eq_def list.pred_set split: if_splits)
+qed (auto simp add: is_simple_eq_def list.pred_set cases_Neg_iff split: if_splits)
 
 lemma safe_assignment_future_bounded: "safe_assignment X \<phi> \<Longrightarrow> Formula.future_bounded \<phi>"
   unfolding safe_assignment_def by (auto split: formula.splits)
@@ -212,13 +208,87 @@ next
 next
   case (15 \<phi> I \<psi>)
   then show ?case
-    using mmonitorable_def restricted_formula_future_bounded
-    by (auto split: if_splits)
+  proof (cases "mem I 0")
+    case mem: True
+    then show ?thesis
+    proof (cases "safe_assignment (fv \<psi>) \<phi> \<or> is_constraint \<phi>")
+      case True
+      moreover {
+        assume "safe_assignment (fv \<psi>) \<phi>"
+        then have ?thesis
+          using 15 True
+          unfolding safe_assignment_def
+          by (cases \<phi>) (auto simp add: mmonitorable_def split: if_splits)
+      }
+      moreover {
+        assume assm: "is_constraint \<phi>"
+        then have ?thesis
+          using 15 True
+        proof (cases \<phi>)
+          case (Neg \<phi>')
+          then have "Formula.future_bounded \<phi>'"
+            using assm
+            by (cases \<phi>') (auto)
+          then show ?thesis
+            using 15 True Neg
+            by (auto simp add: mmonitorable_def split: if_splits)
+        qed (auto simp add: mmonitorable_def split: if_splits)
+      }
+      ultimately show ?thesis by blast
+    next
+      case False
+      then show ?thesis
+        using 15
+        by (auto simp add: cases_Neg_iff mmonitorable_def split: if_splits)
+    qed
+  next
+    case False
+    then show ?thesis
+      using 15
+      by (auto simp add: cases_Neg_iff mmonitorable_def split: if_splits)
+  qed
 next
   case (16 \<phi> I \<psi>)
   then show ?case
-    using mmonitorable_def restricted_formula_future_bounded
-    by (auto split: if_splits)
+  proof (cases "mem I 0")
+    case mem: True
+    then show ?thesis
+    proof (cases "safe_assignment (fv \<psi>) \<phi> \<or> is_constraint \<phi>")
+      case True
+      moreover {
+        assume "safe_assignment (fv \<psi>) \<phi>"
+        then have ?thesis
+          using 16 True
+          unfolding safe_assignment_def
+          by (cases \<phi>) (auto simp add: mmonitorable_def split: if_splits)
+      }
+      moreover {
+        assume assm: "is_constraint \<phi>"
+        then have ?thesis
+          using 16 True
+        proof (cases \<phi>)
+          case (Neg \<phi>')
+          then have "Formula.future_bounded \<phi>'"
+            using assm
+            by (cases \<phi>') (auto)
+          then show ?thesis
+            using 16 True Neg
+            by (auto simp add: mmonitorable_def split: if_splits)
+        qed (auto simp add: mmonitorable_def split: if_splits)
+      }
+      ultimately show ?thesis by blast
+    next
+      case False
+      then show ?thesis
+        using 16
+        by (auto simp add: cases_Neg_iff mmonitorable_def split: if_splits)
+    qed
+  next
+    case False
+    then show ?thesis
+      using 16
+      by (auto simp add: cases_Neg_iff mmonitorable_def split: if_splits)
+  qed
 next
   case (17 I r)
   then show ?case
@@ -784,10 +854,10 @@ fun trigger_results :: "args \<Rightarrow> ts \<Rightarrow> 'a mtaux \<Rightarro
 }"
 
 locale mtaux =
-  fixes valid_mtaux :: "args \<Rightarrow> ts \<Rightarrow> 'mtaux \<Rightarrow> 'a mtaux \<Rightarrow> bool"
+  fixes valid_mtaux :: "args \<Rightarrow> ts \<Rightarrow> 'mtaux \<Rightarrow> event_data mtaux \<Rightarrow> bool"
     and init_mtaux :: "args \<Rightarrow> 'mtaux"
-    and update_mtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> 'mtaux \<Rightarrow> 'mtaux"
-    and result_mtaux :: "args \<Rightarrow> 'mtaux \<Rightarrow> 'a table"
+    and update_mtaux :: "args \<Rightarrow> ts \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> 'mtaux \<Rightarrow> 'mtaux"
+    and result_mtaux :: "args \<Rightarrow> 'mtaux \<Rightarrow> event_data table"
 
   (* the initial state should be valid *)
   assumes valid_init_mtaux: "(
@@ -797,7 +867,8 @@ locale mtaux =
       else 
         L = R
     ) \<Longrightarrow>
-    let args = init_args I n L R false in
+    \<not>mem I 0 \<longrightarrow> pos \<Longrightarrow>
+    let args = init_args I n L R pos in
     valid_mtaux args 0 (init_mtaux args) []"
 
   (* assuming the previous state outputted the same result, the next will as well *)
@@ -951,8 +1022,11 @@ function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<R
     else (case \<phi> of
       Formula.Neg \<phi> \<Rightarrow> MUntil (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] 0 (init_muaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False))
     | _ \<Rightarrow> undefined))"
-| "minit0 n (Formula.Trigger \<phi> I \<psi>) =
-    MTrigger (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] (init_mtaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True))
+| "minit0 n (Formula.Trigger \<phi> I \<psi>) = (if safe_formula \<phi>
+    then MTrigger (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] (init_mtaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True))
+    else (case \<phi> of
+      Formula.Neg \<phi> \<Rightarrow> MTrigger (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] (init_mtaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False))
+    | _ \<Rightarrow> undefined))
 "
 | "minit0 n (Formula.MatchP I r) =
     (let (mr, \<phi>s) = to_mregex r
@@ -1268,6 +1342,45 @@ fun progress :: "(Formula.name \<rightharpoonup> nat) \<Rightarrow> Formula.form
 | "progress P (Formula.MatchF I r) j =
     Inf {i. \<forall>k. k < j \<and> k \<le> min_regex_default (progress P) r j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
 
+(* sanitiy check for trigger progress *)
+
+lemma progress_FF [simp]: "progress P Formula.FF j = j"
+  unfolding Formula.FF_def
+  by auto
+
+lemma progress_TT [simp]: "progress P Formula.TT j = j"
+  unfolding Formula.TT_def
+  by auto
+
+lemma progress_first [simp]: "progress P Formula.first j = j"
+  unfolding Formula.first_def
+  by auto
+
+lemma progress_once [simp]: "progress P (once I \<phi>) j = min j (progress P \<phi> j)"
+  unfolding once_def
+  by auto
+
+lemma progress_historically_safe_0 [simp]: "progress P (historically_safe_0 I \<phi>) j = min j (
+  if bounded I then
+    (progress P \<phi> j) - 1 \<comment> \<open>? in in the past.\<close>
+  else
+    progress P \<phi> j
+  )"
+  unfolding historically_safe_0_def
+  by auto
+
+lemma progress_historically_safe_unbounded [simp]: "progress P (historically_safe_unbounded I \<phi>) j = min j (progress P \<phi> j)"
+  unfolding historically_safe_unbounded_def
+  by auto
+
+(*lemma progress_historically_safe_bounded [simp]: "progress P (historically_safe_bounded I \<phi>) j = j"
+  unfolding historically_safe_bounded_def
+  by auto*)
+
+(*lemma "progress P (Formula.Trigger \<phi> I \<psi>) j = progress P (trigger_safe_0 \<phi> I \<psi>) j"
+  unfolding trigger_safe_0_def
+  by (auto split: if_splits)*)
+
 definition "progress_regex P = min_regex_default (progress P)"
 
 declare progress.simps[simp del]
@@ -1311,10 +1424,6 @@ next
   case (Ands l)
   then show ?case
     by (auto simp: image_iff intro!: Min.coboundedI[THEN order_trans])
-next
-  case (Always I \<phi>)
-  from Always(1)[of P P'] Always.prems show ?case
-    by (auto 0 3 dest: memR_nonzeroD less_\<tau>D spec[of _ j'] intro!: cInf_superset_mono)
 next
   case (Until \<phi> I \<psi>)
   from Until(1,2)[of P P'] Until.prems show ?case
@@ -1566,43 +1675,6 @@ next
   then show ?case
     by (intro exI[of _ P] exI[of _ j]) (auto 0 3 simp: pred_mapping_alt dom_def)
 next
-  case (Historically I \<phi>)
-  from Historically(2) obtain P1 j1 where P1: "dom P1 = S" "range_mapping i j1 P1"  "i \<le> progress \<sigma> P1 \<phi> j1"
-    using Historically(1)[of S i] by auto
-  then have "i \<le> progress \<sigma> P1 (Formula.Historically I \<phi>) j1"
-    by (auto elim!: order.trans[OF _ progress_mono_gen] simp: max_mapping_cobounded1 max_mapping_cobounded2)
-  with P1 show ?case by (intro exI[of _ "P1"] exI[of _ "j1"])
-      (auto elim!: pred_mapping_le intro: max_mapping_cobounded1)
-next
-  case (Always I \<phi>)
-  from Always.prems obtain m where "\<not> memR I m"
-    by (auto simp: bounded_memR)
-  then obtain i' where "i < i'" and 1: "\<not> memR I (\<tau> \<sigma> i' - \<tau> \<sigma> i)"
-    using ex_le_\<tau>[where x="\<tau> \<sigma> i + m" and s=\<sigma> and i="Suc i"]
-    by atomize_elim (auto simp add: less_eq_Suc_le memR_antimono)
-  from Always.prems obtain P1 j1 where P1: "dom P1 = S" "range_mapping (Suc i') j1 P1" "Suc i' \<le> progress \<sigma> P1 \<phi> j1"
-    by (atomize_elim, intro Always(1)) (auto simp: pred_mapping_alt dom_def)
-  have "i \<le> progress \<sigma> P1 (Formula.Always I \<phi>) j1"
-    unfolding progress.simps
-  proof (intro cInf_greatest, goal_cases nonempty greatest)
-    case nonempty
-    then show ?case
-      by (auto simp: trans_le_add1[OF \<tau>_mono] intro!: exI[of _ "j1"])
-  next
-    case (greatest x)
-    from P1(2,3) have "i' < j1"
-      by (auto simp: less_eq_Suc_le intro!: progress_le_gen elim!: order.trans pred_mapping_mono_strong)
-    have "i' \<le> min (progress \<sigma> P1 \<phi> j1) (progress \<sigma> P1 \<phi> j1)"
-      using P1(3) by simp
-    with greatest \<open>i' < j1\<close> have "memR I (\<tau> \<sigma> i' - \<tau> \<sigma> x)"
-      by simp
-    with 1 have "\<tau> \<sigma> i < \<tau> \<sigma> x"
-      by (auto 0 3 elim: contrapos_np)
-    then show ?case by (auto dest!: less_\<tau>D)
-  qed
-  with P1 \<open>i < i'\<close> show ?case
-    by (intro exI[of _ "P1"] exI[of _ "j1"]) (auto simp: range_mapping_relax)
-next
   case (Since \<phi>1 I \<phi>2)
   from Since(3) obtain P1 j1 where P1: "dom P1 = S" "range_mapping i j1 P1"  "i \<le> progress \<sigma> P1 \<phi>1 j1"
     using Since(1)[of S i] by auto
@@ -1785,23 +1857,6 @@ lemma progress_time_conv:
   shows "progress \<sigma> P \<phi> j = progress \<sigma>' P \<phi> j"
   using assms
 proof (induction \<phi> arbitrary: P)
-  case (Always I \<phi>)
-  have *: "i \<le> j - 1 \<longleftrightarrow> i < j" if "j \<noteq> 0" for i
-    using that by auto
-  with Always show ?case
-  proof (cases "bounded I")
-    case True
-    then show ?thesis
-    proof (cases "j")
-      case (Suc n)
-      with * Always show ?thesis
-        using \<tau>_mono[THEN trans_le_add1]
-        by (auto 6 0
-            intro!: box_equals[OF arg_cong[where f=Inf]
-              cInf_restrict_nat[symmetric, where x=n] cInf_restrict_nat[symmetric, where x=n]])
-    qed simp
-  qed (simp add: bounded_memR)
-next
   case (Until \<phi>1 I \<phi>2)
   have *: "i \<le> j - 1 \<longleftrightarrow> i < j" if "j \<noteq> 0" for i
     using that by auto
@@ -1939,14 +1994,6 @@ next
     unfolding sat.simps
     by (intro conj_cong Next) auto
 next
-  case (Historically I \<phi>)
-  show ?case
-    by blast
-next
-  case (Always I \<phi>)
-  show ?case
-    by blast
-next
   case (Since \<phi>1 I \<phi>2)
   then have "i < plen \<pi>"
     by (auto elim!: order.strict_trans2[OF _ progress_le_gen])
@@ -1994,9 +2041,24 @@ next
       by (auto 0 4 simp: le_diff_conv add.commute memR_antimono dest: less_imp_le order.trans[OF \<tau>_mono, rotated])
   qed
 next
-  case (Trigger \<phi>1 I \<phi>2)
+  case (Trigger \<phi> I \<psi>)
+  then have "i < plen \<pi>"
+    by (auto elim!: order.strict_trans2[OF _ progress_le_gen])
+  then have "\<forall>j\<le>i. j < plen \<pi>"
+    by auto
+  then have t_eq: "\<forall>j\<le>i. \<tau> \<sigma> j = \<tau> \<sigma>' j"
+    using \<tau>_prefix_conv[OF assms(1,2)]
+    by auto
+
+  have sat_subformulas:
+    "\<forall>j\<le>i. Formula.sat \<sigma> V v j \<phi> = Formula.sat \<sigma>' V' v j \<phi>"    
+    "\<forall>j\<le>i. Formula.sat \<sigma> V v j \<psi> = Formula.sat \<sigma>' V' v j \<psi>"
+    using Trigger(1-2)[OF _ Trigger(4,5,6,7)] Trigger(3)
+    by auto
+
   show ?case
-    by blast
+    using sat_subformulas t_eq
+    by auto
 next
   case (Release \<phi>1 I \<phi>2)
   show ?case
@@ -2131,10 +2193,74 @@ next
     by (force simp: list.pred_set convert_multiway_remove_neg intro!: Sup.SUP_cong)
 next
   case (Trigger_0 \<phi> I \<psi>)
-  then show ?case using restricted_formula_def proof (cases \<phi>) qed (auto)
+  show ?case
+  proof (cases "safe_assignment (fv \<psi>) \<phi> \<or> is_constraint \<phi> \<or> (case \<phi> of formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' \<and> (\<forall>x. Monitor.progress \<sigma> x (convert_multiway \<phi>') j = Monitor.progress \<sigma> x \<phi>' j) | _ \<Rightarrow> False)")
+    case True
+    moreover {
+      assume "safe_assignment (fv \<psi>) \<phi>"
+      then have ?thesis
+        unfolding safe_assignment_def
+        using Trigger_0
+        by (cases \<phi>) (auto)
+    }
+    moreover {
+      assume assm: "is_constraint \<phi>"
+      then have ?thesis
+        using Trigger_0
+      proof (cases \<phi>)
+        case (Neg \<phi>')
+        then show ?thesis using Trigger_0 assm by (cases \<phi>') (auto)
+      qed (auto)
+    }
+    moreover {
+      assume "(case \<phi> of formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' \<and> (\<forall>x. Monitor.progress \<sigma> x (convert_multiway \<phi>') j = Monitor.progress \<sigma> x \<phi>' j) | _ \<Rightarrow> False)"
+      then obtain \<phi>' where \<phi>'_props:
+        "\<phi> = formula.Neg \<phi>'"
+        "safe_formula \<phi>'"
+        "\<forall>x. Monitor.progress \<sigma> x (convert_multiway \<phi>') j = Monitor.progress \<sigma> x \<phi>' j"
+        by (auto split: formula.splits)
+      then have ?thesis using Trigger_0 by auto
+    }
+    ultimately show ?thesis by blast
+  next
+    case False
+    then show ?thesis using Trigger_0 by (cases \<phi>) (auto)
+  qed
 next
   case (Release_0 \<phi> I \<psi>)
-  then show ?case using restricted_formula_def proof (cases \<phi>) qed (auto)
+  show ?case
+  proof (cases "safe_assignment (fv \<psi>) \<phi> \<or> is_constraint \<phi> \<or> (case \<phi> of formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' \<and> (\<forall>x. Monitor.progress \<sigma> x (convert_multiway \<phi>') j = Monitor.progress \<sigma> x \<phi>' j) | _ \<Rightarrow> False)")
+    case True
+    moreover {
+      assume "safe_assignment (fv \<psi>) \<phi>"
+      then have ?thesis
+        unfolding safe_assignment_def
+        using Release_0
+        by (cases \<phi>) (auto)
+    }
+    moreover {
+      assume assm: "is_constraint \<phi>"
+      then have ?thesis
+        using Release_0
+      proof (cases \<phi>)
+        case (Neg \<phi>')
+        then show ?thesis using Release_0 assm by (cases \<phi>') (auto)
+      qed (auto)
+    }
+    moreover {
+      assume "(case \<phi> of formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' \<and> (\<forall>x. Monitor.progress \<sigma> x (convert_multiway \<phi>') j = Monitor.progress \<sigma> x \<phi>' j) | _ \<Rightarrow> False)"
+      then obtain \<phi>' where \<phi>'_props:
+        "\<phi> = formula.Neg \<phi>'"
+        "safe_formula \<phi>'"
+        "\<forall>x. Monitor.progress \<sigma> x (convert_multiway \<phi>') j = Monitor.progress \<sigma> x \<phi>' j"
+        by (auto split: formula.splits)
+      then have ?thesis using Release_0 by auto
+    }
+    ultimately show ?thesis by blast
+  next
+    case False
+    then show ?thesis using Release_0 by (cases \<phi>) (auto)
+  qed
 next
   case (MatchP I r)
   from MatchP show ?case
@@ -2372,6 +2498,13 @@ lemma (in muaux) wf_until_aux_UNIV_alt:
       auxlist [ne..<ne+length auxlist])"
   unfolding wf_until_aux_def wf_until_auxlist_def qtable_mem_restr_UNIV ..
 
+definition (in mtaux) wf_trigger_aux :: "Formula.trace \<Rightarrow> _ \<Rightarrow> event_data list set \<Rightarrow> args \<Rightarrow>
+  Formula.formula \<Rightarrow> Formula.formula \<Rightarrow> 'mtaux \<Rightarrow> nat \<Rightarrow> bool" where
+ "wf_trigger_aux \<sigma> V R args \<phi> \<psi> aux ne \<longleftrightarrow> Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and>
+    (\<exists>cur auxlist. valid_mtaux args cur aux auxlist \<and>
+      cur = (if ne + length auxlist = 0 then 0 else \<tau> \<sigma> (ne + length auxlist - 1)) \<and>
+      wf_until_auxlist \<sigma> V (args_n args) R (args_pos args) \<phi> (args_ivl args) \<psi> auxlist ne)"
+
 definition wf_matchF_aux :: "Formula.trace \<Rightarrow> _ \<Rightarrow> nat \<Rightarrow> event_data list set \<Rightarrow>
     \<I> \<Rightarrow> Formula.formula Regex.regex \<Rightarrow> event_data ml\<delta>aux \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool" where
   "wf_matchF_aux \<sigma> V n R I r aux ne k \<longleftrightarrow> (case to_mregex r of (mr, \<phi>s) \<Rightarrow>
@@ -2490,6 +2623,18 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
     wf_until_aux \<sigma> V R args \<phi>' \<psi>' aux (progress \<sigma> P (Formula.Until \<phi>'' I \<psi>') j) \<Longrightarrow>
     progress \<sigma> P (Formula.Until \<phi>'' I \<psi>') j + length_muaux args aux = min (progress \<sigma> P \<phi>' j) (progress \<sigma> P \<psi>' j) \<Longrightarrow>
     wf_mformula \<sigma> j P V n R (MUntil args \<phi> \<psi> buf nts t aux) (Formula.Until \<phi>'' I \<psi>')"
+  | Trigger: "wf_mformula \<sigma> j P V n R \<phi> \<phi>' \<Longrightarrow> wf_mformula \<sigma> j P V n R \<psi> \<psi>' \<Longrightarrow>
+    if args_pos args then \<phi>'' = \<phi>' else \<phi>'' = Formula.Neg \<phi>' \<Longrightarrow>
+    safe_formula \<phi>'' = args_pos args \<Longrightarrow>
+    args_ivl args = I \<Longrightarrow>
+    args_n args = n \<Longrightarrow>
+    args_L args = Formula.fv \<phi>' \<Longrightarrow>
+    args_R args = Formula.fv \<psi>' \<Longrightarrow>
+    if mem I 0 then Formula.fv \<phi>' \<subseteq> Formula.fv \<psi>' else Formula.fv \<phi>' = Formula.fv \<psi>' \<Longrightarrow>
+    wf_mbuf2' \<sigma> P V j n R \<phi>' \<psi>' buf \<Longrightarrow>
+    wf_ts \<sigma> P j \<phi>' \<psi>' nts \<Longrightarrow>
+    wf_trigger_aux \<sigma> V R args \<phi>' \<psi>' aux (progress \<sigma> P (Formula.Trigger \<phi>'' I \<psi>') j) \<Longrightarrow>
+    wf_mformula \<sigma> j P V n R (MTrigger args \<phi> \<psi> buf nts aux) (Formula.Trigger \<phi>'' I \<psi>')"
   | MatchP: "(case to_mregex r of (mr', \<phi>s') \<Rightarrow>
       list_all2 (wf_mformula \<sigma> j P V n R) \<phi>s \<phi>s' \<and> mr = mr') \<Longrightarrow>
     mrs = sorted_list_of_set (RPDs mr) \<Longrightarrow>
