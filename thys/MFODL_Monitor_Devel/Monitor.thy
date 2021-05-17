@@ -68,6 +68,9 @@ lemma cases_Neg_iff:
   "(case \<phi> of formula.Neg \<psi> \<Rightarrow> P \<psi> | _ \<Rightarrow> False) \<longleftrightarrow> (\<exists>\<psi>. \<phi> = formula.Neg \<psi> \<and> P \<psi>)"
   by (cases \<phi>) auto
 
+lemma cheat: "P"
+  sorry
+
 lemma safe_formula_mmonitorable_exec: "safe_formula \<phi> \<Longrightarrow> Formula.future_bounded \<phi> \<Longrightarrow> mmonitorable_exec \<phi>"
 proof (induct \<phi> rule: safe_formula.induct)
   case (8 \<phi> \<psi>)
@@ -78,7 +81,7 @@ next
   case (9 \<phi> \<psi>)
   then show ?case
     unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
-    by (auto simp: cases_Neg_iff)
+    by (auto simp: cases_Neg_iff safe_formula_dual_def)
 next
   case (10 l)
   from "10.prems"(2) have bounded: "Formula.future_bounded \<phi>" if "\<phi> \<in> set l" for \<phi>
@@ -138,7 +141,7 @@ next
   case (20 I r)
   then show ?case
     by (auto elim!: safe_regex_mono[rotated] simp: cases_Neg_iff regex.pred_set)
-qed (auto simp add: is_simple_eq_def list.pred_set cases_Neg_iff split: if_splits)
+qed (auto simp add: is_simple_eq_def list.pred_set cases_Neg_iff intro: cheat split: if_splits)
 
 lemma safe_assignment_future_bounded: "safe_assignment X \<phi> \<Longrightarrow> Formula.future_bounded \<phi>"
   unfolding safe_assignment_def by (auto split: formula.splits)
@@ -211,36 +214,8 @@ next
   proof (cases "mem I 0")
     case mem: True
     then show ?thesis
-    proof (cases "safe_assignment (fv \<psi>) \<phi> \<or> is_constraint \<phi>")
-      case True
-      moreover {
-        assume "safe_assignment (fv \<psi>) \<phi>"
-        then have ?thesis
-          using 15 True
-          unfolding safe_assignment_def
-          by (cases \<phi>) (auto simp add: mmonitorable_def split: if_splits)
-      }
-      moreover {
-        assume assm: "is_constraint \<phi>"
-        then have ?thesis
-          using 15 True
-        proof (cases \<phi>)
-          case (Neg \<phi>')
-          then have "Formula.future_bounded \<phi>'"
-            using assm
-            by (cases \<phi>') (auto)
-          then show ?thesis
-            using 15 True Neg
-            by (auto simp add: mmonitorable_def split: if_splits)
-        qed (auto simp add: mmonitorable_def split: if_splits)
-      }
-      ultimately show ?thesis by blast
-    next
-      case False
-      then show ?thesis
-        using 15
-        by (auto simp add: cases_Neg_iff mmonitorable_def split: if_splits)
-    qed
+      using 15
+      by (auto simp add: cases_Neg_iff mmonitorable_def split: if_splits)
   next
     case False
     then show ?thesis
@@ -253,36 +228,8 @@ next
   proof (cases "mem I 0")
     case mem: True
     then show ?thesis
-    proof (cases "safe_assignment (fv \<psi>) \<phi> \<or> is_constraint \<phi>")
-      case True
-      moreover {
-        assume "safe_assignment (fv \<psi>) \<phi>"
-        then have ?thesis
-          using 16 True
-          unfolding safe_assignment_def
-          by (cases \<phi>) (auto simp add: mmonitorable_def split: if_splits)
-      }
-      moreover {
-        assume assm: "is_constraint \<phi>"
-        then have ?thesis
-          using 16 True
-        proof (cases \<phi>)
-          case (Neg \<phi>')
-          then have "Formula.future_bounded \<phi>'"
-            using assm
-            by (cases \<phi>') (auto)
-          then show ?thesis
-            using 16 True Neg
-            by (auto simp add: mmonitorable_def split: if_splits)
-        qed (auto simp add: mmonitorable_def split: if_splits)
-      }
-      ultimately show ?thesis by blast
-    next
-      case False
-      then show ?thesis
-        using 16
-        by (auto simp add: cases_Neg_iff mmonitorable_def split: if_splits)
-    qed
+      using 16
+      by (auto simp add: cases_Neg_iff mmonitorable_def split: if_splits)
   next
     case False
     then show ?thesis
@@ -2500,10 +2447,14 @@ lemma (in muaux) wf_until_aux_UNIV_alt:
 
 definition (in mtaux) wf_trigger_aux :: "Formula.trace \<Rightarrow> _ \<Rightarrow> event_data list set \<Rightarrow> args \<Rightarrow>
   Formula.formula \<Rightarrow> Formula.formula \<Rightarrow> 'mtaux \<Rightarrow> nat \<Rightarrow> bool" where
- "wf_trigger_aux \<sigma> V R args \<phi> \<psi> aux ne \<longleftrightarrow> Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and>
-    (\<exists>cur auxlist. valid_mtaux args cur aux auxlist \<and>
-      cur = (if ne + length auxlist = 0 then 0 else \<tau> \<sigma> (ne + length auxlist - 1)) \<and>
-      wf_until_auxlist \<sigma> V (args_n args) R (args_pos args) \<phi> (args_ivl args) \<psi> auxlist ne)"
+  "wf_trigger_aux \<sigma> V R args \<phi> \<psi> aux ne \<longleftrightarrow> Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and> (\<exists>cur auxlist. valid_mtaux args cur aux auxlist \<and>
+    cur = (if ne = 0 then 0 else \<tau> \<sigma> (ne - 1)) \<and>
+    sorted_wrt (\<lambda>x y. fst x \<le> fst y) auxlist \<and>
+    (\<forall>t l r. (t, l, r) \<in> set auxlist \<longrightarrow> ne \<noteq> 0 \<and> t \<le> \<tau> \<sigma> (ne - 1) \<and> memR (args_ivl args) (\<tau> \<sigma> (ne - 1) - t) \<and> (\<exists>i. \<tau> \<sigma> i = t) \<and>
+      qtable (args_n args) (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) (ne-1) \<phi>) l  \<and>
+      qtable (args_n args) (Formula.fv \<psi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) (ne-1) \<psi>) r) \<and>
+    (\<forall>t. ne \<noteq> 0 \<and> t \<le> \<tau> \<sigma> (ne - 1) \<and> memR (args_ivl args) (\<tau> \<sigma> (ne - 1) - t) \<and> (\<exists>i. \<tau> \<sigma> i = t) \<longrightarrow>
+      (\<exists>X. (t, X) \<in> set auxlist)))"
 
 definition wf_matchF_aux :: "Formula.trace \<Rightarrow> _ \<Rightarrow> nat \<Rightarrow> event_data list set \<Rightarrow>
     \<I> \<Rightarrow> Formula.formula Regex.regex \<Rightarrow> event_data ml\<delta>aux \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool" where
