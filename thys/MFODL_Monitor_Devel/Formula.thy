@@ -891,19 +891,9 @@ qed auto
 
 subsection \<open>Safe formulas\<close>
 
-fun remove_neg :: "formula \<Rightarrow> formula" where
-  "remove_neg (Neg \<phi>) = \<phi>"
-| "remove_neg \<phi> = \<phi>"
-
-lemma fvi_remove_neg[simp]: "fvi b (remove_neg \<phi>) = fvi b \<phi>"
-  by (cases \<phi>) simp_all
-
 lemma partition_cong[fundef_cong]:
   "xs = ys \<Longrightarrow> (\<And>x. x\<in>set xs \<Longrightarrow> f x = g x) \<Longrightarrow> partition f xs = partition g ys"
   by (induction xs arbitrary: ys) auto
-
-lemma size_remove_neg[termination_simp]: "size (remove_neg \<phi>) \<le> size \<phi>"
-  by (cases \<phi>) simp_all
 
 fun is_constraint :: "formula \<Rightarrow> bool" where
   "is_constraint (Eq t1 t2) = True"
@@ -1665,9 +1655,6 @@ qed simp_all
 lemma case_NegE: "(case \<phi> of Neg \<phi>' \<Rightarrow> P \<phi>' | _ \<Rightarrow> False) \<Longrightarrow> (\<And>\<phi>'. \<phi> = Neg \<phi>' \<Longrightarrow> P \<phi>' \<Longrightarrow> Q) \<Longrightarrow> Q"
   by (cases \<phi>) simp_all
 
-lemma convert_multiway_remove_neg: "safe_formula (remove_neg \<phi>) \<Longrightarrow> convert_multiway (remove_neg \<phi>) = remove_neg (convert_multiway \<phi>)"
-  by (cases \<phi>) (auto elim: case_NegE)
-
 lemma fv_convert_multiway: "fvi b (convert_multiway \<phi>) = fvi b \<phi>"
 proof (induction \<phi> arbitrary: b rule: safe_formula.induct)
   case (9 \<phi> \<psi>)
@@ -1725,16 +1712,30 @@ proof (induction \<phi> rule: safe_formula_induct)
     have lsafe_neg: "list_all safe_neg ?l"
       using And_safe \<open>safe_formula \<phi>\<close> \<open>safe_formula \<psi>\<close>
       by (simp add: safe_get_and)
-    then have "list_all safe_formula (map remove_neg neg)"
+    have list_all_neg: "list_all (\<lambda>\<phi>. (case \<phi> of
+        Neg \<phi>' \<Rightarrow> safe_formula \<phi>'
+        | (Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+        | _ \<Rightarrow> safe_formula \<phi>
+      )
+    ) neg"
     proof -
-      have "\<And>x. x \<in> set neg \<Longrightarrow> safe_formula (remove_neg x)"
+      have "\<And>x. x \<in> set neg \<Longrightarrow> (case x of
+        Neg \<phi>' \<Rightarrow> safe_formula \<phi>'
+        | (Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+        | _ \<Rightarrow> safe_formula x
+      )"
       proof -
         fix x assume "x \<in> set neg"
         then have "\<not> safe_formula x" using posneg by auto
         moreover have "safe_neg x" using lsafe_neg \<open>x \<in> set neg\<close>
           unfolding safe_neg_def list_all_iff partition_set[OF posneg[symmetric], symmetric]
           by simp
-        ultimately show "safe_formula (remove_neg x)" using safe_neg_def by blast
+        ultimately show "(case x of
+          Neg \<phi>' \<Rightarrow> safe_formula \<phi>'
+          | (Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+          | _ \<Rightarrow> safe_formula x
+        )" unfolding safe_neg_def
+          by presburger
       qed
       then show ?thesis by (auto simp: list_all_iff)
     qed
@@ -1766,8 +1767,7 @@ proof (induction \<phi> rule: safe_formula_induct)
         unfolding pos_filter by (auto simp: filter_empty_conv)
     qed
     then show ?thesis unfolding b_def
-      using \<open>\<Union> (fv ` set neg) \<subseteq> \<Union> (fv ` set pos)\<close> \<open>list_all safe_formula (map remove_neg neg)\<close>
-        \<open>list_all safe_formula pos\<close> posneg
+      using \<open>\<Union> (fv ` set neg) \<subseteq> \<Union> (fv ` set pos)\<close> list_all_neg \<open>list_all safe_formula pos\<close> posneg
       by simp
   qed
 next
@@ -1787,16 +1787,31 @@ next
     then have lsafe_neg: "list_all safe_neg ?l" using calculation by simp
     obtain pos neg where posneg: "(pos, neg) = partition safe_formula ?l" by simp
     then have "list_all safe_formula pos" by (auto simp: list_all_iff)
-    then have "list_all safe_formula (map remove_neg neg)"
+    
+    have list_all_neg: "list_all (\<lambda>\<phi>. (case \<phi> of
+        Neg \<phi>' \<Rightarrow> safe_formula \<phi>'
+        | (Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+        | _ \<Rightarrow> safe_formula \<phi>
+      )
+    ) neg"
     proof -
-      have "\<And>x. x \<in> (set neg) \<Longrightarrow> safe_formula (remove_neg x)"
+      have "\<And>x. x \<in> (set neg) \<Longrightarrow> (case x of
+        Neg \<phi>' \<Rightarrow> safe_formula \<phi>'
+        | (Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+        | _ \<Rightarrow> safe_formula x
+      )"
       proof -
         fix x assume "x \<in> set neg"
         then have "\<not> safe_formula x" using posneg by (auto simp del: filter.simps)
         moreover have "safe_neg x" using lsafe_neg \<open>x \<in> set neg\<close>
           unfolding safe_neg_def list_all_iff partition_set[OF posneg[symmetric], symmetric]
           by simp
-        ultimately show "safe_formula (remove_neg x)" using safe_neg_def by blast
+        ultimately show "(case x of
+          Neg \<phi>' \<Rightarrow> safe_formula \<phi>'
+          | (Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+          | _ \<Rightarrow> safe_formula x
+        )" unfolding safe_neg_def
+          by presburger
       qed
       then show ?thesis using Ball_set_list_all by force
     qed
@@ -1829,8 +1844,7 @@ next
         unfolding pos_filter by (auto simp: filter_empty_conv)
     qed
     then show ?thesis unfolding b_def
-      using \<open>\<Union> (fv ` set neg) \<subseteq> \<Union> (fv ` set pos)\<close> \<open>list_all safe_formula (map remove_neg neg)\<close>
-        \<open>list_all safe_formula pos\<close> posneg
+      using \<open>\<Union> (fv ` set neg) \<subseteq> \<Union> (fv ` set pos)\<close> list_all_neg \<open>list_all safe_formula pos\<close> posneg
       by simp
   qed
 next
@@ -1851,14 +1865,10 @@ next
       then have "False"
       proof (cases "case (convert_multiway \<phi>) of (Ands l) \<Rightarrow> True | _ \<Rightarrow> False")
         case True
-        then obtain l where l_props: "convert_multiway \<phi> = Ands l"
+        then obtain l where "convert_multiway \<phi> = Ands l"
           by (auto split: formula.splits)
-        then have "let (pos, neg) = partition safe_formula l in pos \<noteq> [] \<and>
-          list_all safe_formula (map remove_neg neg) \<and> \<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos))"
-          using And_Trigger(5)
-          by auto
         then show ?thesis
-          using l_props assm
+          using assm And_Trigger(5)
           by auto
       next
         case False
@@ -1875,6 +1885,10 @@ next
   then have filter_pos: "filter safe_formula (get_and_list (convert_multiway \<phi>)) \<noteq> []"
     by (simp add: filter_empty_conv)
 
+  have \<phi>_fvs: "\<Union>(set (map fv (snd (partition safe_formula (get_and_list (convert_multiway \<phi>)))))) \<subseteq> \<Union>(set (map fv (fst (partition safe_formula (get_and_list (convert_multiway \<phi>))))))"
+    using And_Trigger
+    by (cases "(convert_multiway \<phi>)") (auto)
+
   show ?case
   proof (cases "safe_formula t")
     define l where "l = get_and_list (convert_multiway \<phi>) @ get_and_list (convert_multiway t)"
@@ -1885,6 +1899,14 @@ next
     then have convert_f: "convert_multiway f = Ands l"
       unfolding f_def l_def
       using t_not_safe_assign
+      by auto
+
+    have "safe_formula (convert_multiway t)"
+      using And_Trigger True
+      unfolding t_def
+      by (auto split: if_splits simp add: safe_formula_dual_def fv_convert_multiway)
+    then have neg_fv: "\<Union>(set (map fv neg)) = \<Union>(set (map fv (snd (partition safe_formula (get_and_list (convert_multiway \<phi>))))))"
+      unfolding neg_def l_def t_def
       by auto
 
     have mem:
@@ -1900,14 +1922,19 @@ next
       using filter_pos
       unfolding pos_def l_def
       by auto
-    moreover have "list_all safe_formula (map remove_neg neg)"
+    moreover have "list_all (\<lambda>\<phi>. (case \<phi> of
+        Neg \<phi>' \<Rightarrow> safe_formula \<phi>'
+        | (Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+        | _ \<Rightarrow> safe_formula \<phi>
+      )
+    ) neg"
       using And_Trigger mem
       unfolding l_def neg_def t_def
       by (cases "(convert_multiway \<phi>)") (auto simp add: safe_formula_dual_def fv_convert_multiway)
     moreover have "\<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos))"
-      unfolding l_def pos_def neg_def t_def
-      using And_Trigger mem True
-      by (cases "(convert_multiway \<phi>)") (auto simp add: safe_formula_dual_def fv_convert_multiway)
+      using \<phi>_fvs neg_fv
+      unfolding l_def pos_def
+      by (auto simp add: fv_convert_multiway)
     ultimately have "safe_formula (Ands l)"
       unfolding pos_def neg_def
       by auto
@@ -1926,24 +1953,55 @@ next
       using t_not_safe_assign t_not_constraint
       by auto
 
-    have "\<not>mem I 0 \<or> (
-      mem I 0 \<and> (
-        \<not>safe_formula \<psi>' \<or>
-        \<not>fv \<phi>' \<subseteq> fv \<psi>' \<or> (
-          \<not>safe_formula \<phi>' \<and>
-          (case \<phi>' of Formula.Neg \<phi>'' \<Rightarrow> \<not> safe_formula \<phi>'' | _ \<Rightarrow> True)
-        )
-      )
-    )"
-      using False
+    have unsafe: "\<not>safe_formula (convert_multiway t)"
+      using And_Trigger False
       unfolding t_def
-      by (auto simp add: safe_formula_dual_def split: if_splits formula.splits)
+      by (auto split: if_splits simp add: safe_formula_dual_def fv_convert_multiway)
+    then have pos_fv: "\<Union>(set (map fv pos)) = \<Union>(set (map fv (fst (partition safe_formula (get_and_list (convert_multiway \<phi>))))))"
+      unfolding pos_def l_def t_def
+      by auto
+
+    have neg_eq: "neg = convert_multiway t # snd (partition safe_formula (get_and_list (convert_multiway \<phi>)))"
+      using unsafe
+      unfolding neg_def l_def
+      by auto
+
+    have "\<Union> (set (map fv (fst (partition safe_formula (get_and_list (convert_multiway \<phi>)))))) = fv \<phi>"
+    proof (cases "case (convert_multiway \<phi>) of (Ands l) \<Rightarrow> True | _ \<Rightarrow> False")
+      case True
+      then obtain l where l_props: "(convert_multiway \<phi>) = Ands l"
+        by (auto split: formula.splits)
+      then have "get_and_list (convert_multiway \<phi>) = l"
+        by auto
+      then have "fv \<phi> = fv (Ands l)"
+        using l_props fv_convert_multiway[of 0 \<phi>]
+        by auto
+      then show ?thesis
+        using l_props And_Trigger(5) l_props
+        by auto
+    next
+      case False
+      then have "get_and_list (convert_multiway \<phi>) = [convert_multiway \<phi>]"
+        by (auto split: formula.splits)
+      then show ?thesis
+        using And_Trigger(5)
+        by (auto simp add: fv_convert_multiway)
+    qed
+    then have t_fvs: "fv (convert_multiway t) \<subseteq> \<Union> (set (map fv (fst (partition safe_formula (get_and_list (convert_multiway \<phi>))))))"
+      using And_Trigger(4)
+      unfolding t_def
+      by (auto simp add: fv_convert_multiway)
+
+    then have mem: "\<not>mem I 0 \<or> (case \<phi>' of Formula.Neg \<phi>'' \<Rightarrow> \<not> safe_formula \<phi>'' | _ \<Rightarrow> True)"
+      using False And_Trigger
+      unfolding t_def safe_formula_dual_def
+      by (auto simp add: safe_formula_dual_def)
 
     have unsafe_convert_t: "\<not> safe_formula (convert_multiway t)"
       using False And_Trigger
       unfolding t_def
       by (auto simp add: safe_formula_dual_def)
-    then have unsafe_convert_t_rem_neg: "\<not>safe_formula (remove_neg (convert_multiway t))"
+    then have unsafe_convert_t_rem_neg: "\<not>safe_formula (convert_multiway t)"
       unfolding t_def
       by auto
 
@@ -1951,14 +2009,72 @@ next
       using filter_pos
       unfolding pos_def l_def
       by auto
-    moreover have "list_all safe_formula (map remove_neg neg)"
-      using unsafe_convert_t
-      unfolding neg_def l_def t_def
-      by auto
+    moreover have "list_all (\<lambda>\<phi>. (case \<phi> of
+        Neg \<phi>' \<Rightarrow> safe_formula \<phi>'
+        | (Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+        | _ \<Rightarrow> safe_formula \<phi>
+      )
+    ) neg"
+    proof -
+      {
+        fix \<alpha>
+        assume assm: "\<alpha> \<in> set neg"
+
+        have "(case \<alpha> of
+          Neg \<phi>' \<Rightarrow> safe_formula \<phi>'
+          | (Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+          | _ \<Rightarrow> safe_formula \<alpha>
+        )"
+        proof (cases "\<alpha> \<in> set (snd (partition safe_formula (get_and_list (convert_multiway \<phi>))))")
+          case True
+          then have \<alpha>_props:
+            "\<not>safe_formula \<alpha>"
+            "\<alpha> \<in> set (get_and_list (convert_multiway \<phi>))"
+            by auto
+          then show ?thesis
+          proof (cases "case (convert_multiway \<phi>) of (Ands l) \<Rightarrow> True | _ \<Rightarrow> False")
+            case True
+            then obtain l where l_props: "(convert_multiway \<phi>) = Ands l"
+              by (auto split: formula.splits)
+            then have "safe_formula (Ands l)"
+              using And_Trigger(5)
+              by auto
+            then have "list_all (\<lambda>\<phi>. case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | Trigger \<phi>' I \<psi>' \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>' | _ \<Rightarrow> safe_formula \<phi>)
+              (filter (\<lambda>f. \<not> safe_formula f) l)"
+              by (auto simp add: o_def)
+            then have "\<forall>\<phi> \<in> set (filter (\<lambda>f. \<not> safe_formula f) l). case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | Trigger \<phi>' I \<psi>' \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>' | _ \<Rightarrow> safe_formula \<phi>"
+              by (simp add: list.pred_set)
+            moreover have "\<alpha> \<in> set (filter (\<lambda>f. \<not> safe_formula f) l)"
+              using \<alpha>_props l_props
+              by auto
+            ultimately show ?thesis
+              by auto
+          next
+            case False
+            then have "get_and_list (convert_multiway \<phi>) = [convert_multiway \<phi>]"
+              by (auto split: formula.splits)
+            then have "False"
+              using \<alpha>_props And_Trigger(5)
+              by auto
+            then show ?thesis by auto
+          qed
+        next
+          case False
+          then have "\<alpha> = convert_multiway t"
+            using assm neg_eq
+            by auto
+          then show ?thesis
+            using And_Trigger
+            unfolding t_def safe_formula_dual_def
+            by (auto simp add: fv_convert_multiway split: if_splits)
+        qed
+      }
+      then show ?thesis by (auto simp: list_all_iff)
+    qed
     moreover have "\<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos))"
-      unfolding neg_def pos_def l_def
-      using unsafe_convert_t And_Trigger
-      by auto
+      using pos_fv \<phi>_fvs t_fvs
+      unfolding neg_def l_def t_def
+      by (auto simp add: fv_convert_multiway)
     ultimately have "safe_formula (Ands l)"
       unfolding pos_def neg_def
       by auto
@@ -1969,13 +2085,414 @@ next
   qed
 next
   case (And_Not_Trigger \<phi> \<phi>' I \<psi>')
-  then show ?case by auto
-next
-  case (Ands l)
+  define t where "t = (Trigger (Neg \<phi>') I \<psi>')"
+  define f where "f = And \<phi> t"
+
+  have t_not_safe_assign: "\<not>safe_assignment (fv \<phi>) t"
+    unfolding safe_assignment_def
+    by (cases t) (auto simp add: t_def)
+
+  have t_not_constraint: "\<not>is_constraint t"
+    unfolding t_def
+    by auto
+
+  have "\<exists>f \<in> set (get_and_list (convert_multiway \<phi>)). safe_formula f"
+  proof -
+    {
+      assume assm: "\<forall>f \<in> set (get_and_list (convert_multiway \<phi>)). \<not>safe_formula f"
+      then have "False"
+      proof (cases "case (convert_multiway \<phi>) of (Ands l) \<Rightarrow> True | _ \<Rightarrow> False")
+        case True
+        then obtain l where "convert_multiway \<phi> = Ands l"
+          by (auto split: formula.splits)
+        then show ?thesis
+          using assm And_Not_Trigger(5)
+          by auto
+      next
+        case False
+        then have "get_and_list (convert_multiway \<phi>) = [convert_multiway \<phi>]"
+          using assm
+          by (auto split: formula.splits)
+        then show ?thesis
+          using assm And_Not_Trigger(5)
+          by auto
+      qed
+    }
+    then show ?thesis by auto
+  qed
+  then have filter_pos: "filter safe_formula (get_and_list (convert_multiway \<phi>)) \<noteq> []"
+    by (simp add: filter_empty_conv)
+
+  have \<phi>_fvs: "\<Union>(set (map fv (snd (partition safe_formula (get_and_list (convert_multiway \<phi>)))))) \<subseteq> \<Union>(set (map fv (fst (partition safe_formula (get_and_list (convert_multiway \<phi>))))))"
+    using And_Not_Trigger
+    by (cases "(convert_multiway \<phi>)") (auto)
+
   then show ?case
-    using convert_multiway_remove_neg fv_convert_multiway
-    apply (auto simp: list.pred_set filter_map filter_empty_conv subset_eq)
-    by (metis fvi_remove_neg)
+  proof (cases "safe_formula t")
+    define l where "l = get_and_list (convert_multiway \<phi>) @ get_and_list (convert_multiway t)"
+    define pos where "pos = fst (partition safe_formula l)"
+    define neg where "neg = snd (partition safe_formula l)"
+
+    case True
+    then have convert_f: "convert_multiway f = Ands l"
+      unfolding f_def l_def
+      using t_not_safe_assign
+      by auto
+
+    have "safe_formula (convert_multiway t)"
+      using And_Not_Trigger True
+      unfolding t_def
+      by (auto split: if_splits simp add: safe_formula_dual_def fv_convert_multiway)
+    then have neg_fv: "\<Union>(set (map fv neg)) = \<Union>(set (map fv (snd (partition safe_formula (get_and_list (convert_multiway \<phi>))))))"
+      unfolding neg_def l_def t_def
+      by auto
+
+    have mem:
+      "mem I 0"
+      "safe_formula \<psi>'"
+      "fv \<phi>' \<subseteq> fv \<psi>'"
+      "safe_formula \<phi>'"
+      using True And_Not_Trigger
+      unfolding t_def
+      by (auto split: if_splits simp add: safe_formula_dual_def)
+
+    have "filter safe_formula pos \<noteq> []"
+      using filter_pos
+      unfolding pos_def l_def
+      by auto
+    moreover have "list_all (\<lambda>\<phi>. (case \<phi> of
+        Neg \<phi>' \<Rightarrow> safe_formula \<phi>'
+        | (Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+        | _ \<Rightarrow> safe_formula \<phi>
+      )
+    ) neg"
+      using And_Not_Trigger mem
+      unfolding l_def neg_def t_def
+      by (cases "(convert_multiway \<phi>)") (auto simp add: safe_formula_dual_def fv_convert_multiway)
+    moreover have "\<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos))"
+      using \<phi>_fvs neg_fv
+      unfolding l_def pos_def
+      by (auto simp add: fv_convert_multiway)
+    ultimately have "safe_formula (Ands l)"
+      unfolding pos_def neg_def
+      by auto
+    then show ?thesis
+      using convert_f
+      unfolding f_def t_def
+      by auto
+  next
+    define l where "l = convert_multiway t # get_and_list (convert_multiway \<phi>)"
+    define pos where "pos = fst (partition safe_formula l)"
+    define neg where "neg = snd (partition safe_formula l)"
+
+    case False
+    then have convert_f: "convert_multiway f = Ands l"
+      unfolding f_def l_def
+      using t_not_safe_assign t_not_constraint
+      by auto
+
+    have unsafe: "\<not>safe_formula (convert_multiway t)"
+      using And_Not_Trigger False
+      unfolding t_def
+      by (auto split: if_splits simp add: safe_formula_dual_def fv_convert_multiway)
+    then have pos_fv: "\<Union>(set (map fv pos)) = \<Union>(set (map fv (fst (partition safe_formula (get_and_list (convert_multiway \<phi>))))))"
+      unfolding pos_def l_def t_def
+      by auto
+
+    have neg_eq: "neg = convert_multiway t # snd (partition safe_formula (get_and_list (convert_multiway \<phi>)))"
+      using unsafe
+      unfolding neg_def l_def
+      by auto
+
+    have "\<Union> (set (map fv (fst (partition safe_formula (get_and_list (convert_multiway \<phi>)))))) = fv \<phi>"
+    proof (cases "case (convert_multiway \<phi>) of (Ands l) \<Rightarrow> True | _ \<Rightarrow> False")
+      case True
+      then obtain l where l_props: "(convert_multiway \<phi>) = Ands l"
+        by (auto split: formula.splits)
+      then have "get_and_list (convert_multiway \<phi>) = l"
+        by auto
+      then have "fv \<phi> = fv (Ands l)"
+        using l_props fv_convert_multiway[of 0 \<phi>]
+        by auto
+      then show ?thesis
+        using l_props And_Not_Trigger(5) l_props
+        by auto
+    next
+      case False
+      then have "get_and_list (convert_multiway \<phi>) = [convert_multiway \<phi>]"
+        by (auto split: formula.splits)
+      then show ?thesis
+        using And_Not_Trigger(5)
+        by (auto simp add: fv_convert_multiway)
+    qed
+    then have t_fvs: "fv (convert_multiway t) \<subseteq> \<Union> (set (map fv (fst (partition safe_formula (get_and_list (convert_multiway \<phi>))))))"
+      using And_Not_Trigger(4)
+      unfolding t_def
+      by (auto simp add: fv_convert_multiway)
+
+    then have mem: "\<not>mem I 0 \<or> (case \<phi>' of Formula.Neg \<phi>'' \<Rightarrow> \<not> safe_formula \<phi>'' | _ \<Rightarrow> True)"
+      using False And_Not_Trigger
+      unfolding t_def safe_formula_dual_def
+      by (auto simp add: safe_formula_dual_def)
+
+    have unsafe_convert_t: "\<not> safe_formula (convert_multiway t)"
+      using False And_Not_Trigger
+      unfolding t_def
+      by (auto simp add: safe_formula_dual_def)
+    then have unsafe_convert_t_rem_neg: "\<not>safe_formula (convert_multiway t)"
+      unfolding t_def
+      by auto
+
+    have filter_pos: "filter safe_formula pos \<noteq> []"
+      using filter_pos
+      unfolding pos_def l_def
+      by auto
+    moreover have "list_all (\<lambda>\<phi>. (case \<phi> of
+        Neg \<phi>' \<Rightarrow> safe_formula \<phi>'
+        | (Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+        | _ \<Rightarrow> safe_formula \<phi>
+      )
+    ) neg"
+    proof -
+      {
+        fix \<alpha>
+        assume assm: "\<alpha> \<in> set neg"
+
+        have "(case \<alpha> of
+          Neg \<phi>' \<Rightarrow> safe_formula \<phi>'
+          | (Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+          | _ \<Rightarrow> safe_formula \<alpha>
+        )"
+        proof (cases "\<alpha> \<in> set (snd (partition safe_formula (get_and_list (convert_multiway \<phi>))))")
+          case True
+          then have \<alpha>_props:
+            "\<not>safe_formula \<alpha>"
+            "\<alpha> \<in> set (get_and_list (convert_multiway \<phi>))"
+            by auto
+          then show ?thesis
+          proof (cases "case (convert_multiway \<phi>) of (Ands l) \<Rightarrow> True | _ \<Rightarrow> False")
+            case True
+            then obtain l where l_props: "(convert_multiway \<phi>) = Ands l"
+              by (auto split: formula.splits)
+            then have "safe_formula (Ands l)"
+              using And_Not_Trigger(5)
+              by auto
+            then have "list_all (\<lambda>\<phi>. case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | Trigger \<phi>' I \<psi>' \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>' | _ \<Rightarrow> safe_formula \<phi>)
+              (filter (\<lambda>f. \<not> safe_formula f) l)"
+              by (auto simp add: o_def)
+            then have "\<forall>\<phi> \<in> set (filter (\<lambda>f. \<not> safe_formula f) l). case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | Trigger \<phi>' I \<psi>' \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>' | _ \<Rightarrow> safe_formula \<phi>"
+              by (simp add: list.pred_set)
+            moreover have "\<alpha> \<in> set (filter (\<lambda>f. \<not> safe_formula f) l)"
+              using \<alpha>_props l_props
+              by auto
+            ultimately show ?thesis
+              by auto
+          next
+            case False
+            then have "get_and_list (convert_multiway \<phi>) = [convert_multiway \<phi>]"
+              by (auto split: formula.splits)
+            then have "False"
+              using \<alpha>_props And_Not_Trigger(5)
+              by auto
+            then show ?thesis by auto
+          qed
+        next
+          case False
+          then have "\<alpha> = convert_multiway t"
+            using assm neg_eq
+            by auto
+          then show ?thesis
+            using And_Not_Trigger
+            unfolding t_def safe_formula_dual_def
+            by (auto simp add: fv_convert_multiway split: if_splits)
+        qed
+      }
+      then show ?thesis by (auto simp: list_all_iff)
+    qed
+    moreover have "\<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos))"
+      using pos_fv \<phi>_fvs t_fvs
+      unfolding neg_def l_def t_def
+      by (auto simp add: fv_convert_multiway)
+    ultimately have "safe_formula (Ands l)"
+      unfolding pos_def neg_def
+      by auto
+    then show ?thesis
+      using convert_f
+      unfolding f_def t_def
+      by auto
+  qed
+next
+  (*
+
+  let (pos, neg) = partition safe_formula l in pos \<noteq> [] \<and>
+    list_all (\<lambda>\<phi>. (case \<phi> of
+        Neg \<phi>' \<Rightarrow> safe_formula \<phi>'
+        | (Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+        | _ \<Rightarrow> safe_formula \<phi>
+      )
+    ) neg \<and>
+    \<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos))
+  *)
+  case (Ands l pos neg)
+  define pos' where "pos' = fst (partition safe_formula (map convert_multiway l))"
+  define neg' where "neg' = snd (partition safe_formula (map convert_multiway l))"
+
+  have pos_fv: "\<Union>(set (map fv pos)) \<subseteq> \<Union>(set (map fv pos'))"
+    using Ands(1,6)
+    unfolding pos'_def
+    by (auto simp add: list_all_iff fv_convert_multiway)
+
+  have neg_mem: "\<forall>\<alpha> \<in> set neg'. \<exists>\<alpha>' \<in> set neg. \<alpha> = convert_multiway \<alpha>'"
+  proof -
+    {
+      fix \<alpha>
+      assume "\<alpha> \<in> set neg'"
+      then have \<alpha>_props: "\<alpha> \<in> set neg'" "\<not>safe_formula \<alpha>"
+        unfolding neg'_def
+        by auto
+
+      then obtain \<alpha>' where \<alpha>'_props: "\<alpha> = convert_multiway \<alpha>'" "\<alpha>' \<in> set l"
+        unfolding neg'_def
+        by auto
+      {
+        assume "safe_formula \<alpha>'"
+        then have "safe_formula \<alpha>"
+          using \<alpha>'_props Ands(1,6)
+          by (auto simp add: list_all_iff)
+        then have "False" using \<alpha>_props(2) by auto
+      }
+      then have "\<not>safe_formula \<alpha>'" by auto
+      then have "\<alpha>' \<in> set neg" "\<alpha> = convert_multiway \<alpha>'"
+        using Ands(1) \<alpha>'_props
+        by auto
+      then have "\<exists>\<alpha>' \<in> set neg. \<alpha> = convert_multiway \<alpha>'"
+        by auto
+    }
+    then show ?thesis by auto
+  qed
+
+  have neg_fv: "\<Union>(set (map fv neg')) \<subseteq> \<Union>(set (map fv neg))"
+  proof -
+    {
+      fix x
+      assume "x \<in> \<Union>(set (map fv neg'))"
+      then obtain \<alpha> where \<alpha>_props: "x \<in> fv \<alpha>" "\<alpha> \<in> set neg'" "\<not>safe_formula \<alpha>"
+        unfolding neg'_def
+        by auto
+
+      then obtain \<alpha>' where "\<alpha>'\<in> set neg" "\<alpha> = convert_multiway \<alpha>'"
+        using neg_mem
+        by auto
+      
+      then have "x \<in> \<Union>(set (map fv neg))"
+        using \<alpha>_props(1)
+        by (auto simp add: fv_convert_multiway)
+    }
+    then show ?thesis by auto
+  qed
+
+  obtain \<alpha> where "\<alpha> \<in> set pos"
+    using Ands(2)
+    using hd_in_set
+    by blast
+  then have
+    "\<alpha> \<in> set l"
+    "safe_formula (convert_multiway \<alpha>)"
+    using Ands(1,6)
+    by (auto simp add: list_all_iff)
+  then have "convert_multiway \<alpha> \<in> set pos'"
+    unfolding pos'_def
+    by auto
+  then have "pos' \<noteq> []"
+    by auto
+  moreover have "list_all (\<lambda>\<phi>. (case \<phi> of
+        Neg \<phi>' \<Rightarrow> safe_formula \<phi>'
+        | (Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+        | _ \<Rightarrow> safe_formula \<phi>
+      )
+    ) neg'"
+  proof -
+    {
+      fix \<phi>
+      assume "\<phi> \<in> set neg'"
+      then obtain \<phi>' where \<phi>'_props: "\<phi>'\<in>set neg" "\<phi> = convert_multiway \<phi>'"
+        using neg_mem
+        by auto
+      then have \<phi>'_cases: "case \<phi>' of
+           Neg \<phi>' \<Rightarrow> safe_formula (convert_multiway \<phi>')
+           | Trigger \<phi>' I \<psi>' \<Rightarrow>
+               safe_formula (convert_multiway \<psi>') \<and>
+               (if mem I 0 then safe_formula (convert_multiway \<phi>') \<or> (case \<phi>' of Neg \<phi>'' \<Rightarrow> safe_formula (convert_multiway \<phi>'') | _ \<Rightarrow> False)
+                else safe_formula (convert_multiway \<phi>'))
+           | _ \<Rightarrow> safe_formula \<phi>"
+        "case \<phi>' of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | Trigger \<phi>' I \<psi>' \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>' | _ \<Rightarrow> safe_formula \<phi>'"
+        using Ands(4,7)
+        by (auto simp add: list_all_iff)
+
+      then have "(case \<phi> of
+          Neg \<phi>' \<Rightarrow> safe_formula \<phi>'
+          | (Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+          | _ \<Rightarrow> safe_formula \<phi>
+        )"
+        using \<phi>'_props
+      proof (cases "\<phi>'")
+        case (And \<alpha> \<beta>)
+        then show ?thesis using \<phi>'_cases(1) \<phi>'_props
+          by (auto split: if_splits)
+      next
+        case (Trigger \<alpha> I \<beta>)
+        then have IH:
+          "safe_formula (convert_multiway \<beta>)"
+          "if mem I 0 then
+              safe_formula (convert_multiway \<alpha>) \<or> (case \<alpha> of Neg \<phi>'' \<Rightarrow> safe_formula (convert_multiway \<phi>'') | _ \<Rightarrow> False)
+           else
+              safe_formula (convert_multiway \<alpha>)"
+          using \<phi>'_cases
+          by auto
+        have safe_dual: "safe_formula_dual True safe_formula \<alpha> I \<beta>"
+          using Trigger \<phi>'_cases(2)
+          by auto
+        
+        have "safe_formula_dual True safe_formula (convert_multiway \<alpha>) I (convert_multiway \<beta>)"
+        proof (cases "mem I 0")
+          case True
+          then show ?thesis
+          proof (cases "safe_formula (convert_multiway \<alpha>)")
+            case True
+            then show ?thesis
+              using IH safe_dual
+              unfolding safe_formula_dual_def
+              by (auto simp add: fv_convert_multiway)
+          next
+            case False
+            then obtain \<phi>'' where "\<alpha> = Neg \<phi>''" "safe_formula (convert_multiway \<phi>'')"
+              using True False IH
+              by (auto split: formula.splits)
+            then show ?thesis
+              using IH safe_dual
+              unfolding safe_formula_dual_def
+              by (auto simp add: fv_convert_multiway split: formula.splits)
+          qed
+        next
+          case False
+          then show ?thesis
+            using IH safe_dual
+            unfolding safe_formula_dual_def
+            by (auto simp add: fv_convert_multiway)
+        qed
+        then show ?thesis
+          using \<phi>'_props(2) Trigger
+          by auto
+      qed (auto)
+    }
+    then show ?thesis by (auto simp add: list_all_iff)
+  qed
+  moreover have "\<Union>(set (map fv neg')) \<subseteq> \<Union>(set (map fv pos'))"
+    using Ands(5) pos_fv neg_fv
+    by auto
+  ultimately show ?case
+    unfolding neg'_def pos'_def
+    by auto
 next
   case (Neg \<phi>)
   have "safe_formula (Neg \<phi>') \<longleftrightarrow> safe_formula \<phi>'" if "fv \<phi>' = {}" for \<phi>'
@@ -2095,8 +2612,9 @@ next
       dest: safe_regex_safe_formula split: if_splits)
 qed (auto simp add: fv_convert_multiway nfv_convert_multiway split: if_splits)
 
-lemma future_bounded_remove_neg: "future_bounded (remove_neg \<phi>) = future_bounded \<phi>"
-  by (cases \<phi>) auto
+lemma future_bounded_multiway_Ands: "future_bounded (convert_multiway \<phi>) = future_bounded \<phi> \<Longrightarrow> future_bounded (Ands (get_and_list (convert_multiway \<phi>))) = future_bounded \<phi>"
+  by (cases "case (convert_multiway \<phi>) of Ands l \<Rightarrow> True | _ \<Rightarrow> False") (auto split: formula.splits)
+
 
 lemma future_bounded_convert_multiway: "safe_formula \<phi> \<Longrightarrow> future_bounded (convert_multiway \<phi>) = future_bounded \<phi>"
 proof (induction \<phi> rule: safe_formula_induct)
@@ -2133,10 +2651,134 @@ next
   ultimately show ?case by auto
 next
   case (And_Trigger \<phi> \<phi>' I \<psi>')
-  then show ?case by auto
+  define t where "t = Trigger \<phi>' I \<psi>'"
+  define f where "f = And \<phi> t"
+  have t_not_safe_assign: "\<not>safe_assignment (fv \<phi>) t"
+    unfolding safe_assignment_def
+    by (cases t) (auto simp add: t_def)
+
+  have t_not_constraint: "\<not>is_constraint t"
+    by (auto simp add: t_def)
+
+  then show ?case proof (cases "safe_formula t")
+    define l where "l = (get_and_list (convert_multiway \<phi>) @ get_and_list (convert_multiway t))"
+    case True
+    then have f_convert: "convert_multiway f = Ands l"
+      using t_not_safe_assign
+      unfolding l_def f_def
+      by auto
+    have t_multiway: "future_bounded (convert_multiway t) = future_bounded t"
+      using And_Trigger(6-7)
+      unfolding t_def
+      by auto
+    have "list_all future_bounded l = (future_bounded \<phi> \<and> future_bounded (Trigger \<phi>' I \<psi>'))"
+      using future_bounded_multiway_Ands[OF t_multiway] future_bounded_multiway_Ands[OF And_Trigger(5)]
+      unfolding l_def t_def
+      by auto
+    then show ?thesis
+      using f_convert
+      unfolding f_def t_def
+      by auto
+  next
+    define l where "l = (convert_multiway t) # get_and_list (convert_multiway \<phi>)"
+    case False
+    then have f_convert: "convert_multiway f = Ands l"
+      using t_not_safe_assign t_not_constraint
+      unfolding l_def f_def
+      by auto
+    have t_multiway: "future_bounded (convert_multiway t) = future_bounded t"
+      using And_Trigger(6-7)
+      unfolding t_def
+      by auto
+    have "list_all future_bounded l = (future_bounded \<phi> \<and> future_bounded (Trigger \<phi>' I \<psi>'))"
+      using future_bounded_multiway_Ands[OF t_multiway] future_bounded_multiway_Ands[OF And_Trigger(5)]
+      unfolding l_def t_def
+      by auto
+    then show ?thesis
+      using f_convert
+      unfolding f_def t_def
+      by auto
+  qed
 next
   case (And_Not_Trigger \<phi> \<phi>' I \<psi>')
-  then show ?case by auto
+  define t where "t = Trigger (Neg \<phi>') I \<psi>'"
+  define f where "f = And \<phi> t"
+  have t_not_safe_assign: "\<not>safe_assignment (fv \<phi>) t"
+    unfolding safe_assignment_def
+    by (cases t) (auto simp add: t_def)
+
+  have t_not_constraint: "\<not>is_constraint t"
+    by (auto simp add: t_def)
+
+  then show ?case proof (cases "safe_formula t")
+    define l where "l = (get_and_list (convert_multiway \<phi>) @ get_and_list (convert_multiway t))"
+    case True
+    then have f_convert: "convert_multiway f = Ands l"
+      using t_not_safe_assign
+      unfolding l_def f_def
+      by auto
+    have t_multiway: "future_bounded (convert_multiway t) = future_bounded t"
+      using And_Not_Trigger(6-7)
+      unfolding t_def
+      by auto
+    have "list_all future_bounded l = (future_bounded \<phi> \<and> future_bounded (Trigger (Neg \<phi>') I \<psi>'))"
+      using future_bounded_multiway_Ands[OF t_multiway] future_bounded_multiway_Ands[OF And_Not_Trigger(5)]
+      unfolding l_def t_def
+      by auto
+    then show ?thesis
+      using f_convert
+      unfolding f_def t_def
+      by auto
+  next
+    define l where "l = (convert_multiway t) # get_and_list (convert_multiway \<phi>)"
+    case False
+    then have f_convert: "convert_multiway f = Ands l"
+      using t_not_safe_assign t_not_constraint
+      unfolding l_def f_def
+      by auto
+    have t_multiway: "future_bounded (convert_multiway t) = future_bounded t"
+      using And_Not_Trigger(6-7)
+      unfolding t_def
+      by auto
+    have "list_all future_bounded l = (future_bounded \<phi> \<and> future_bounded (Trigger (Neg \<phi>') I \<psi>'))"
+      using future_bounded_multiway_Ands[OF t_multiway] future_bounded_multiway_Ands[OF And_Not_Trigger(5)]
+      unfolding l_def t_def
+      by auto
+    then show ?thesis
+      using f_convert
+      unfolding f_def t_def
+      by auto
+  qed
+next
+  case (Ands l pos neg)
+  then have l_future_bounded: "list_all (\<lambda>a. future_bounded (convert_multiway a) = future_bounded a) l"
+  proof -
+    {
+      fix \<phi>
+      assume assm: "\<phi> \<in> set l"
+      then have "future_bounded (convert_multiway \<phi>) = future_bounded \<phi>"
+      proof (cases "\<phi> \<in> set pos")
+        case True
+        then show ?thesis using Ands(6) by (auto simp add: list_all_iff)
+      next
+        case False
+        then have \<phi>'_props: "case \<phi> of Neg \<phi>' \<Rightarrow> future_bounded (convert_multiway \<phi>') = future_bounded \<phi>'
+           | Trigger \<phi>' I \<psi>' \<Rightarrow>
+               future_bounded (convert_multiway \<psi>') = future_bounded \<psi>' \<and>
+               (if mem I 0
+                then future_bounded (convert_multiway \<phi>') = future_bounded \<phi>' \<or>
+                     (case \<phi>' of Neg \<phi>'' \<Rightarrow> future_bounded (convert_multiway \<phi>'') = future_bounded \<phi>'' | _ \<Rightarrow> False)
+                else future_bounded (convert_multiway \<phi>') = future_bounded \<phi>')
+           | _ \<Rightarrow> future_bounded (convert_multiway \<phi>) = future_bounded \<phi>"
+          using Ands(1,7) assm
+          by (auto simp add: list_all_iff)
+        then show ?thesis
+          by (cases \<phi>) (auto split: if_splits formula.splits)
+      qed
+    }
+    then show ?thesis by (auto simp add: list_all_iff)
+  qed
+  then show ?case by (auto simp add: list_all_iff)
 next
   case assms: (Trigger_0 \<phi> I \<psi>)
   then have "future_bounded (convert_multiway \<phi>) = future_bounded \<phi>"
@@ -2193,7 +2835,7 @@ next
   then show ?case
     by (fastforce simp: atms_def regex.pred_set regex.set_map ball_Un
         elim: safe_regex_safe_formula[THEN disjE_Not2])
-qed (auto simp: list.pred_set convert_multiway_remove_neg future_bounded_remove_neg)
+qed (auto simp: list.pred_set)
 
 lemma sat_convert_multiway: "safe_formula \<phi> \<Longrightarrow> sat \<sigma> V v i (convert_multiway \<phi>) \<longleftrightarrow> sat \<sigma> V v i \<phi>"
 proof (induction \<phi> arbitrary: V v i rule: safe_formula_induct)
@@ -2219,10 +2861,102 @@ next
   then show ?case using And_Not by (auto simp: list.pred_set)
 next
   case (And_Trigger \<phi> \<phi>' I \<psi>')
-  then show ?case by auto
+  define t where "t = Trigger \<phi>' I \<psi>'"
+
+  have t_not_safe_assign: "\<not>safe_assignment (fv \<phi>) t"
+    unfolding safe_assignment_def
+    by (cases t) (auto simp add: t_def)
+
+  moreover have t_not_constraint: "\<not>is_constraint t"
+    by (auto simp add: t_def)
+
+  moreover have "get_and_list (convert_multiway t) = [convert_multiway t]"
+    unfolding t_def
+    by auto
+
+  ultimately obtain l where l_props:
+    "convert_multiway (And \<phi> t) = Ands l"
+    "set l = set (get_and_list (convert_multiway \<phi>)) \<union> {convert_multiway t}"
+    by (metis Un_insert_right convert_multiway.simps(8) empty_set list.simps(15) set_append sup_bot.right_neutral)
+
+  have t_sat: "sat \<sigma> V v i (convert_multiway t) = sat \<sigma> V v i t"
+    using And_Trigger(6-7)
+    unfolding t_def
+    by auto
+
+  have "(\<forall>\<phi> \<in> set l. sat \<sigma> V v i \<phi>) = sat \<sigma> V v i (And \<phi> (Trigger \<phi>' I \<psi>'))"
+  proof (cases "case (convert_multiway \<phi>) of (Ands l) \<Rightarrow> True | _ \<Rightarrow> False")
+    case True
+    then obtain l' where l'_props: "convert_multiway \<phi> = Ands l'" by (auto split: formula.splits)
+    then have "get_and_list (convert_multiway \<phi>) = l'"
+      by auto
+    moreover have "(\<forall>\<phi> \<in> set l'. sat \<sigma> V v i \<phi>) = sat \<sigma> V v i \<phi>"
+      using And_Trigger(5) l'_props
+      by auto
+    ultimately show ?thesis using t_sat l_props(2) unfolding t_def by auto
+  next
+    case False
+    then have "get_and_list (convert_multiway \<phi>) = [convert_multiway \<phi>]"
+      by (auto split: formula.splits)
+    moreover have "sat \<sigma> V v i (convert_multiway \<phi>) = sat \<sigma> V v i \<phi>"
+      using And_Trigger(5)
+      by auto
+    ultimately show ?thesis using t_sat l_props(2) unfolding t_def by auto
+  qed
+
+  then show ?case
+    using l_props(1)
+    unfolding t_def
+    by auto
 next
   case (And_Not_Trigger \<phi> \<phi>' I \<psi>')
-  then show ?case by auto
+  define t where "t = Trigger (Neg \<phi>') I \<psi>'"
+
+  have t_not_safe_assign: "\<not>safe_assignment (fv \<phi>) t"
+    unfolding safe_assignment_def
+    by (cases t) (auto simp add: t_def)
+
+  moreover have t_not_constraint: "\<not>is_constraint t"
+    by (auto simp add: t_def)
+
+  moreover have "get_and_list (convert_multiway t) = [convert_multiway t]"
+    unfolding t_def
+    by auto
+
+  ultimately obtain l where l_props:
+    "convert_multiway (And \<phi> t) = Ands l"
+    "set l = set (get_and_list (convert_multiway \<phi>)) \<union> {convert_multiway t}"
+    by (metis Un_insert_right convert_multiway.simps(8) empty_set list.simps(15) set_append sup_bot.right_neutral)
+
+  have t_sat: "sat \<sigma> V v i (convert_multiway t) = sat \<sigma> V v i t"
+    using And_Not_Trigger(6-7)
+    unfolding t_def
+    by auto
+
+  have "(\<forall>\<phi> \<in> set l. sat \<sigma> V v i \<phi>) = sat \<sigma> V v i (And \<phi> (Trigger (Neg \<phi>') I \<psi>'))"
+  proof (cases "case (convert_multiway \<phi>) of (Ands l) \<Rightarrow> True | _ \<Rightarrow> False")
+    case True
+    then obtain l' where l'_props: "convert_multiway \<phi> = Ands l'" by (auto split: formula.splits)
+    then have "get_and_list (convert_multiway \<phi>) = l'"
+      by auto
+    moreover have "(\<forall>\<phi> \<in> set l'. sat \<sigma> V v i \<phi>) = sat \<sigma> V v i \<phi>"
+      using And_Not_Trigger(5) l'_props
+      by auto
+    ultimately show ?thesis using t_sat l_props(2) unfolding t_def by auto
+  next
+    case False
+    then have "get_and_list (convert_multiway \<phi>) = [convert_multiway \<phi>]"
+      by (auto split: formula.splits)
+    moreover have "sat \<sigma> V v i (convert_multiway \<phi>) = sat \<sigma> V v i \<phi>"
+      using And_Not_Trigger(5)
+      by auto
+    ultimately show ?thesis using t_sat l_props(2) unfolding t_def by auto
+  qed
+
+  then show ?case
+    using l_props(1)
+    unfolding t_def
+    by auto
 next
   case (Agg y \<omega> b f \<phi>)
   then show ?case
@@ -2294,14 +3028,35 @@ next
   then show ?case
     by (auto simp add: nfv_convert_multiway fun_upd_def)
 next
-  case (Ands l)
-  have sat_remove_neg: "(sat \<sigma> V v i (remove_neg \<phi>) \<longleftrightarrow> sat \<sigma> V v i (remove_neg \<psi>)) \<longleftrightarrow>
-        (sat \<sigma> V v i \<phi> \<longleftrightarrow> sat \<sigma> V v i \<psi>)" if "is_Neg \<phi> \<longleftrightarrow> is_Neg \<psi>" for V v i \<phi> \<psi>
-    using that by (cases \<phi>; cases \<psi>) (auto simp add: is_Neg_def)
-  have is_Neg_cm: "is_Neg (convert_multiway \<phi>) \<longleftrightarrow> is_Neg \<phi>" for \<phi>
-    by (cases \<phi>) auto
-  from Ands show ?case
-    by (fastforce simp: list.pred_set convert_multiway_remove_neg sat_remove_neg[OF is_Neg_cm])
+  case (Ands l pos neg)
+  then have l_future_bounded: "list_all (\<lambda>a. sat \<sigma> V v i (convert_multiway a) = sat \<sigma> V v i a) l"
+  proof -
+    {
+      fix \<phi>
+      assume assm: "\<phi> \<in> set l"
+      then have "sat \<sigma> V v i (convert_multiway \<phi>) = sat \<sigma> V v i \<phi>"
+      proof (cases "\<phi> \<in> set pos")
+        case True
+        then show ?thesis using Ands(6) by (auto simp add: list_all_iff)
+      next
+        case False
+        then have \<phi>'_props: "case \<phi> of Neg \<phi>' \<Rightarrow> \<forall>x xa xaa. sat \<sigma> x xa xaa (convert_multiway \<phi>') = sat \<sigma> x xa xaa \<phi>'
+           | Trigger \<phi>' I \<psi>' \<Rightarrow>
+               (\<forall>x xa xaa. sat \<sigma> x xa xaa (convert_multiway \<psi>') = sat \<sigma> x xa xaa \<psi>') \<and>
+               (if mem I 0
+                then (\<forall>x xa xaa. sat \<sigma> x xa xaa (convert_multiway \<phi>') = sat \<sigma> x xa xaa \<phi>') \<or>
+                     (case \<phi>' of Neg \<phi>'' \<Rightarrow> \<forall>x xa xaa. sat \<sigma> x xa xaa (convert_multiway \<phi>'') = sat \<sigma> x xa xaa \<phi>'' | _ \<Rightarrow> False)
+                else \<forall>x xa xaa. sat \<sigma> x xa xaa (convert_multiway \<phi>') = sat \<sigma> x xa xaa \<phi>')
+           | _ \<Rightarrow> \<forall>x xa xaa. sat \<sigma> x xa xaa (convert_multiway \<phi>) = sat \<sigma> x xa xaa \<phi>"
+          using Ands(1,7) assm
+          by (auto simp add: list_all_iff)
+        then show ?thesis
+          by (cases \<phi>) (auto split: if_splits formula.splits)
+      qed
+    }
+    then show ?thesis by (auto simp add: list_all_iff)
+  qed
+  then show ?case by (auto simp add: list_all_iff)
 qed (auto cong: nat.case_cong)
 
 end (*context*)
