@@ -921,6 +921,11 @@ definition safe_formula_dual where "
     b \<and> (safe_formula \<phi> \<and> safe_formula \<psi> \<and> fv \<phi> = fv \<psi>))
 "
 
+lemma safe_formula_dual_impl:
+  assumes "\<forall>x. P x \<longrightarrow> Q x"
+  shows "safe_formula_dual b P \<phi> I \<psi> \<Longrightarrow> safe_formula_dual b Q \<phi> I \<psi>"
+  using assms unfolding safe_formula_dual_def by (auto split: if_splits formula.splits)
+
 lemma safe_formula_dual_size [fundef_cong]:
   assumes "\<And>f. size f \<le> size \<phi> + size \<psi> \<Longrightarrow> safe_formula f = safe_formula' f"
   shows "safe_formula_dual b safe_formula \<phi> I \<psi> = safe_formula_dual b safe_formula' \<phi> I \<psi>"
@@ -960,8 +965,8 @@ fun safe_formula :: "formula \<Rightarrow> bool" where
     (safe_formula \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False)))"
 | "safe_formula (Until \<phi> I \<psi>) = (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and>
     (safe_formula \<phi> \<or> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False)))"
-| "safe_formula (Trigger \<phi> I \<psi>) = safe_formula_dual False safe_formula \<phi> I \<psi>" (* TODO: remove False / once *)
-| "safe_formula (Release \<phi> I \<psi>) = safe_formula_dual False safe_formula \<phi> I \<psi>" (* TODO: remove False / once *)
+| "safe_formula (Trigger \<phi> I \<psi>) = safe_formula_dual False safe_formula \<phi> I \<psi>"
+| "safe_formula (Release \<phi> I \<psi>) = safe_formula_dual False safe_formula \<phi> I \<psi>"
 | "safe_formula (MatchP I r) = Regex.safe_regex fv (\<lambda>g \<phi>. safe_formula \<phi> \<or>
      (g = Lax \<and> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))) Past Strict r"
 | "safe_formula (MatchF I r) = Regex.safe_regex fv (\<lambda>g \<phi>. safe_formula \<phi> \<or>

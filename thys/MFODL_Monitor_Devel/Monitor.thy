@@ -33,9 +33,17 @@ fun mmonitorable_exec :: "Formula.formula \<Rightarrow> bool" where
 | "mmonitorable_exec (Formula.Or \<phi> \<psi>) = (fv \<phi> = fv \<psi> \<and> mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi>)"
 | "mmonitorable_exec (Formula.And \<phi> \<psi>) = (mmonitorable_exec \<phi> \<and>
     (safe_assignment (fv \<phi>) \<psi> \<or> mmonitorable_exec \<psi> \<or>
-      fv \<psi> \<subseteq> fv \<phi> \<and> (is_constraint \<psi> \<or> (case \<psi> of Formula.Neg \<psi>' \<Rightarrow> mmonitorable_exec \<psi>' | _ \<Rightarrow> False))))"
+      fv \<psi> \<subseteq> fv \<phi> \<and> (is_constraint \<psi> \<or> (case \<psi> of Formula.Neg \<psi>' \<Rightarrow> mmonitorable_exec \<psi>'
+        | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True mmonitorable_exec \<phi>' I \<psi>'
+        | _ \<Rightarrow> False
+      ))))"
 | "mmonitorable_exec (Formula.Ands l) = (let (pos, neg) = partition mmonitorable_exec l in
-    pos \<noteq> [] \<and> list_all mmonitorable_exec (map remove_neg neg) \<and>
+    pos \<noteq> [] \<and> list_all (\<lambda>\<phi>. (case \<phi> of
+        (Formula.Neg \<phi>') \<Rightarrow> mmonitorable_exec \<phi>'
+        | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True mmonitorable_exec \<phi>' I \<psi>'
+        | _ \<Rightarrow> mmonitorable_exec \<phi>
+      )
+    ) neg \<and>
     \<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos)))"
 | "mmonitorable_exec (Formula.Exists \<phi>) = (mmonitorable_exec \<phi>)"
 | "mmonitorable_exec (Formula.Agg y \<omega> b f \<phi>) = (mmonitorable_exec \<phi> \<and>
@@ -46,20 +54,8 @@ fun mmonitorable_exec :: "Formula.formula \<Rightarrow> bool" where
     (mmonitorable_exec \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False)) \<and> mmonitorable_exec \<psi>)"
 | "mmonitorable_exec (Formula.Until \<phi> I \<psi>) = (Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and> bounded I \<and>
     (mmonitorable_exec \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False)) \<and> mmonitorable_exec \<psi>)"
-| "mmonitorable_exec (Formula.Trigger \<phi> I \<psi>) = (if (mem I 0) then
-    (mmonitorable_exec \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (
-      mmonitorable_exec \<phi> \<or> safe_assignment (fv \<psi>) \<phi> \<or> is_constraint \<phi> \<or>
-      (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False)
-    ))
-      else
-    False \<and> (mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi> \<and> fv \<phi> = fv \<psi>))" (* TODO: remove False *)
-| "mmonitorable_exec (Formula.Release \<phi> I \<psi>) = (bounded I \<and> (if (mem I 0) then
-    (mmonitorable_exec \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (
-      mmonitorable_exec \<phi> \<or> safe_assignment (fv \<psi>) \<phi> \<or> is_constraint \<phi> \<or>
-      (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False)
-    ))
-      else
-    False \<and> (mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi> \<and> fv \<phi> = fv \<psi>)))" (* TODO: remove False *)
+| "mmonitorable_exec (Formula.Trigger \<phi> I \<psi>) = safe_formula_dual False mmonitorable_exec \<phi> I \<psi>"
+| "mmonitorable_exec (Formula.Release \<phi> I \<psi>) = (bounded I \<and> safe_formula_dual False mmonitorable_exec \<phi> I \<psi>)"
 | "mmonitorable_exec (Formula.MatchP I r) = Regex.safe_regex Formula.fv (\<lambda>g \<phi>. mmonitorable_exec \<phi> \<or> (g = Lax \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False))) Past Strict r"
 | "mmonitorable_exec (Formula.MatchF I r) = (Regex.safe_regex Formula.fv (\<lambda>g \<phi>. mmonitorable_exec \<phi> \<or> (g = Lax \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False))) Futu Strict r \<and> bounded I)"
 | "mmonitorable_exec _ = False"
@@ -68,20 +64,39 @@ lemma cases_Neg_iff:
   "(case \<phi> of formula.Neg \<psi> \<Rightarrow> P \<psi> | _ \<Rightarrow> False) \<longleftrightarrow> (\<exists>\<psi>. \<phi> = formula.Neg \<psi> \<and> P \<psi>)"
   by (cases \<phi>) auto
 
-lemma cheat: "P"
-  sorry
-
 lemma safe_formula_mmonitorable_exec: "safe_formula \<phi> \<Longrightarrow> Formula.future_bounded \<phi> \<Longrightarrow> mmonitorable_exec \<phi>"
 proof (induct \<phi> rule: safe_formula.induct)
-  case (8 \<phi> \<psi>)
-  then show ?case
-    unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
-    by (auto simp: cases_Neg_iff)
-next
   case (9 \<phi> \<psi>)
   then show ?case
-    unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
-    by (auto simp: cases_Neg_iff safe_formula_dual_def)
+  proof (cases "fv \<psi> \<subseteq> fv \<phi> \<and> (is_constraint \<psi> \<or> (case \<psi> of Formula.Neg \<psi>' \<Rightarrow> safe_formula \<psi>'
+      | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+      | _ \<Rightarrow> False
+    ))")
+    case True
+    then show ?thesis
+      using 9
+    proof (cases "is_constraint \<psi>")
+      case False
+      then have \<psi>_props: "(case \<psi> of Formula.Neg \<psi>' \<Rightarrow> safe_formula \<psi>'
+        | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+        | _ \<Rightarrow> False
+      )" using True
+        by auto
+      then show ?thesis
+      proof (cases "case \<psi> of Formula.Neg \<psi>' \<Rightarrow> safe_formula \<psi>' | _ \<Rightarrow> False")
+        case True
+        then obtain \<psi>' where "\<psi> = Formula.Neg \<psi>'" "safe_formula \<psi>'"
+          by (auto split:formula.splits)
+        then show ?thesis using 9 \<psi>_props by (auto split: formula.splits)
+      next
+        case False
+        then obtain \<phi>' I \<psi>' where "\<psi> = Formula.Trigger \<phi>' I \<psi>'" "safe_formula_dual True safe_formula \<phi>' I \<psi>'"
+          using \<psi>_props
+          by (auto split:formula.splits)
+        then show ?thesis using 9 \<psi>_props by (auto simp add: safe_formula_dual_def)
+      qed
+    qed (auto)
+  qed (auto)
 next
   case (10 l)
   from "10.prems"(2) have bounded: "Formula.future_bounded \<phi>" if "\<phi> \<in> set l" for \<phi>
@@ -96,35 +111,80 @@ next
     then show "x \<in> set posm" using \<open>x \<in> set poss\<close> posnegm posnegs by simp
   qed
   then have "set negm \<subseteq> set negs" using posnegm posnegs by auto
-  obtain "poss \<noteq> []" "list_all safe_formula (map remove_neg negs)"
+  obtain s_props: "poss \<noteq> []" "list_all (\<lambda>\<phi>. (case \<phi> of
+        Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>'
+        | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+        | _ \<Rightarrow> safe_formula \<phi>
+      )
+    ) negs"
     "(\<Union>x\<in>set negs. fv x) \<subseteq> (\<Union>x\<in>set poss. fv x)"
     using "10.prems"(1) posnegs by simp
   then have "posm \<noteq> []" using \<open>set poss \<subseteq> set posm\<close> by auto
-  moreover have "list_all mmonitorable_exec (map remove_neg negm)"
+  moreover have "list_all (\<lambda>\<phi>. (case \<phi> of
+        Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>'
+        | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True mmonitorable_exec \<phi>' I \<psi>'
+        | _ \<Rightarrow> mmonitorable_exec \<phi>
+      )
+    ) negm"
   proof -
-    let ?l = "map remove_neg negm"
-    have "\<And>x. x \<in> set ?l \<Longrightarrow> mmonitorable_exec x"
+    have "\<And>\<phi>. \<phi> \<in> set negm \<Longrightarrow> (case \<phi> of
+        Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>'
+        | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True mmonitorable_exec \<phi>' I \<psi>'
+        | _ \<Rightarrow> mmonitorable_exec \<phi>
+      )"
     proof -
-      fix x assume "x \<in> set ?l"
-      then obtain y where "y \<in> set negm" "x = remove_neg y" by auto
-      then have "y \<in> set negs" using \<open>set negm \<subseteq> set negs\<close> by blast
-      then have "safe_formula x"
-        unfolding \<open>x = remove_neg y\<close> using \<open>list_all safe_formula (map remove_neg negs)\<close>
+      fix x assume "x \<in> set negm"
+      then have x_mem: "x \<in> set negs" using \<open>set negm \<subseteq> set negs\<close> by blast
+      then have x_props: "(case x of
+          Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>'
+          | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+          | _ \<Rightarrow> safe_formula x
+        )"
+        using s_props(2)
         by (simp add: list_all_def)
-      show "mmonitorable_exec x"
-      proof (cases "\<exists>z. y = Formula.Neg z")
+      show "case x of
+        Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>'
+        | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True mmonitorable_exec \<phi>' I \<psi>'
+        | _ \<Rightarrow> mmonitorable_exec x"
+      proof (cases "\<exists>z. x = Formula.Neg z")
         case True
-        then obtain z where "y = Formula.Neg z" by blast
+        then obtain z where z_props: "x = Formula.Neg z" "safe_formula z" using x_props by auto
         then show ?thesis
-          using "10.hyps"(2)[OF posnegs refl] \<open>x = remove_neg y\<close> \<open>y \<in> set negs\<close> posnegs bounded
-            \<open>safe_formula x\<close> by fastforce
+          using "10.hyps"(7)[OF posnegs refl x_mem z_props] posnegs bounded[of x] x_mem
+          by (auto simp add: o_def split: formula.splits)
       next
-        case False
-        then have "remove_neg y = y" by (cases y) simp_all
-        then have "y = x" unfolding \<open>x = remove_neg y\<close> by simp
+        case not_neg: False
         show ?thesis
-          using "10.hyps"(1) \<open>y \<in> set negs\<close> posnegs \<open>safe_formula x\<close> unfolding \<open>y = x\<close>
-          by auto
+        proof (cases "\<exists>\<phi>' I \<psi>'. x = Formula.Trigger \<phi>' I \<psi>'")
+          case True
+          have x_mem_l: "x \<in> set l"
+            using posnegs x_mem
+            by auto
+          obtain \<phi>' I \<psi>' where x_def: "x = Formula.Trigger \<phi>' I \<psi>'"
+            using True
+            by auto
+          then have "safe_formula_dual True safe_formula \<phi>' I \<psi>'"
+            using x_props by auto
+          then have "safe_formula_dual True mmonitorable_exec \<phi>' I \<psi>'"
+            using 10(17)[OF posnegs refl x_mem x_def] bounded[OF x_mem_l]
+            unfolding safe_formula_dual_def x_def
+            apply (auto split: if_splits)
+            using posnegs safe_formula_dual_def x_def x_mem
+            by auto
+          then show ?thesis
+            using x_def
+            by auto
+        next
+          case False
+          then have safe: "safe_formula x"
+            using not_neg x_props
+            by (auto split: formula.splits)
+          have x_mem: "x \<in> set l"
+            using posnegs x_mem
+            by auto
+          have "mmonitorable_exec x" using 10(1)[OF x_mem safe] posnegs bounded[OF x_mem] by auto
+          then show ?thesis using \<open>x \<in> set negm\<close> posnegm by auto
+        qed
       qed
     qed
     then show ?thesis by (simp add: list_all_iff)
@@ -141,7 +201,7 @@ next
   case (20 I r)
   then show ?case
     by (auto elim!: safe_regex_mono[rotated] simp: cases_Neg_iff regex.pred_set)
-qed (auto simp add: is_simple_eq_def list.pred_set cases_Neg_iff intro: cheat split: if_splits)
+qed (auto simp add: is_simple_eq_def list.pred_set cases_Neg_iff safe_formula_dual_def split: if_splits)
 
 lemma safe_assignment_future_bounded: "safe_assignment X \<phi> \<Longrightarrow> Formula.future_bounded \<phi>"
   unfolding safe_assignment_def by (auto split: formula.splits)
@@ -152,49 +212,196 @@ lemma is_constraint_future_bounded: "is_constraint \<phi> \<Longrightarrow> Form
 lemma mmonitorable_exec_mmonitorable: "mmonitorable_exec \<phi> \<Longrightarrow> mmonitorable \<phi>"
 proof (induct \<phi> rule: mmonitorable_exec.induct)
   case (7 \<phi> \<psi>)
-  then show ?case
-    unfolding mmonitorable_def mmonitorable_exec.simps safe_formula.simps
-    by (auto simp: cases_Neg_iff intro: safe_assignment_future_bounded is_constraint_future_bounded)
+  show ?case
+  proof (cases "\<exists>\<psi>'. \<psi> = Formula.Neg \<psi>'")
+    case True
+    then show ?thesis
+      using 7
+      unfolding mmonitorable_def
+      by (auto intro: safe_assignment_future_bounded is_constraint_future_bounded)
+  next
+    case non_neg: False
+    then show ?thesis
+    proof (cases "\<exists>\<phi>' I \<psi>'. \<psi> = Formula.Trigger \<phi>' I \<psi>'")
+      case True
+      then obtain \<phi>' I \<psi>' where \<psi>_def: "\<psi> = Formula.Trigger \<phi>' I \<psi>'"
+        by blast
+      then show ?thesis
+        using 7(1-2,5) 7(4)[OF \<psi>_def]
+        unfolding mmonitorable_def
+        by (auto simp add: safe_assignment_def safe_formula_dual_def intro: is_constraint_future_bounded)
+    next
+      case False
+      then have "mmonitorable_exec \<phi> \<and> (safe_assignment (fv \<phi>) \<psi> \<or> mmonitorable_exec \<psi> \<or> fv \<psi> \<subseteq> fv \<phi> \<and> is_constraint \<psi>)"
+        using non_neg 7(5)
+        by (auto split: formula.splits)
+      then show ?thesis
+        using non_neg 7
+        unfolding mmonitorable_def
+        by (auto intro: safe_assignment_future_bounded is_constraint_future_bounded)
+    qed
+  qed
 next
   case (8 l)
   obtain poss negs where posnegs: "(poss, negs) = partition safe_formula l" by simp
   obtain posm negm where posnegm: "(posm, negm) = partition mmonitorable_exec l" by simp
   have pos_monitorable: "list_all mmonitorable_exec posm" using posnegm by (simp add: list_all_iff)
-  have neg_monitorable: "list_all mmonitorable_exec (map remove_neg negm)"
+  have neg_monitorable: "list_all (\<lambda>\<phi>. (case \<phi> of
+        (Formula.Neg \<phi>') \<Rightarrow> mmonitorable_exec \<phi>'
+        | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True mmonitorable_exec \<phi>' I \<psi>'
+        | _ \<Rightarrow> mmonitorable_exec \<phi>
+      )
+    ) negm"
     using "8.prems" posnegm by (simp add: list_all_iff)
   have "set posm \<subseteq> set poss"
     using "8.hyps"(1) posnegs posnegm unfolding mmonitorable_def by auto
-  then have "set negs \<subseteq> set negm"
+  then have neg_subset: "set negs \<subseteq> set negm"
     using posnegs posnegm by auto
 
+  have list_all_mmonitorable:
+    "list_all (\<lambda>\<phi>. (case \<phi> of
+        (Formula.Neg \<phi>') \<Rightarrow> safe_formula \<phi>'
+        | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+        | _ \<Rightarrow> safe_formula \<phi>
+      )
+    ) negm"
+    "list_all Formula.future_bounded negm"
+  proof -
+    {
+      fix \<phi>
+      assume assm: "\<phi> \<in> set negm"
+      then have "case \<phi> of
+        (Formula.Neg \<phi>') \<Rightarrow> mmonitorable \<phi>'
+        | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True mmonitorable \<phi>' I \<psi>'
+        | _ \<Rightarrow> mmonitorable \<phi>"
+      proof (cases "\<exists>\<phi>'. \<phi> = Formula.Neg \<phi>'")
+        case True
+        then obtain \<phi>' where \<phi>_def: "\<phi> = Formula.Neg \<phi>'"
+          by blast
+        then have "mmonitorable_exec \<phi>'"
+          using neg_monitorable assm
+          by (auto split: formula.splits simp: list_all_iff)
+        then show ?thesis
+          using 8(7)[OF posnegm refl _ \<phi>_def] assm \<phi>_def
+          unfolding mmonitorable_def
+          by (auto split: formula.splits)
+      next
+        case no_neg: False
+        then show ?thesis
+        proof (cases "\<exists>\<phi>' I \<psi>'. \<phi> = Formula.Trigger \<phi>' I \<psi>'")
+          case True
+          then obtain \<phi>' I \<psi>' where \<phi>_def: "\<phi> = Formula.Trigger \<phi>' I \<psi>'"
+            by blast
+          then have "safe_formula_dual True mmonitorable_exec \<phi>' I \<psi>'"
+            using neg_monitorable assm
+            by (auto split: formula.splits simp: list_all_iff)
+          moreover have
+            "mmonitorable_exec \<phi>' \<Longrightarrow> mmonitorable \<phi>'"
+            "mmonitorable_exec \<psi>' \<Longrightarrow> mmonitorable \<psi>'"
+            using 8(17)[OF posnegm refl _ \<phi>_def] assm
+            by auto
+          ultimately have "safe_formula_dual True mmonitorable \<phi>' I \<psi>'"
+            unfolding safe_formula_dual_def
+            apply (auto split: if_splits)
+            using \<phi>_def assm posnegm safe_formula_dual_def by auto
+          then show ?thesis using \<phi>_def by (auto split: formula.splits)
+        next
+          case False
+          moreover have "case \<phi> of
+          (Formula.Neg \<phi>') \<Rightarrow> mmonitorable_exec \<phi>'
+          | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True mmonitorable_exec \<phi>' I \<psi>'
+          | _ \<Rightarrow> mmonitorable_exec \<phi>"
+            using neg_monitorable assm
+            by (auto simp: list_all_iff)
+          ultimately have "mmonitorable_exec \<phi>"
+            using no_neg neg_monitorable assm
+            by (auto split: formula.splits)
+          then have "mmonitorable \<phi>"
+            using 8(1)[of \<phi>] using assm posnegm
+            by auto
+          then show ?thesis using no_neg False by (auto split: formula.splits)
+        qed
+      qed
+    }
+    then have \<phi>_props: "\<forall>\<phi> \<in> set negm. (case \<phi> of
+      (Formula.Neg \<phi>') \<Rightarrow> mmonitorable \<phi>'
+      | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True mmonitorable \<phi>' I \<psi>'
+      | _ \<Rightarrow> mmonitorable \<phi>)"
+      by auto
+    {
+      fix \<phi>
+      assume "\<phi> \<in> set negm"
+      then have \<phi>_props: "case \<phi> of
+        (Formula.Neg \<phi>') \<Rightarrow> mmonitorable \<phi>'
+        | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True mmonitorable \<phi>' I \<psi>'
+        | _ \<Rightarrow> mmonitorable \<phi>"
+        using \<phi>_props
+        by auto
+
+      then have "case \<phi> of
+      (Formula.Neg \<phi>') \<Rightarrow> safe_formula \<phi>'
+      | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+      | _ \<Rightarrow> safe_formula \<phi>"
+        using safe_formula_dual_impl[of mmonitorable safe_formula]
+        unfolding mmonitorable_def
+        by (cases \<phi>) (auto)
+    }
+    then show "list_all (\<lambda>\<phi>. (case \<phi> of
+      (Formula.Neg \<phi>') \<Rightarrow> safe_formula \<phi>'
+      | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>'
+      | _ \<Rightarrow> safe_formula \<phi>)) negm"
+      by (auto simp: list_all_iff)
+
+    {
+      fix \<phi>
+      assume "\<phi> \<in> set negm"
+      then have \<phi>_props: "case \<phi> of
+        (Formula.Neg \<phi>') \<Rightarrow> mmonitorable \<phi>'
+        | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> safe_formula_dual True mmonitorable \<phi>' I \<psi>'
+        | _ \<Rightarrow> mmonitorable \<phi>"
+        using \<phi>_props
+        by auto
+
+      have trigger_future_bounded: "\<And>\<phi> I \<psi>. safe_formula_dual True Formula.future_bounded \<phi> I \<psi> \<Longrightarrow> Formula.future_bounded (Formula.Trigger \<phi> I \<psi>)"
+        unfolding safe_formula_dual_def mmonitorable_def
+        by (auto split: if_splits formula.splits)
+
+      then have "Formula.future_bounded \<phi>"
+        using \<phi>_props
+        unfolding mmonitorable_def
+      proof (cases \<phi>)
+        case (Trigger \<phi>' I \<psi>')
+        then have "safe_formula_dual True mmonitorable \<phi>' I \<psi>'"
+          using \<phi>_props
+          by auto
+        then have "safe_formula_dual True Formula.future_bounded \<phi>' I \<psi>'"
+          using safe_formula_dual_impl[of mmonitorable Formula.future_bounded]
+          unfolding mmonitorable_def
+          by auto
+        then show ?thesis using trigger_future_bounded Trigger by auto
+        qed (auto)
+    }
+    then show "list_all Formula.future_bounded negm"
+      by (auto simp: list_all_iff)
+  qed
+
+
   have "poss \<noteq> []" using "8.prems" posnegm \<open>set posm \<subseteq> set poss\<close> by auto
-  moreover have "list_all safe_formula (map remove_neg negs)"
-    using neg_monitorable "8.hyps"(2)[OF posnegm refl] \<open>set negs \<subseteq> set negm\<close>
-    unfolding mmonitorable_def by (auto simp: list_all_iff)
   moreover have "\<Union> (fv ` set negm) \<subseteq> \<Union> (fv ` set posm)"
     using "8.prems" posnegm by simp
   then have "\<Union> (fv ` set negs) \<subseteq> \<Union> (fv ` set poss)"
     using \<open>set posm \<subseteq> set poss\<close> \<open>set negs \<subseteq> set negm\<close> by fastforce
-  ultimately have "safe_formula (Formula.Ands l)" using posnegs by simp
+  ultimately have "safe_formula (Formula.Ands l)"
+    using posnegs list_all_mmonitorable(1) neg_subset
+    by (auto simp: list_all_iff)
   moreover have "Formula.future_bounded (Formula.Ands l)"
   proof -
     have "list_all Formula.future_bounded posm"
       using pos_monitorable "8.hyps"(1) posnegm unfolding mmonitorable_def
       by (auto elim!: list.pred_mono_strong)
-    moreover have fnegm: "list_all Formula.future_bounded (map remove_neg negm)"
-      using neg_monitorable "8.hyps"(2) posnegm unfolding mmonitorable_def
-      by (auto elim!: list.pred_mono_strong)
-    then have "list_all Formula.future_bounded negm"
-    proof -
-      have "\<And>x. x \<in> set negm \<Longrightarrow> Formula.future_bounded x"
-      proof -
-        fix x assume "x \<in> set negm"
-        have "Formula.future_bounded (remove_neg x)" using fnegm \<open>x \<in> set negm\<close> by (simp add: list_all_iff)
-        then show "Formula.future_bounded x" by (cases x) auto
-      qed
-      then show ?thesis by (simp add: list_all_iff)
-    qed
-    ultimately have "list_all Formula.future_bounded l" using posnegm by (auto simp: list_all_iff)
+    then have "list_all Formula.future_bounded l"
+      using list_all_mmonitorable(2) posnegm
+      by (auto simp: list_all_iff)
     then show ?thesis by (auto simp: list_all_iff)
   qed
   ultimately show ?case unfolding mmonitorable_def ..
@@ -215,12 +422,12 @@ next
     case mem: True
     then show ?thesis
       using 15
-      by (auto simp add: cases_Neg_iff mmonitorable_def split: if_splits)
+      by (auto simp add: cases_Neg_iff mmonitorable_def safe_formula_dual_def split: if_splits)
   next
     case False
     then show ?thesis
       using 15
-      by (auto simp add: cases_Neg_iff mmonitorable_def split: if_splits)
+      by (auto simp add: cases_Neg_iff mmonitorable_def safe_formula_dual_def split: if_splits)
   qed
 next
   case (16 \<phi> I \<psi>)
@@ -229,12 +436,12 @@ next
     case mem: True
     then show ?thesis
       using 16
-      by (auto simp add: cases_Neg_iff mmonitorable_def split: if_splits)
+      by (auto simp add: cases_Neg_iff mmonitorable_def safe_formula_dual_def split: if_splits)
   next
     case False
     then show ?thesis
       using 16
-      by (auto simp add: cases_Neg_iff mmonitorable_def split: if_splits)
+      by (auto simp add: cases_Neg_iff mmonitorable_def safe_formula_dual_def split: if_splits)
   qed
 next
   case (17 I r)
@@ -782,29 +989,35 @@ locale msaux =
     and valid_result_msaux: "valid_msaux args cur aux auxlist \<Longrightarrow> result_msaux args aux =
     foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist, memL (args_ivl args) (cur - t)] {}"
 
-fun trigger_results :: "args \<Rightarrow> ts \<Rightarrow> 'a mtaux \<Rightarrow> 'a table" where
-  "trigger_results args cur auxlist = {
-    tuple. wf_tuple (args_n args) (args_R args) tuple \<and>
-      (length (filter (\<lambda> (t, _, _). mem (args_ivl args) (cur - t)) auxlist) > 0) \<and>
-      \<comment> \<open>pretty much the definition of trigger\<close>
-      (\<forall>i \<in> {0..<(length auxlist)}.
-        let (t, l, r) = auxlist!i in
-        mem (args_ivl args) (cur - t) \<longrightarrow> 
-        \<comment> \<open>either \<psi> holds or there is a later database where the same tuple satisfies \<phi>\<close>
-        (
-          tuple \<in> r \<or>
-          (\<exists>j \<in> {i<..<(length auxlist)}.
-            (proj_tuple (join_mask (args_n args) (args_L args)) tuple) \<in> (fst o snd) (auxlist!j) \<comment> \<open>t < t' is given as the list is sorted\<close>
+fun trigger_results :: "args \<Rightarrow> ts \<Rightarrow> event_data mtaux \<Rightarrow> (nat set \<times> event_data table)" where
+  "trigger_results args cur auxlist = (
+    if (length (filter (\<lambda> (t, _, _). mem (args_ivl args) (cur - t)) auxlist) > 0) then (
+      (args_R args), {
+      tuple. wf_tuple (args_n args) (args_R args) tuple \<and>
+        \<comment> \<open>pretty much the definition of trigger\<close>
+        (\<forall>i \<in> {0..<(length auxlist)}.
+          let (t, l, r) = auxlist!i in
+          mem (args_ivl args) (cur - t) \<longrightarrow> 
+          \<comment> \<open>either \<psi> holds or there is a later database where the same tuple satisfies \<phi>\<close>
+          (
+            tuple \<in> r \<or>
+            (\<exists>j \<in> {i<..<(length auxlist)}.
+              join_cond (args_pos args) ((fst o snd) (auxlist!j)) (proj_tuple (join_mask (args_n args) (args_L args)) tuple) \<comment> \<open>t < t' is given as the list is sorted\<close>
+            )
           )
         )
-      )
-}"
+      }
+    ) else
+    ({}, {replicate (args_n args) None})
+)"
 
 locale mtaux =
   fixes valid_mtaux :: "args \<Rightarrow> ts \<Rightarrow> 'mtaux \<Rightarrow> event_data mtaux \<Rightarrow> bool"
     and init_mtaux :: "args \<Rightarrow> 'mtaux"
     and update_mtaux :: "args \<Rightarrow> ts \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> 'mtaux \<Rightarrow> 'mtaux"
-    and result_mtaux :: "args \<Rightarrow> 'mtaux \<Rightarrow> event_data table"
+    (* and update_mtaux_constraint :: "args \<Rightarrow> ts \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> 'mtaux \<Rightarrow> 'mtaux" *)
+    (* and update_mtaux_safe_assignment :: "args \<Rightarrow> ts \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> 'mtaux \<Rightarrow> 'mtaux" *)
+    and result_mtaux :: "args \<Rightarrow> 'mtaux \<Rightarrow> (nat set \<times> event_data table)"
 
   (* the initial state should be valid *)
   assumes valid_init_mtaux: "(
@@ -917,7 +1130,7 @@ locale maux = msaux valid_msaux init_msaux add_new_ts_msaux join_msaux add_new_t
     and valid_mtaux :: "args \<Rightarrow> ts \<Rightarrow> 'mtaux \<Rightarrow> event_data mtaux \<Rightarrow> bool"
     and init_mtaux :: "args \<Rightarrow> 'mtaux"
     and update_mtaux :: "args \<Rightarrow> ts \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> 'mtaux \<Rightarrow> 'mtaux"
-    and result_mtaux :: "args \<Rightarrow> 'mtaux \<Rightarrow> event_data table"
+    and result_mtaux :: "args \<Rightarrow> 'mtaux \<Rightarrow> (nat set \<times> event_data table)"
 
 fun split_assignment :: "nat set \<Rightarrow> Formula.formula \<Rightarrow> nat \<times> Formula.trm" where
   "split_assignment X (Formula.Eq t1 t2) = (case (t1, t2) of

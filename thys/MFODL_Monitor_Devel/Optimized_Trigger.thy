@@ -30,7 +30,7 @@ fun trigger_results :: "args \<Rightarrow> ts \<Rightarrow> 'a mtaux \<Rightarro
           (
             tuple \<in> r \<or>
             (\<exists>j \<in> {i<..<(length auxlist)}.
-              join_cond (args_pos args) (relL (auxlist!j)) (proj_tuple (join_mask (args_n args) (args_L args)) tuple) \<comment> \<open>t < t' is given as the list is sorted\<close>
+              join_cond (args_pos args) ((fst o snd) (auxlist!j)) (proj_tuple (join_mask (args_n args) (args_L args)) tuple) \<comment> \<open>t < t' is given as the list is sorted\<close>
             )
           )
         )
@@ -943,6 +943,7 @@ proof -
         qed                
         ultimately have "tuple \<in> snd (trigger_results args mt auxlist)"
           using non_empty
+          unfolding relL_def
           by fastforce
       }
       moreover {
@@ -1171,6 +1172,7 @@ proof -
             by auto
           ultimately have "tuple \<in> snd (trigger_results args mt auxlist)"
             using non_empty wf
+            unfolding relL_def
             by fastforce
         }
         ultimately have "tuple \<in> snd (trigger_results args mt auxlist)"
@@ -1205,6 +1207,7 @@ proof -
           )
         )"
         using el non_empty_alt
+        unfolding relL_def
         by fastforce
       then have tuple_props: "(\<forall>i \<in> {0..<(length auxlist)}.
           mem (args_ivl args) (cur - time (auxlist!i)) \<longrightarrow> 
