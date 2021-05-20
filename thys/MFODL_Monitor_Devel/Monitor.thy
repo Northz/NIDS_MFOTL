@@ -898,6 +898,7 @@ subsection \<open>The executable monitor\<close>
 type_synonym ts = nat
 
 type_synonym 'a mbuf2 = "'a table list \<times> 'a table list"
+type_synonym 'a mbuf2_dual = "('a table) list \<times> (nat set \<times> 'a table) list"
 type_synonym 'a mbufn = "'a table list list"
 type_synonym 'a msaux = "(ts \<times> 'a table) list"
 type_synonym 'a mtaux = "(ts \<times> 'a table \<times> 'a table) list"
@@ -921,6 +922,7 @@ datatype (dead 'msaux, dead 'muaux, dead 'mtaux) mformula =
   | MAnd "nat set" "('msaux, 'muaux, 'mtaux) mformula" bool "nat set" "('msaux, 'muaux, 'mtaux) mformula" "event_data mbuf2"
   | MAndAssign "('msaux, 'muaux, 'mtaux) mformula" "nat \<times> Formula.trm"
   | MAndRel "('msaux, 'muaux, 'mtaux) mformula" "Formula.trm \<times> bool \<times> mconstraint \<times> Formula.trm"
+  | MAndTrigger "nat set" "('msaux, 'muaux, 'mtaux) mformula" "event_data mbuf2_dual" args "('msaux, 'muaux, 'mtaux) mformula" "('msaux, 'muaux, 'mtaux) mformula" "event_data mbuf2" "ts list" "'mtaux"
   | MAnds "nat set list" "nat set list" "('msaux, 'muaux, 'mtaux) mformula list" "event_data mbufn"
   | MOr "('msaux, 'muaux, 'mtaux) mformula" "('msaux, 'muaux, 'mtaux) mformula" "event_data mbuf2"
   | MNeg "('msaux, 'muaux, 'mtaux) mformula"
@@ -1148,6 +1150,13 @@ fun split_constraint :: "Formula.formula \<Rightarrow> Formula.trm \<times> bool
 | "split_constraint (Formula.Neg (Formula.LessEq t1 t2)) = (t1, False, MLessEq, t2)"
 | "split_constraint _ = undefined"
 
+fun remove_neg :: "Formula.formula \<Rightarrow> Formula.formula" where
+  "remove_neg (Formula.Neg \<phi>) = \<phi>"
+| "remove_neg \<phi> = \<phi>"
+
+lemma size_remove_neg[termination_simp]: "size (remove_neg \<phi>) \<le> size \<phi>"
+  by (cases \<phi>) simp_all
+
 function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<Rightarrow> ('msaux, 'muaux, 'mtaux) mformula" where
   "minit0 n (Formula.Neg \<phi>) = (if fv \<phi> = {} then MNeg (minit0 n \<phi>) else MRel empty_table)"
 | "minit0 n (Formula.Eq t1 t2) = MRel (eq_rel n t1 t2)"
@@ -1160,11 +1169,23 @@ function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<R
       MAnd (fv \<phi>) (minit0 n \<phi>) True (fv \<psi>) (minit0 n \<psi>) ([], [])
     else if is_constraint \<psi> then
       MAndRel (minit0 n \<phi>) (split_constraint \<psi>)
-    else (case \<psi> of Formula.Neg \<psi> \<Rightarrow>
-      MAnd (fv \<phi>) (minit0 n \<phi>) False (fv \<psi>) (minit0 n \<psi>) ([], [])))"
+    else (case \<psi> of
+        (Formula.Neg \<psi>) \<Rightarrow> MAnd (fv \<phi>) (minit0 n \<phi>) False (fv \<psi>) (minit0 n \<psi>) ([], [])
+      | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow>
+          (if safe_formula \<phi>'
+            then
+              MAndTrigger (fv \<phi>) (minit0 n \<phi>) ([], []) (init_args I n (Formula.fv \<phi>') (Formula.fv \<psi>') True) (minit0 n \<phi>') (minit0 n \<psi>') ([], []) [] (init_mtaux (init_args I n (Formula.fv \<phi>') (Formula.fv \<psi>') True))
+            else (
+              case \<phi> of
+                (Formula.Neg \<phi>) \<Rightarrow> MAndTrigger (fv \<phi>) (minit0 n \<phi>) ([], []) (init_args I n (Formula.fv \<phi>') (Formula.fv \<psi>') True) (minit0 n \<phi>') (minit0 n \<psi>') ([], []) [] (init_mtaux (init_args I n (Formula.fv \<phi>') (Formula.fv \<psi>') False))
+              | _ \<Rightarrow> undefined
+            )
+          )
+      )
+)"
 | "minit0 n (Formula.Ands l) = (let (pos, neg) = partition safe_formula l in
     let mpos = map (minit0 n) pos in
-    let mneg = map (minit0 n) (map remove_neg neg) in
+    let mneg = map (minit0 n) (map remove_neg neg) in \<comment> \<open>Trigger is passed as is\<close>
     let vpos = map fv pos in
     let vneg = map fv neg in
     MAnds vpos vneg (mpos @ mneg) (replicate (length l) []))"
@@ -1214,15 +1235,14 @@ fun mprev_next :: "\<I> \<Rightarrow> event_data table list \<Rightarrow> ts lis
 | "mprev_next I (x # xs) (t # t' # ts) = (let (ys, zs) = mprev_next I xs (t' # ts)
     in ((if mem I ((t' - t)) then x else empty_table) # ys, zs))"
 
-fun mbuf2_add :: "event_data table list \<Rightarrow> event_data table list \<Rightarrow> event_data mbuf2 \<Rightarrow> event_data mbuf2" where
+fun mbuf2_add where
   "mbuf2_add xs' ys' (xs, ys) = (xs @ xs', ys @ ys')"
 
-fun mbuf2_take :: "(event_data table \<Rightarrow> event_data table \<Rightarrow> 'b) \<Rightarrow> event_data mbuf2 \<Rightarrow> 'b list \<times> event_data mbuf2" where
+fun mbuf2_take where
   "mbuf2_take f (x # xs, y # ys) = (let (zs, buf) = mbuf2_take f (xs, ys) in (f x y # zs, buf))"
 | "mbuf2_take f (xs, ys) = ([], (xs, ys))"
 
-fun mbuf2t_take :: "(event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'b \<Rightarrow>
-    event_data mbuf2 \<Rightarrow> ts list \<Rightarrow> 'b \<times> event_data mbuf2 \<times> ts list" where
+fun mbuf2t_take where
   "mbuf2t_take f z (x # xs, y # ys) (t # ts) = mbuf2t_take f (f x y t z) (xs, ys) ts"
 | "mbuf2t_take f z (xs, ys) ts = (z, (xs, ys), ts)"
 
@@ -1411,6 +1431,21 @@ primrec (in maux) meval :: "nat \<Rightarrow> ts list \<Rightarrow> Formula.data
     (let (xs, \<phi>) = meval n ts db \<phi> in (map (\<lambda>r. eval_assignment conf ` r) xs, MAndAssign \<phi> conf))"
 | "meval n ts db (MAndRel \<phi> conf) =
     (let (xs, \<phi>) = meval n ts db \<phi> in (map (Set.filter (eval_constraint conf)) xs, MAndRel \<phi> conf))"
+| "meval n ts db (MAndTrigger V_\<phi> \<phi> buf1 args \<phi>' \<psi>' buf2 nts aux) = (let
+    (as, \<phi>) = meval n ts db \<phi>;
+    (xs, \<phi>') = meval n ts db \<phi>';
+    (ys, \<psi>') = meval n ts db \<psi>';
+    ((zs_trigger, aux), buf2, nts) = mbuf2t_take (\<lambda>r1 r2 t (zs, aux).
+        let aux       = update_mtaux args t r1 r2 aux;
+            (fv_z, z) = result_mtaux args aux
+        in (zs @ [(fv_z, z)], aux)) ([], aux) (mbuf2_add xs ys buf2) (nts @ ts);
+     \<comment> \<open>analogous to MAnd\<close>
+    (zs, buf1) = mbuf2_take (\<lambda>r1 (V_trigger, r2).
+        bin_join n V_\<phi> r1 True V_trigger r2 \<comment> \<open>fix pos=True as the rhs in this case always is, see minit0. should (And \<phi> (Neg (Trigger))) = Since be allowed?\<close>
+    ) (mbuf2_add as zs_trigger buf1)
+    in
+    ([], MAndTrigger V_\<phi> \<phi> buf1 args \<phi>' \<psi>' buf2 nts aux)
+)"
 | "meval n ts db (MAnds A_pos A_neg L buf) =
     (let R = map (meval n ts db) L in
     let buf = mbufn_add (map fst R) buf in
@@ -1451,8 +1486,9 @@ primrec (in maux) meval :: "nat \<Rightarrow> ts list \<Rightarrow> Formula.data
 | "meval n ts db (MTrigger args \<phi> \<psi> buf nts aux) =
     (let (xs, \<phi>) = meval n ts db \<phi>; (ys, \<psi>) = meval n ts db \<psi>;
       ((zs, aux), buf, nts) = mbuf2t_take (\<lambda>r1 r2 t (zs, aux).
-        let aux = update_mtaux args t r1 r2 aux;
-            z   = result_mtaux args aux
+        let aux       = update_mtaux args t r1 r2 aux;
+        \<comment> \<open>if trigger is evaluated alone, ignore the set of free variables (fv_z)\<close>
+            (fv_z, z) = result_mtaux args aux
         in (zs @ [z], aux)) ([], aux) (mbuf2_add xs ys buf) (nts @ ts)
     in (zs, MTrigger args \<phi> \<psi> buf nts aux))"
 | "meval n ts db (MMatchP I mr mrs \<phi>s buf nts aux) =
