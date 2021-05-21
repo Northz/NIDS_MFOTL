@@ -416,6 +416,7 @@ fun dominate_True :: "nat set list \<Rightarrow> 'a table list \<Rightarrow>
   ((nat set list \<times> nat set \<times> nat set list \<times> nat set \<times> nat set list) \<times>
   ('a table list \<times> 'a table \<times> 'a table list \<times> 'a table \<times> 'a table list)) option" where
   "dominate_True A_pos L_pos = (case find_sub_True A_pos of None \<Rightarrow> None
+  \<comment> \<open>find_sub_True xs = Some (ys, w, ws, z, zs) \<Longrightarrow> xs = ys @ w # ws @ z # zs \<and> (z \<subseteq> w \<or> w \<subseteq> z)\<close>
   | Some split \<Rightarrow> Some (split, proj_list_5 L_pos split))"
 
 lemma find_sub_True_proj_list_5_same:
@@ -450,6 +451,7 @@ fun dominate_False :: "nat set list \<Rightarrow> 'a table list \<Rightarrow> na
   'a table list \<times> 'a table \<times> 'a table list)) option" where
   "dominate_False A_pos L_pos A_neg L_neg = (case find_sub_False A_pos A_neg of None \<Rightarrow> None
   | Some (pos_split, neg_split) \<Rightarrow>
+    \<comment> \<open>find_sub_False xs ns = Some ((rs, w, ws), (ys, z, zs)) \<Longrightarrow> xs = rs @ w # ws \<and> ns = ys @ z # zs \<and> (z \<subseteq> w)\<close>
     Some ((pos_split, neg_split), (proj_list_3 L_pos pos_split, proj_list_3 L_neg neg_split)))"
 
 lemma find_sub_False_proj_list_3_same_left:
@@ -502,15 +504,31 @@ lemma dominate_False_sound:
 
 function mmulti_join :: "(nat \<Rightarrow> nat set list \<Rightarrow> nat set list \<Rightarrow> 'a table list \<Rightarrow> 'a table)" where
   "mmulti_join n A_pos A_neg L = (if length A_pos + length A_neg \<noteq> length L then {} else
-    let L_pos = take (length A_pos) L; L_neg = drop (length A_pos) L in
-    (case dominate_True A_pos L_pos of None \<Rightarrow>
-      (case dominate_False A_pos L_pos A_neg L_neg of None \<Rightarrow> mmulti_join' A_pos A_neg L
-      | Some (((A_zs, A_x, A_xs), A_ws, A_y, A_ys), ((zs, x, xs), ws, y, ys)) \<Rightarrow>
-        mmulti_join n (A_zs @ A_x # A_xs) (A_ws @ A_ys)
-        ((zs @ bin_join n A_x x False A_y y # xs) @ (ws @ ys)))
+    let L_pos = take (length A_pos) L;
+        L_neg = drop (length A_pos) L
+    in
+    \<comment> \<open>first check whether two safe formulas can be joined, i.e. if the fvs of one formula are a subset of another\<close>
+    (case dominate_True A_pos L_pos
+      of None \<Rightarrow>
+        \<comment> \<open>if that's not the case, do the same for the negated formulas:
+          check if there is a negated formula whose fvs are dominated by a safe formula\<close>
+        (case dominate_False A_pos L_pos A_neg L_neg of
+          \<comment> \<open>if not, do the join in some other way\<close>
+          None \<Rightarrow> mmulti_join' A_pos A_neg L
+          | Some (((A_zs, A_x, A_xs), A_ws, A_y, A_ys), ((zs, x, xs), ws, y, ys)) \<Rightarrow>
+            \<comment> \<open>if that is the case, join them\<close>
+            mmulti_join n (A_zs @ A_x # A_xs) (A_ws @ A_ys)
+            ((zs @ bin_join n A_x x False A_y y # xs) @ (ws @ ys))
+        )
     | Some ((A_zs, A_x, A_xs, A_y, A_ys), (zs, x, xs, y, ys)) \<Rightarrow>
-      mmulti_join n (A_zs @ (A_x \<union> A_y) # A_xs @ A_ys) A_neg
-      ((zs @ bin_join n A_x x True A_y y # xs @ ys) @ L_neg)))"
+        \<comment> \<open>A_x \<subseteq> A_y \<or> A_y \<subseteq> A_x, fv x = A_x, fv y = A_y.
+        i.e. the free variables of one subformula is a subset of another \<Rightarrow> we can join them.
+        As the order doesn't matter in an And, union the fvs and join the tables
+        \<close>
+        mmulti_join n (A_zs @ (A_x \<union> A_y) # A_xs @ A_ys) A_neg
+        ((zs @ bin_join n A_x x True A_y y # xs @ ys) @ L_neg))
+    )
+  "
   by pat_completeness auto
 termination
   by (relation "measure (\<lambda>(n, A_pos, A_neg, L). length A_pos + length A_neg)")
