@@ -1613,17 +1613,20 @@ lemma progress_eventually[simp]: "progress P (eventually I \<phi>) j = Inf {i. \
 lemma progress_eventually_once[simp]: "progress P (eventually I (once J \<phi>)) j = progress P (eventually I \<phi>) j"
   by (auto intro: arg_cong[where f = Inf])
 
+lemma progress_nonempty: "{i. \<forall>k. k < j \<and> k \<le> n \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)} \<noteq> {}"
+  by (auto intro!: exI[of _ n])
+
+lemma min_Inf:
+  fixes X :: "nat set"
+  assumes "X \<noteq> {}" "Y \<noteq> {}"
+  shows "min (Inf X) (Inf Y) = Inf (X \<union> Y)"
+  using assms
+  sorry
+
 lemma progress_eventually_or[simp]: "progress P (eventually I (Formula.Or \<phi> \<psi>)) j =
   min (progress P (eventually I \<phi>) j) (progress P (eventually I \<psi>) j)"
-  apply (auto simp: min_def)
-   apply (rule Inf_leq)
-    apply (auto intro!: exI[of _ "progress P \<psi> j"])
-  apply (subst eq_iff)
-  apply (rule conjI; rule Inf_leq)
-     apply (auto)
-    apply (auto intro!: exI[of _ "progress P \<phi> j"]) [1]
-    apply (auto intro!: exI[of _ "progress P \<psi> j"]) [1]
-  sorry
+  unfolding progress_eventually min_Inf[OF progress_nonempty progress_nonempty]
+  by (cases "progress P \<phi> j \<le> progress P \<psi> j") (auto intro: arg_cong[where ?f=Inf])
 
 lemma progress_eventually_double_upper[simp]: "(progress P (eventually I (eventually (int_remove_lower_bound I) \<phi>)) j) =
   (progress P (eventually (flip_int_double_upper I) \<phi>) j)"
