@@ -1620,20 +1620,59 @@ lemma min_Inf:
   fixes X :: "nat set"
   assumes "X \<noteq> {}" "Y \<noteq> {}"
   shows "min (Inf X) (Inf Y) = Inf (X \<union> Y)"
-  using assms
-  sorry
+proof -
+  obtain x where x_def: "x = Inf X" "x \<in> X" "\<And>z. z \<in> X \<Longrightarrow> x \<le> z"
+    using assms(1) cInf_lower
+    by (auto simp add: Inf_nat_def1)
+  obtain y where y_def: "y = Inf Y" "y \<in> Y" "\<And>z. z \<in> Y \<Longrightarrow> y \<le> z"
+    using assms(2) cInf_lower
+    by (auto simp add: Inf_nat_def1)
+  have "min x y \<in> X \<union> Y" "\<And>z. z \<in> X \<union> Y \<Longrightarrow> min x y \<le> z"
+    using x_def(2,3) y_def(2,3)
+    by (fastforce simp: min_def)+
+  then have "Inf (X \<union> Y) = min x y"
+    unfolding Inf_nat_def
+    by (rule Least_equality)
+  then show ?thesis
+    by (auto simp: x_def(1) y_def(1))
+qed
 
 lemma progress_eventually_or[simp]: "progress P (eventually I (Formula.Or \<phi> \<psi>)) j =
   min (progress P (eventually I \<phi>) j) (progress P (eventually I \<psi>) j)"
   unfolding progress_eventually min_Inf[OF progress_nonempty progress_nonempty]
   by (cases "progress P \<phi> j \<le> progress P \<psi> j") (auto intro: arg_cong[where ?f=Inf])
 
-lemma progress_eventually_double_upper[simp]: "(progress P (eventually I (eventually (int_remove_lower_bound I) \<phi>)) j) =
-  (progress P (eventually (flip_int_double_upper I) \<phi>) j)"
+lemma diff_le_mono_cross: "m \<le> n \<Longrightarrow> l \<le> l' \<Longrightarrow> m - l' \<le> n - l" for m n l l' :: nat
+  by auto
+
+lemma subset_contrI: "(\<And>x. x \<notin> B \<Longrightarrow> x \<notin> A) \<Longrightarrow> A \<subseteq> B"
+  by auto
+
+lemma Inf_memR_conv: "\<Sqinter> {i. \<forall>k. k < j \<and> k \<le> n \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)} =
+  (case j of 0 \<Rightarrow> 0 | Suc x \<Rightarrow> Inf {i. memR I (\<tau> \<sigma> (min x n) - \<tau> \<sigma> i)})"
+  using memR_antimono[OF _ diff_le_mono[OF \<tau>_mono]]
+  by (fastforce simp: cInf_eq_minimum less_Suc_eq_le split: nat.splits intro!: arg_cong[where ?f=Inf])
+
+lemma min_x_Inf: "min x (\<Sqinter> {i. memR I (\<tau> \<sigma> (min x n) - \<tau> \<sigma> i)}) = \<Sqinter> {i. memR I (\<tau> \<sigma> (min x n) - \<tau> \<sigma> i)}"
   sorry
 
-lemma progress_always_safe_unbounded [simp]: "progress P (always_safe_bounded I \<phi>) j =
-  Inf {i. \<forall>k. k < j \<and> k \<le> progress P \<phi> j \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
+lemma progress_eventually_double_upper[simp]: "(progress P (eventually I (eventually (int_remove_lower_bound I) \<phi>)) j) =
+  (case j of 0 \<Rightarrow> 0
+   | Suc x \<Rightarrow> \<Sqinter> {i. memR I (\<tau> \<sigma> (\<Sqinter> {i. memR I (\<tau> \<sigma> (min x (progress P \<phi> j)) - \<tau> \<sigma> i)}) - \<tau> \<sigma> i)})"
+proof -
+  have "(progress P (eventually I (eventually (int_remove_lower_bound I) \<phi>)) j) =
+    (case j of 0 \<Rightarrow> 0
+     | Suc x \<Rightarrow> \<Sqinter> {i. memR I (\<tau> \<sigma> (min x (\<Sqinter> {i. memR I (\<tau> \<sigma> (min x (progress P \<phi> j)) - \<tau> \<sigma> i)})) - \<tau> \<sigma> i)})"
+  unfolding progress_eventually Inf_memR_conv
+  by transfer' (auto split: nat.splits)
+  moreover have "\<dots> = (case j of 0 \<Rightarrow> 0
+     | Suc x \<Rightarrow> \<Sqinter> {i. memR I (\<tau> \<sigma> (\<Sqinter> {i. memR I (\<tau> \<sigma> (min x (progress P \<phi> j)) - \<tau> \<sigma> i)}) - \<tau> \<sigma> i)})"
+    by (auto simp: min_x_Inf split: nat.splits)
+  finally show ?thesis .
+qed
+
+lemma progress_always_safe_unbounded [simp]: "progress P (always_safe_bounded I \<phi>) j = (case j of 0 \<Rightarrow> 0
+  | Suc x \<Rightarrow> \<Sqinter> {i. memR I (\<tau> \<sigma> (\<Sqinter> {i. memR I (\<tau> \<sigma> (min x (progress P \<phi> j)) - \<tau> \<sigma> i)}) - \<tau> \<sigma> i)})"
 proof -
   have "(local.progress P \<phi> j + 1) \<in> {i. \<forall>k. k < j \<and> k \<le> local.progress P \<phi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
     by auto
@@ -1651,18 +1690,24 @@ proof -
     using Inf_leq[OF non_empty subset]
     by auto
 
+  have sub: "\<Sqinter> {i. \<forall>k. k < j \<and> k \<le> local.progress P \<phi> j \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)} \<le>
+    \<Sqinter> {i. \<forall>k. k < j \<and> k \<le> local.progress P \<phi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
+    using memR_flip_int_double_upper
+    by (auto intro: Inf_leq[OF progress_nonempty])
+
   have "progress P (always_safe_bounded I \<phi>) j = progress P (eventually I (formula.Or (once (int_remove_lower_bound I) \<phi>) (eventually (int_remove_lower_bound I) \<phi>))) j"
     unfolding always_safe_bounded_def
     by (auto simp add: min_eq)
-  moreover have "\<dots> = min (progress P (eventually I \<phi>) j) (progress P (eventually (flip_int_double_upper I) \<phi>) j)"
+  moreover have "\<dots> = min (local.progress P (Formula.eventually I \<phi>) j) (case j of 0 \<Rightarrow> 0
+   | Suc x \<Rightarrow> \<Sqinter> {i. memR I (\<tau> \<sigma> (\<Sqinter> {i. memR I (\<tau> \<sigma> (min x (progress P \<phi> j)) - \<tau> \<sigma> i)}) - \<tau> \<sigma> i)})"
     unfolding progress_eventually_or progress_eventually_once progress_eventually_double_upper
     by auto
-  moreover have "\<dots> = progress P (eventually (flip_int_double_upper I) \<phi>) j"
+  moreover have "\<dots> = (case j of 0 \<Rightarrow> 0
+   | Suc x \<Rightarrow> \<Sqinter> {i. memR I (\<tau> \<sigma> (\<Sqinter> {i. memR I (\<tau> \<sigma> (min x (progress P \<phi> j)) - \<tau> \<sigma> i)}) - \<tau> \<sigma> i)})"
+    unfolding progress_eventually Inf_memR_conv
+    apply (auto split: nat.splits)
     sorry
-  ultimately have "progress P (always_safe_bounded I \<phi>) j = (progress P (eventually (flip_int_double_upper I) \<phi>) j)"
-    by auto
-
-  then show ?thesis
+  ultimately show ?thesis
     unfolding progress_eventually
     by auto
 qed
