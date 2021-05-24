@@ -3689,14 +3689,157 @@ next
     by (auto simp add: init_args_def simp del: progress_simps intro!: wf_mformula.Until[unfolded fvi.simps] wf_mbuf2'_0 wf_ts_0)
 next
   case (Not_Until \<phi> I \<psi>)
-  then show ?case
-    using valid_length_muaux[OF valid_init_muaux[OF Not_Until(1)]] wf_until_aux_Nil
-    by (auto simp add: init_args_def simp del: progress_simps intro!: wf_mformula.Until[unfolded fvi.simps] wf_mbuf2'_0 wf_ts_0)
+  define args where "args = init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False"
+
+  have wf_\<phi>: "wf_mformula \<sigma> 0 P V n R (minit0 n \<phi>) \<phi>"
+    using Not_Until(5)[of n P V R] Not_Until(7,8)
+    by auto
+  have wf_\<psi>: "wf_mformula \<sigma> 0 P V n R (minit0 n \<psi>) \<psi>"
+    using Not_Until(6)[of n P V R] Not_Until(7,8)
+    by auto
+  have args:
+    "if args_pos args then formula.Neg \<phi> = \<phi> else formula.Neg \<phi> = formula.Neg \<phi>"
+    "safe_formula (formula.Neg \<phi>) = args_pos args"
+    "args_ivl args = I"
+    "args_n args = n"
+    "args_L args = fv \<phi>"
+    "args_R args = fv \<psi>"
+    "fv \<phi> \<subseteq> fv \<psi>"
+    using Not_Until(1,3)
+    unfolding args_def init_args_def
+    by auto
+
+  have wf_aux: "wf_until_aux \<sigma> V R args \<phi> \<psi> (init_muaux args) (Monitor.progress \<sigma> P (formula.Until (formula.Neg \<phi>) I \<psi>) 0)"
+    using wf_until_aux_Nil[OF args(7)] Not_Until(8)
+    unfolding args_def 
+    by (auto simp del: progress_simps)
+
+  have muax_len: "length_muaux args (init_muaux args) = length []"
+    using valid_length_muaux[OF valid_init_muaux[OF Not_Until(1)], of I n False]
+    unfolding args_def
+    by auto
+  then have prog:
+    "0 = (if 0 = 0 then 0 else \<tau> \<sigma> (min (0 - 1) (min (Monitor.progress \<sigma> P \<phi> 0) (Monitor.progress \<sigma> P \<psi> 0))))"
+    "Monitor.progress \<sigma> P (formula.Until (formula.Neg \<phi>) I \<psi>) 0 + length_muaux args (init_muaux args) = min (Monitor.progress \<sigma> P \<phi> 0) (Monitor.progress \<sigma> P \<psi> 0)"
+    using Inf_UNIV_nat Not_Until(8)
+    by auto
+  
+  show ?case
+    using wf_mformula.Until[unfolded fvi.simps, OF wf_\<phi> wf_\<psi> args wf_mbuf2'_0[OF Not_Until(8)] wf_ts_0 prog(1) wf_aux prog(2)] Not_Until(3)
+    unfolding args_def
+    by auto
+    
 next
   case (Trigger_0 \<phi> I \<psi>)
-  then show ?case
-    using wf_since_aux_Nil
-    by (auto simp add: init_args_def intro!: wf_mformula.Since wf_mbuf2'_0 wf_ts_0)
+  have wf_\<psi>:
+    "wf_mformula \<sigma> 0 P V n R (minit0 n \<psi>) \<psi>"
+    using Trigger_0
+    by auto
+  show ?case
+  proof (cases "safe_formula \<phi> \<and> (\<forall>x. (\<forall>xa\<in>fv \<phi>. xa < x) \<longrightarrow> (\<forall>xa xaa. pred_mapping (\<lambda>x. x = 0) xaa \<longrightarrow> (\<forall>xaaa. wf_mformula \<sigma> 0 xaa xaaa x xa (minit0 x \<phi>) \<phi>)))")
+    define args where "args = init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True"
+    define aux where "aux = init_mtaux args"
+    case True
+    then have wf_\<phi>: "wf_mformula \<sigma> 0 P V n R (minit0 n \<phi>) \<phi>"
+      using Trigger_0
+      by auto
+    have if_pos: "if args_pos args then \<phi> = \<phi> else \<phi> = formula.Neg \<phi>"
+      unfolding args_def init_args_def
+      by auto
+    have args:
+      "safe_formula \<phi> = args_pos args"
+      "args_ivl args = I"
+      "args_n args = n"
+      "args_L args = fv \<phi>"
+      "args_R args = fv \<psi>"
+      "if mem I 0 then fv \<phi> \<subseteq> fv \<psi> else fv \<phi> = fv \<psi>"
+      using Trigger_0(1,3) True
+      unfolding args_def init_args_def
+      by auto
+    have aux: "wf_trigger_aux \<sigma> V R args \<phi> \<psi> aux (Monitor.progress \<sigma> P (formula.Trigger \<phi> I \<psi>) 0)"
+      using Trigger_0(1,3) valid_init_mtaux[of I "fv \<phi>" "fv \<psi>" True n]
+      unfolding safe_formula_dual_def wf_trigger_aux_def aux_def args_def
+      by (auto simp add: Let_def Trigger_0(7) split: if_splits)
+
+    show ?thesis
+      using True wf_mformula.Trigger[OF wf_\<psi> if_pos wf_\<phi> args wf_mbuf2'_0[OF Trigger_0(7)] wf_ts_0 aux]
+      unfolding aux_def args_def
+      by auto
+  next
+    define args where "args = init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True"
+    define aux where "aux = init_mtaux args"
+    case False
+    then obtain \<phi>' where \<phi>'_props:
+      "\<phi> = Formula.Neg \<phi>'"
+      "safe_formula \<phi>'"
+      "(\<forall>x. (\<forall>xa\<in>fv \<phi>'. xa < x) \<longrightarrow> (\<forall>xa xaa. pred_mapping (\<lambda>x. x = 0) xaa \<longrightarrow> (\<forall>xaaa. wf_mformula \<sigma> 0 xaa xaaa x xa (minit0 x \<phi>') \<phi>')))"
+      using Trigger_0(4)
+      by (cases \<phi>) (auto)
+    show ?thesis
+    proof (cases "safe_formula \<phi>")
+      case True
+      then have "fv \<phi>' = {}"
+        using \<phi>'_props(1,2) safe_formula_Neg[of \<phi>']
+        by auto
+      moreover have "wf_mformula \<sigma> 0 P V n R (minit0 n \<phi>') \<phi>'"
+        using Trigger_0(6,7) \<phi>'_props(1,3)
+        by auto
+      ultimately have wf_\<phi>: "wf_mformula \<sigma> 0 P V n R (minit0 n \<phi>) \<phi>"
+        using \<phi>'_props(1) wf_mformula.Neg
+        by auto
+      have if_pos: "if args_pos args then \<phi> = \<phi> else \<phi> = formula.Neg \<phi>"
+        unfolding args_def init_args_def
+        by auto
+      have args:
+        "safe_formula \<phi> = args_pos args"
+        "args_ivl args = I"
+        "args_n args = n"
+        "args_L args = fv \<phi>"
+        "args_R args = fv \<psi>"
+        "if mem I 0 then fv \<phi> \<subseteq> fv \<psi> else fv \<phi> = fv \<psi>"
+        using Trigger_0(1,3) True
+        unfolding args_def init_args_def
+        by auto
+      have aux: "wf_trigger_aux \<sigma> V R args \<phi> \<psi> aux (Monitor.progress \<sigma> P (formula.Trigger \<phi> I \<psi>) 0)"
+        using Trigger_0(1,3) valid_init_mtaux[of I "fv \<phi>" "fv \<psi>" True n]
+        unfolding safe_formula_dual_def wf_trigger_aux_def aux_def args_def
+        by (auto simp add: Let_def Trigger_0(7) split: if_splits)
+  
+      show ?thesis
+        using True wf_mformula.Trigger[OF wf_\<psi> if_pos wf_\<phi> args wf_mbuf2'_0[OF Trigger_0(7)] wf_ts_0 aux]
+        unfolding aux_def args_def
+        by auto
+    next
+      define args where "args = init_args I n (Formula.fv \<phi>') (Formula.fv \<psi>) False"
+      define aux where "aux = init_mtaux args"
+      case False
+      have wf_\<phi>': "wf_mformula \<sigma> 0 P V n R (minit0 n \<phi>') \<phi>'"
+        using \<phi>'_props Trigger_0
+        by auto
+      have if_pos: "if args_pos args then \<phi> = \<phi>' else \<phi> = formula.Neg \<phi>'"
+        unfolding \<phi>'_props(1) args_def init_args_def
+        by auto
+      have args:
+        "safe_formula \<phi> = args_pos args"
+        "args_ivl args = I"
+        "args_n args = n"
+        "args_L args = fv \<phi>'"
+        "args_R args = fv \<psi>"
+        "if mem I 0 then fv \<phi>' \<subseteq> fv \<psi> else fv \<phi>' = fv \<psi>"
+        using \<phi>'_props(1) Trigger_0(1,3) False
+        unfolding args_def init_args_def
+        by auto
+      have aux: "wf_trigger_aux \<sigma> V R args \<phi>' \<psi> aux (Monitor.progress \<sigma> P (formula.Trigger \<phi> I \<psi>) 0)"
+        using Trigger_0(1,3) valid_init_mtaux[of I "fv \<phi>'" "fv \<psi>" False n] \<phi>'_props(1)
+        unfolding safe_formula_dual_def wf_trigger_aux_def aux_def args_def
+        by (auto simp add: Let_def Trigger_0(7) split: if_splits)
+  
+      show ?thesis
+        using False \<phi>'_props(1) wf_mformula.Trigger[OF wf_\<psi> if_pos wf_\<phi>' args wf_mbuf2'_0[OF Trigger_0(7)] wf_ts_0 aux]
+        unfolding aux_def args_def
+        by auto
+    qed
+  qed
 next
   case (Trigger \<phi> I \<psi>)
   then show ?case by auto
@@ -3708,17 +3851,51 @@ next
   then show ?case by auto
 next
   case (MatchP I r)
-  then show ?case
+  obtain mr \<phi>s' where r_props:"(mr, \<phi>s') = to_mregex r"
+    by (metis surj_pair)
+  define \<phi>s where "\<phi>s = (map (minit0 n) \<phi>s')"
+
+  have wf_props:
+    "case to_mregex r of (mr', \<phi>s') \<Rightarrow> list_all2 (wf_mformula \<sigma> 0 P V n R) \<phi>s \<phi>s' \<and> mr = mr'"
+    "(sorted_list_of_set (RPDs mr)) = sorted_list_of_set (RPDs mr)"
+    "safe_regex Past Strict r"
+    "wf_mbufn' \<sigma> P V 0 n R r (replicate (length \<phi>s') [])"
+    "wf_ts_regex \<sigma> P 0 r []"
+    "wf_matchP_aux \<sigma> V n R I r [] (Monitor.progress \<sigma> P (formula.MatchP I r) 0)"
+    using MatchP r_props
+    unfolding \<phi>s_def
     by (auto simp: list.rel_map fv_regex_alt simp del: progress_simps split: prod.split
-        intro!: wf_mformula.MatchP[unfolded fvi.simps] list.rel_refl_strong wf_mbufn'_0 wf_ts_regex_0 wf_matchP_aux_Nil
+        intro!: list.rel_refl_strong wf_mbufn'_0[OF r_props[symmetric]] wf_ts_regex_0 wf_matchP_aux_Nil
         dest!: to_mregex_atms)
+  show ?case
+    using wf_mformula.MatchP[OF wf_props] r_props
+    unfolding \<phi>s_def
+    by (cases "to_mregex r") (auto)
 next
   case (MatchF I r)
-  then show ?case
+  obtain mr \<phi>s' where r_props:"(mr, \<phi>s') = to_mregex r"
+    by (metis surj_pair)
+  define \<phi>s where "\<phi>s = (map (minit0 n) \<phi>s')"
+
+  have wf_props:
+    "case to_mregex r of (mr', \<phi>s') \<Rightarrow> list_all2 (wf_mformula \<sigma> 0 P V n R) \<phi>s \<phi>s' \<and> mr = mr'"
+    "sorted_list_of_set (LPDs mr) = sorted_list_of_set (LPDs mr)"
+    "safe_regex Futu Strict r"
+    "wf_mbufn' \<sigma> P V 0 n R r (replicate (length \<phi>s') [])"
+    "wf_ts_regex \<sigma> P 0 r []"
+    "0 = (if 0 = 0 then 0 else \<tau> \<sigma> (min (0 - 1) (progress_regex \<sigma> P r 0)))"
+    "wf_matchF_aux \<sigma> V n R I r [] (Monitor.progress \<sigma> P (formula.MatchF I r) 0) 0"
+    "Monitor.progress \<sigma> P (formula.MatchF I r) 0 + length [] = progress_regex \<sigma> P r 0"
+    using MatchF r_props
+    unfolding \<phi>s_def
     by (auto simp: list.rel_map fv_regex_alt progress_le Min_eq_iff progress_regex_def
         simp del: progress_simps split: prod.split
-        intro!: wf_mformula.MatchF[unfolded fvi.simps] list.rel_refl_strong wf_mbufn'_0 wf_ts_regex_0 wf_matchF_aux_Nil
+        intro!: list.rel_refl_strong wf_mbufn'_0[OF r_props[symmetric]] wf_ts_regex_0 wf_matchF_aux_Nil
         dest!: to_mregex_atms)
+  show ?case
+    using wf_mformula.MatchF[OF wf_props] r_props
+    unfolding \<phi>s_def
+    by (cases "to_mregex r") (auto)
 qed
 
 lemma (in maux) wf_mstate_minit: "safe_formula \<phi> \<Longrightarrow> wf_mstate \<phi> pnil R (minit \<phi>)"
