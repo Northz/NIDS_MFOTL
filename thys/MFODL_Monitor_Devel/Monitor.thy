@@ -2026,9 +2026,12 @@ next
       (auto elim!: pred_mapping_le intro: max_mapping_cobounded1)
 next
   case (Release \<phi>1 I \<phi>2)
-  from Release.prems obtain m where "\<not> memR I m"
+  from Release.prems have "bounded (flip_int_double_upper I)"
+    by (transfer') auto
+  then obtain m where "\<not> memR (flip_int_double_upper I) m"
     by (auto simp: bounded_memR)
-  then obtain i' where "i < i'" and 1: "\<not> memR I (\<tau> \<sigma> i' - \<tau> \<sigma> i)"
+
+  then obtain i' where "i < i'" and 1: "\<not> memR (flip_int_double_upper I) (\<tau> \<sigma> i' - \<tau> \<sigma> i)"
     using ex_le_\<tau>[where x="\<tau> \<sigma> i + m" and s=\<sigma> and i="Suc i"]
     by atomize_elim (auto simp add: less_eq_Suc_le memR_antimono)
   from Release.prems obtain P1 j1 where P1: "dom P1 = S" "range_mapping (Suc i') j1 P1" "Suc i' \<le> progress \<sigma> P1 \<phi>1 j1"
@@ -2036,7 +2039,8 @@ next
   from Release.prems obtain P2 j2 where P2: "dom P2 = S" "range_mapping (Suc i') j2 P2" "Suc i' \<le> progress \<sigma> P2 \<phi>2 j2"
     by (atomize_elim, intro Release(2)) (auto simp: pred_mapping_alt dom_def)
   let ?P12 = "max_mapping P1 P2"
-  have "i \<le> progress \<sigma> ?P12 (Formula.Until \<phi>1 I \<phi>2) (max j1 j2)"
+
+  have "i \<le> progress \<sigma> ?P12 (Formula.Release \<phi>1 I \<phi>2) (max j1 j2)"
     unfolding progress.simps
   proof (intro cInf_greatest, goal_cases nonempty greatest)
     case nonempty
@@ -2053,13 +2057,14 @@ next
       using P1(1) P2(1) by (auto intro!: progress_mono_gen max_mapping_cobounded2)
     ultimately have "i' \<le> min (progress \<sigma> ?P12 \<phi>1 (max j1 j2)) (progress \<sigma> ?P12 \<phi>2 (max j1 j2))"
       using P1(3) P2(3) by simp
-    with greatest \<open>i' < max j1 j2\<close> have "memR I (\<tau> \<sigma> i' - \<tau> \<sigma> x)"
+    with greatest \<open>i' < max j1 j2\<close> have "memR (flip_int_double_upper I) (\<tau> \<sigma> i' - \<tau> \<sigma> x)"
       by simp
     with 1 have "\<tau> \<sigma> i < \<tau> \<sigma> x"
       by (auto 0 3 elim: contrapos_np)
     then show ?case by (auto dest!: less_\<tau>D)
   qed
-  with P1 P2 \<open>i < i'\<close> show ?case
+  then show ?case
+    using P1 P2 \<open>i < i'\<close>
     by (intro exI[of _ "max_mapping P1 P2"] exI[of _ "max j1 j2"]) (auto simp: range_mapping_relax)
 next
   case (MatchP I r)
@@ -2180,7 +2185,34 @@ next
             intro!: box_equals[OF arg_cong[where f=Inf]
               cInf_restrict_nat[symmetric, where x=n] cInf_restrict_nat[symmetric, where x=n]])
     qed simp
-  qed (simp add: bounded_memR)
+  next
+    case False
+    have "\<And>k i. k<j \<Longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma>' k - \<tau> \<sigma> i) = memR (flip_int_double_upper I) (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
+    proof -
+      fix k i
+      assume assm: "k < j"
+      show "memR (flip_int_double_upper I) (\<tau> \<sigma>' k - \<tau> \<sigma> i) = memR (flip_int_double_upper I) (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
+      proof (cases "i < j")
+        case True
+        then show ?thesis using Release(3) by auto
+      next
+        case False
+        have "\<tau> \<sigma>' k = \<tau> \<sigma> k" using assm Release(3) by auto
+        then have "\<tau> \<sigma>' k - \<tau> \<sigma> i = 0"
+          using False assm
+          by auto
+        moreover have
+          "\<tau> \<sigma>' k - \<tau> \<sigma>' i = 0"
+          using assm False
+          by auto
+        ultimately show ?thesis by auto
+      qed
+    qed
+    then have "{i. \<forall>k. k < j \<and> k \<le> Monitor.progress \<sigma>' P \<phi>1 j \<and> k \<le> Monitor.progress \<sigma>' P \<phi>2 j \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma>' k - \<tau> \<sigma> i)} =
+    {i. \<forall>k. k < j \<and> k \<le> Monitor.progress \<sigma>' P \<phi>1 j \<and> k \<le> Monitor.progress \<sigma>' P \<phi>2 j \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma>' k - \<tau> \<sigma>' i)}"
+      by auto
+    then show ?thesis using Release by (auto simp add: bounded_memR intro: arg_cong[where f = Inf])
+  qed
 next
   case (MatchF I r)
   have *: "i \<le> j - 1 \<longleftrightarrow> i < j" if "j \<noteq> 0" for i
@@ -2351,9 +2383,105 @@ next
     using sat_subformulas t_eq
     by auto
 next
-  case (Release \<phi>1 I \<phi>2)
-  show ?case
+  case (Release \<phi> I \<psi>)
+
+  from Release.prems have [simp]: "bounded (flip_int_double_upper I)"
+    by (cases "bounded (flip_int_double_upper I)") (auto simp: bounded_memR Inf_UNIV_nat)
+
+  from Release.prems obtain j where "\<not> memR (flip_int_double_upper I) (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+    "j \<le> progress \<sigma> P \<phi> (plen \<pi>)" "j \<le> progress \<sigma> P \<psi> (plen \<pi>)"
+    by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
+      dest!: le_cInf_iff[THEN iffD1, rotated -1])
+  then have 1: "k < progress \<sigma> P \<phi> (plen \<pi>)" and 2: "k < progress \<sigma> P \<psi> (plen \<pi>)"
+    if "memR (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)" for k
+    using that
+    by (auto 0 3 elim!: order.strict_trans2[rotated] elim: contrapos_np intro!: less_\<tau>D[of \<sigma> k j])
+  have 3: "k < plen \<pi>" if "memR (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)" for k
+    using 1[OF that] Release(6) by (auto simp only: less_eq_Suc_le order.trans[OF _ progress_le_gen])
+
+  from Release.prems have "i < progress \<sigma>' P (Formula.Release \<phi> I \<psi>) (plen \<pi>)"
+    unfolding progress_prefix_conv[OF assms(1,2)] by simp
+  then obtain j where "\<not> memR (flip_int_double_upper I) (\<tau> \<sigma>' j - \<tau> \<sigma>' i)"
+    "j \<le> progress \<sigma>' P \<phi> (plen \<pi>)" "j \<le> progress \<sigma>' P \<psi> (plen \<pi>)"
+    by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
+      dest!: le_cInf_iff[THEN iffD1, rotated -1])
+  then have 11: "k < progress \<sigma> P \<phi> (plen \<pi>)" and 21: "k < progress \<sigma> P \<psi> (plen \<pi>)"
+    if "memR (flip_int_double_upper I) (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" for k
+    unfolding progress_prefix_conv[OF assms(1,2)]
+    using that
+    by (auto 0 3 elim!: order.strict_trans2[rotated] elim: contrapos_np intro!: less_\<tau>D[of \<sigma>' k j])
+  have 31: "k < plen \<pi>" if "memR (flip_int_double_upper I) (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" for k
+    using 11[OF that] Release(6) by (auto simp only: less_eq_Suc_le order.trans[OF _ progress_le_gen])
+
+  have t_eq1: "\<And>j. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> \<tau> \<sigma> j = \<tau> \<sigma>' j"
+    using \<tau>_prefix_conv[OF assms(1,2) 3]memR_flip_int_double_upper
+    by auto
+
+  have t_eq2: "\<And>j. memR I (\<tau> \<sigma>' j - \<tau> \<sigma>' i) \<Longrightarrow> \<tau> \<sigma> j = \<tau> \<sigma>' j"
+    using \<tau>_prefix_conv[OF assms(1,2) 31]memR_flip_int_double_upper
+    by auto
+
+  have sat_subformulas:
+    "\<And>j v. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> Formula.sat \<sigma> V v j \<phi> = Formula.sat \<sigma>' V' v j \<phi>"
+    "\<And>j v. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> Formula.sat \<sigma> V v j \<psi> = Formula.sat \<sigma>' V' v j \<psi>"
+    using Release.IH(1)[OF 1 Release.prems(2-5)] Release.IH(2)[OF 2 Release.prems(2-5)] Release.prems(1) memR_flip_int_double_upper
+    by auto
+
+  have "\<And>j k. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> k \<le> j \<Longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+    using memR_antimono[of I]
+    using \<tau>_mono diff_le_mono
     by blast
+  then have "\<And>j k. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> k \<le> j \<Longrightarrow> Formula.sat \<sigma> V v k \<phi> = Formula.sat \<sigma>' V' v k \<phi>"
+    using sat_subformulas(1)
+    by auto
+
+  then have release_eq: "\<And>j. (mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)) \<longrightarrow> (
+      (Formula.sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. Formula.sat \<sigma> V v k \<phi>)) =
+      (Formula.sat \<sigma>' V' v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. Formula.sat \<sigma>' V' v k \<phi>))
+  )"
+    using sat_subformulas(2)
+    by auto
+
+  show ?case
+  proof (rule iffI)
+    assume assm: "Formula.sat \<sigma> V v i (formula.Release \<phi> I \<psi>)"
+    {
+      fix j
+      assume assms: "j \<ge> i" "mem I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)"
+      then have memR: "memR I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)" by auto
+      have memRi: "memR I (\<tau> \<sigma>' i - \<tau> \<sigma>' i)" by auto
+      have mem: "mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+        using assms(2)[unfolded t_eq2[OF memR,symmetric] t_eq2[OF memRi,symmetric]]
+        by auto
+      have sat: "Formula.sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. Formula.sat \<sigma> V v k \<phi>)"
+        using assm assms(1) mem
+        by auto
+      then have "Formula.sat \<sigma>' V' v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. Formula.sat \<sigma>' V' v k \<phi>)"
+        using mem release_eq[of j]
+        by auto
+    }
+    then show "Formula.sat \<sigma>' V' v i (formula.Release \<phi> I \<psi>)"
+      by auto
+  next
+    assume assm: "Formula.sat \<sigma>' V' v i (formula.Release \<phi> I \<psi>)"
+    {
+      fix j
+      assume assms: "j \<ge> i" "mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+      then have memR: "memR I (\<tau> \<sigma> j - \<tau> \<sigma> i)" by auto
+      have memRi: "memR I (\<tau> \<sigma> i - \<tau> \<sigma> i)" by auto
+      have mem: "mem I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)"
+        using assms(2)[unfolded t_eq1[OF memR] t_eq1[OF memRi]]
+        by auto
+      have sat: "Formula.sat \<sigma>' V' v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. Formula.sat \<sigma>' V' v k \<phi>)"
+        using assm assms(1) mem
+        by auto
+      then have "Formula.sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. Formula.sat \<sigma> V v k \<phi>)"
+        using assms(2) release_eq[of j]
+        by auto
+    }
+    then show "Formula.sat \<sigma> V v i (formula.Release \<phi> I \<psi>)"
+      by auto
+  qed
 next
   case (MatchP I r)
   then have "i < plen \<pi>"
