@@ -1625,6 +1625,10 @@ lemma progress_eventually_or[simp]: "progress P (eventually I (Formula.Or \<phi>
     apply (auto intro!: exI[of _ "progress P \<psi> j"]) [1]
   sorry
 
+lemma progress_eventually_double_upper[simp]: "(progress P (eventually I (eventually (int_remove_lower_bound I) \<phi>)) j) =
+  (progress P (eventually (flip_int_double_upper I) \<phi>) j)"
+  sorry
+
 lemma progress_always_safe_unbounded [simp]: "progress P (always_safe_bounded I \<phi>) j =
   Inf {i. \<forall>k. k < j \<and> k \<le> progress P \<phi> j \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
 proof -
@@ -1647,19 +1651,17 @@ proof -
   have "progress P (always_safe_bounded I \<phi>) j = progress P (eventually I (formula.Or (once (int_remove_lower_bound I) \<phi>) (eventually (int_remove_lower_bound I) \<phi>))) j"
     unfolding always_safe_bounded_def
     by (auto simp add: min_eq)
-  moreover have "\<dots> = min (progress P (eventually I \<phi>) j) (progress P (eventually I (eventually (int_remove_lower_bound I) \<phi>)) j)"
-    unfolding progress_eventually_or progress_eventually_once
+  moreover have "\<dots> = min (progress P (eventually I \<phi>) j) (progress P (eventually (flip_int_double_upper I) \<phi>) j)"
+    unfolding progress_eventually_or progress_eventually_once progress_eventually_double_upper
     by auto
-  finally have "progress P (always_safe_bounded I \<phi>) j = min (progress P (eventually I \<phi>) j) (progress P (eventually I (eventually (int_remove_lower_bound I) \<phi>)) j)"
+  moreover have "\<dots> = progress P (eventually (flip_int_double_upper I) \<phi>) j"
+    sorry
+  ultimately have "progress P (always_safe_bounded I \<phi>) j = (progress P (eventually (flip_int_double_upper I) \<phi>) j)"
     by auto
 
-  show ?thesis
-    unfolding always_safe_bounded_def
-    apply (auto simp add: min_eq intro!: arg_cong[where f = Inf])
-    subgoal for x k
-      apply (drule spec[of _ "\<Sqinter> {i. \<forall>k. k < j \<and> k \<le> local.progress P \<phi> j \<longrightarrow> memR (int_remove_lower_bound I) (\<tau> \<sigma> k - \<tau> \<sigma> i)} "])
-      
-      apply simp
+  then show ?thesis
+    unfolding progress_eventually
+    by auto
 qed
 
 (*lemma progress_historically_safe_bounded [simp]: "progress P (historically_safe_bounded I \<phi>) j = j"
