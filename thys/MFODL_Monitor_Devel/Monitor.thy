@@ -1654,7 +1654,17 @@ lemma Inf_memR_conv: "\<Sqinter> {i. \<forall>k. k < j \<and> k \<le> n \<longri
   by (fastforce simp: cInf_eq_minimum less_Suc_eq_le split: nat.splits intro!: arg_cong[where ?f=Inf])
 
 lemma min_x_Inf: "min x (\<Sqinter> {i. memR I (\<tau> \<sigma> (min x n) - \<tau> \<sigma> i)}) = \<Sqinter> {i. memR I (\<tau> \<sigma> (min x n) - \<tau> \<sigma> i)}"
-  sorry
+proof -
+  {
+    assume assm: "x < \<Sqinter> {i. memR I (\<tau> \<sigma> (min x n) - \<tau> \<sigma> i)}"
+    then have "x \<in> {i. memR I (\<tau> \<sigma> (min x n) - \<tau> \<sigma> i)}"
+      by auto
+    then have "x \<ge> \<Sqinter> {i. memR I (\<tau> \<sigma> (min x n) - \<tau> \<sigma> i)}"
+      by (simp add: cInf_lower)
+    then have "False" using assm by auto
+  }
+  then show ?thesis using le_def by fastforce
+qed
 
 lemma progress_eventually_double_upper[simp]: "(progress P (eventually I (eventually (int_remove_lower_bound I) \<phi>)) j) =
   (case j of 0 \<Rightarrow> 0
@@ -1706,7 +1716,7 @@ proof -
    | Suc x \<Rightarrow> \<Sqinter> {i. memR I (\<tau> \<sigma> (\<Sqinter> {i. memR I (\<tau> \<sigma> (min x (progress P \<phi> j)) - \<tau> \<sigma> i)}) - \<tau> \<sigma> i)})"
     unfolding progress_eventually Inf_memR_conv
     apply (auto split: nat.splits)
-    sorry
+    by (metis min_x_Inf min.idem)
   ultimately show ?thesis
     unfolding progress_eventually
     by auto
