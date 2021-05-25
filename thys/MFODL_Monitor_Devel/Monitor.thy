@@ -915,7 +915,7 @@ record args =
   args_pos :: bool
 
 datatype (dead 'msaux, dead 'muaux, dead 'mtaux) mformula =
-  MRel "event_data table"
+  MRel "nat set" "event_data table"
   | MPred "nat set" Formula.name "Formula.trm list"
   | MLet Formula.name nat "('msaux, 'muaux, 'mtaux) mformula" "('msaux, 'muaux, 'mtaux) mformula"
   | MAnd "('msaux, 'muaux, 'mtaux) mformula" bool "('msaux, 'muaux, 'mtaux) mformula" "event_data mbuf2"
@@ -1158,9 +1158,123 @@ lemma size_remove_neg[termination_simp]: "size (remove_neg \<phi>) \<le> size \<
 lemma fv_remove_neg: "fv \<phi> = fv (remove_neg \<phi>)"
   by (cases \<phi>) auto
 
+(* FF = Exists (Neg (Eq (Var 0) (Var 0))) *)
+definition (in maux) minit0_FF where
+  "minit0_FF = MExists (fv (Formula.Exists (Formula.Neg (Formula.Eq (Formula.Var 0) (Formula.Var 0))))) (
+    MRel (fv (Formula.Eq (Formula.Var 0) (Formula.Var 0))) empty_table
+  )"
+
+definition (in maux) minit0_TT where
+  "minit0_TT = MNeg (minit0_FF)"
+
+(* always_safe_0 I \<phi> = (Or (Until \<phi> (flip_int_double_upper I) (Prev all \<phi>)) (Until \<phi> I (And \<phi> (Next (flip_int I) TT)))) *)
+definition (in maux) minit0_always_safe_0 where
+  "minit0_always_safe_0 minit0 n I \<phi> = MOr
+    (
+      MUntil
+      (fv \<phi>)
+      (init_args (flip_int_double_upper I) n (Formula.fv \<phi>) (Formula.fv \<phi>) True)
+      (minit0 n \<phi>)
+      (MPrev all (minit0 n \<phi>) True [] [])
+      ([], [])
+      []
+      0
+      (init_muaux (init_args (flip_int_double_upper I) n (Formula.fv \<phi>) (Formula.fv (Formula.Prev all \<phi>)) True))
+    )
+    (
+      MUntil
+      (fv \<phi>)
+      (init_args I n (fv \<phi>) (fv \<phi>) True)
+      (minit0 n \<phi>)
+      \<comment> \<open>no case distinction for rhs of and as next is neither safe_assignment nor constraint\<close>
+      (
+        MAnd
+          (minit0 n \<phi>)
+          True
+          (MNext (flip_int I) (minit0_TT) True [])
+          ([], [])
+      )
+      ([], [])
+      []
+      0
+      (init_muaux (init_args I n (fv \<phi>) (fv \<phi>) True))
+    )
+    ([], [])
+"
+
+lemma (in maux) minit0_always_safe_0_size [fundef_cong]:
+  assumes "\<And>f. size f \<le> size \<phi> \<Longrightarrow> minit0 n f = minit0' n f"
+  shows "minit0_always_safe_0 minit0 n I \<phi> = minit0_always_safe_0 minit0' n I \<phi>"
+  using assms
+  unfolding minit0_always_safe_0_def
+  by auto
+
+(* once I \<phi> = Since TT I \<phi> *)
+definition (in maux) minit0_once where
+  "minit0_once n I V \<phi> = (
+    MSince
+    (init_args I n (fv Formula.TT) V True)
+    (minit0_TT)
+    \<phi>
+    ([], [])
+    []
+    (init_msaux (init_args I n (fv Formula.TT) V True))
+  )"
+
+(* eventually I \<phi> = Until TT I \<phi> *)
+definition (in maux) minit0_eventually where
+  "minit0_eventually n I V \<phi> = (
+    MUntil
+    V
+    (init_args I n (fv Formula.TT) V True)
+    (minit0_TT)
+    \<phi>
+    ([], [])
+    []
+    0
+    (init_muaux (init_args I n (fv Formula.TT) V True))
+  )"
+
+(* always_safe_bounded I \<phi> = (And (eventually I \<phi>) (Neg (eventually I (And (Or (once (int_remove_lower_bound I) \<phi>) (eventually (int_remove_lower_bound I) \<phi>)) (Neg \<phi>))))) *)
+definition (in maux) minit0_always_safe_bounded where
+  "minit0_always_safe_bounded minit0 n I \<phi> = (let
+  or = (
+    MOr
+      (minit0_once       n (int_remove_lower_bound I) (fv \<phi>) (minit0 n \<phi>))
+      (minit0_eventually n (int_remove_lower_bound I) (fv \<phi>) (minit0 n \<phi>))
+      ([], [])
+  );
+  and = (if safe_formula (Formula.Neg \<phi>) then
+          MAnd or True (MNeg (minit0 n \<phi>)) ([], [])
+        else if is_constraint (Formula.Neg \<phi>) then
+          MAndRel or (split_constraint (Formula.Neg \<phi>))
+        else
+          MAnd or False (minit0 n \<phi>) ([], [])
+  ) in
+  (
+    if safe_formula (Formula.Neg (eventually I (Formula.And (Formula.Or (once (int_remove_lower_bound I) \<phi>) (eventually (int_remove_lower_bound I) \<phi>)) (Formula.Neg \<phi>)))) then
+      MAnd
+        (minit0_eventually n I (fv \<phi>) (minit0 n \<phi>))
+        True
+        (MNeg (minit0_eventually n I (fv \<phi>) and))
+        ([], [])
+    else
+      MAnd
+        (minit0_eventually n I (fv \<phi>) (minit0 n \<phi>))
+        False
+        (minit0_eventually n I (fv \<phi>) and)
+        ([], [])
+))"
+
+lemma (in maux) minit0_always_safe_bounded_size [fundef_cong]:
+  assumes "\<And>f. size f \<le> size \<phi> \<Longrightarrow> minit0 n f = minit0' n f"
+  shows "minit0_always_safe_bounded minit0 n I \<phi> = minit0_always_safe_bounded minit0' n I \<phi>"
+  using assms
+  by (auto simp add: minit0_always_safe_bounded_def Let_def split: formula.splits)
+
 function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<Rightarrow> ('msaux, 'muaux, 'mtaux) mformula" where
-  "minit0 n (Formula.Neg \<phi>) = (let V = fv \<phi> in (if V = {} then MNeg (minit0 n \<phi>) else MRel empty_table))"
-| "minit0 n (Formula.Eq t1 t2) = MRel (eq_rel n t1 t2)"
+  "minit0 n (Formula.Neg \<phi>) = (let V = fv \<phi> in (if V = {} then MNeg (minit0 n \<phi>) else MRel V empty_table))"
+| "minit0 n (Formula.Eq t1 t2) = MRel (fv (Formula.Eq t1 t2)) (eq_rel n t1 t2)"
 | "minit0 n (Formula.Pred e ts) = MPred (fv (Formula.Pred e ts)) e ts"
 | "minit0 n (Formula.Let p \<phi> \<psi>) = MLet p (Formula.nfv \<phi>) (minit0 (Formula.nfv \<phi>) \<phi>) (minit0 n \<psi>)"
 | "minit0 n (Formula.Or \<phi> \<psi>) = MOr (minit0 n \<phi>) (minit0 n \<psi>) ([], [])"
@@ -1203,6 +1317,78 @@ function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<R
       Formula.Neg \<phi> \<Rightarrow> MTrigger (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] (init_mtaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False))
     | _ \<Rightarrow> undefined))
 "
+
+| "minit0 n (Formula.Release \<phi> I \<psi>) = (let
+  \<comment> \<open>horrendous code s.t. doesn't have to be changed. rewrite formula is used directly\<close>
+  and = (if safe_assignment (fv \<psi>) \<phi> then
+      MAndAssign (minit0 n \<psi>) (split_assignment (fv \<psi>) \<phi>)
+    else if safe_formula \<phi> then
+      MAnd (minit0 n \<psi>) True (minit0 n \<phi>) ([], [])
+    else if is_constraint \<phi> then
+      MAndRel (minit0 n \<psi>) (split_constraint \<phi>)
+    else (case \<phi> of
+        (Formula.Neg \<phi>) \<Rightarrow> MAnd (minit0 n \<psi>) False (minit0 n \<phi>) ([], [])
+      | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow>
+          MAnd (minit0 n \<psi>) True (minit0 n \<phi>) ([], [])
+      )
+  ) in
+  if mem I 0
+    then
+      \<comment> \<open>release_safe_0 \<phi> I \<psi> = Or (Until \<psi> I (And \<psi> \<phi>)) (always_safe_0 I \<psi>)\<close>
+      MOr
+        \<comment> \<open>\<psi> always is safe\<close>
+        (
+          MUntil
+            (fv (Formula.Until \<psi> I (Formula.And \<psi> \<phi>)))
+            (init_args I n (Formula.fv \<psi>) (Formula.fv (Formula.And \<psi> \<phi>)) True)
+            (minit0 n \<psi>)
+            and
+            ([], [])
+            []
+            0
+            (init_muaux (init_args I n (Formula.fv \<psi>) (Formula.fv (Formula.And \<psi> \<phi>)) True))
+        )
+        (minit0_always_safe_0 minit0 n I \<psi>)
+        ([], [])
+    else
+      \<comment> \<open>release_safe_bounded \<phi> I \<psi> = And (eventually I TT) (Or (Or (always_safe_bounded I \<psi>) (eventually (flip_int_less_lower I) \<phi>)) (eventually (flip_int_less_lower I) (Next all (Until \<psi> (int_remove_lower_bound I) (And \<psi> \<phi>)))))\<close>
+      \<comment> \<open>no case distinction needed as the rhs (or) is neither a safe assignment nor a constraint\<close>
+      MAnd
+        (minit0_eventually n I (fv Formula.TT) minit0_TT)
+        True
+        (
+          MOr
+            \<comment> \<open>(Or (always_safe_bounded I \<psi>) (eventually (flip_int_less_lower I) \<phi>))\<close>
+            (
+              MOr
+                (minit0_always_safe_bounded minit0 n I \<psi>)
+                (minit0_eventually n (flip_int_less_lower I) (fv \<phi>) (minit0 n \<phi>))
+                ([], [])
+            )
+            \<comment> \<open>eventually (flip_int_less_lower I) (Next all (Until \<psi> (int_remove_lower_bound I) (And \<psi> \<phi>)))\<close>
+            (
+              minit0_eventually n (flip_int_less_lower I) (fv \<phi> \<union> fv \<psi>) (
+                MNext
+                all
+                (
+                  MUntil
+                  (fv \<phi> \<union> fv \<psi>)
+                  (init_args (int_remove_lower_bound I) n (fv \<psi>) (fv \<phi> \<union> fv \<psi>) True)
+                  (minit0 n \<psi>)
+                  and
+                  ([], []) []
+                  0
+                  (init_muaux (init_args (int_remove_lower_bound I) n (fv \<psi>) (fv \<phi> \<union> fv \<psi>) True))
+                )
+                True
+                []
+              )
+            )
+            ([], [])
+        )
+        ([], [])
+  )
+"
 | "minit0 n (Formula.MatchP I r) =
     (let (mr, \<phi>s) = to_mregex r
     in MMatchP (fv (Formula.MatchP I r)) I mr (sorted_list_of_set (RPDs mr)) (map (minit0 n) \<phi>s) (replicate (length \<phi>s) []) [] [])"
@@ -1215,6 +1401,78 @@ termination (in maux)
   by (relation "measure (\<lambda>(_, \<phi>). size \<phi>)")
     (auto simp: less_Suc_eq_le size_list_estimation' size_remove_neg
       dest!: to_mregex_ok[OF sym] atms_size)
+
+lemma safe_assignment_next: "\<not>safe_assignment (fv \<psi>) (formula.Next I \<phi>)"
+  unfolding safe_assignment_def
+  by auto
+
+lemma constraint_eventually: "\<not>is_constraint (formula.Neg (Formula.eventually I \<phi>))"
+  unfolding eventually_def
+  by auto
+
+lemma (in maux) minit0_FF_eq[simp]: "minit0_FF = minit0 n Formula.FF"
+  unfolding minit0_FF_def Formula.FF_def
+  by auto
+
+lemma (in maux) minit0_TT_eq[simp]: "minit0_TT = minit0 n Formula.TT"
+  using minit0_FF_eq
+  unfolding minit0_TT_def Formula.TT_def
+  by auto
+
+lemma (in maux) minit0_always_safe_0_eq:
+  "safe_formula \<phi> \<Longrightarrow> minit0_always_safe_0 minit0 n I \<phi> = minit0 n (always_safe_0 I \<phi>)"
+  unfolding minit0_always_safe_0_def always_safe_0_def
+  by (auto simp add: safe_assignment_next)
+
+lemma (in maux) minit0_once_eq:
+  "minit0_once n I (fv \<phi>) (minit0 n \<phi>) = minit0 n (once I \<phi>)"
+  unfolding minit0_once_def once_def
+  by auto
+
+lemma (in maux) minit0_eventually_eq:
+  "minit0_eventually n I (fv \<phi>) (minit0 n \<phi>) = minit0 n (eventually I \<phi>)"
+  unfolding minit0_eventually_def eventually_def
+  by auto
+
+lemma (in maux) minit0_always_safe_bounded_eq:
+  "safe_formula \<phi> \<Longrightarrow> minit0_always_safe_bounded minit0 n I \<phi> = minit0 n (always_safe_bounded I \<phi>)"
+  unfolding minit0_always_safe_bounded_def minit0_eventually_def minit0_once_def always_safe_bounded_def
+  by (auto simp add: once_def eventually_def safe_assignment_def safe_formula_Neg)
+
+lemma (in maux)
+  assumes mem: "mem I 0"
+  assumes "safe_formula \<psi>"
+  shows "minit0 n (Formula.Release \<phi> I \<psi>) = minit0 n (release_safe_0 \<phi> I \<psi>)"
+  using assms minit0_always_safe_0_eq[OF assms(2)]
+  unfolding safe_formula_dual_def release_safe_0_def
+  by auto
+
+lemma (in maux) "(minit0_eventually n I (fv Formula.TT) minit0_TT) = minit0 n (eventually I Formula.TT)"
+  unfolding minit0_TT_eq[of n] minit0_eventually_eq
+  by auto
+
+lemma (in maux)
+  assumes mem: "\<not>mem I 0"
+  assumes "safe_formula_dual True safe_formula \<phi> I \<psi>"
+  shows "minit0 n (Formula.Release \<phi> I \<psi>) = minit0 n (release_safe_bounded \<phi> I \<psi>)"
+proof -
+  have safe_\<psi>: "safe_formula \<psi>" using assms(1-2) unfolding safe_formula_dual_def by auto
+  define f where "f = (Formula.Next all (Formula.Until \<psi> (int_remove_lower_bound I) (Formula.And \<psi> \<phi>)))"
+  have "fv f = fv \<phi> \<union> fv \<psi>"
+    unfolding f_def
+    by auto
+  then have evtly: "minit0_eventually n (flip_int_less_lower I) (fv \<phi> \<union> fv \<psi>) (minit0 n f) = minit0 n (eventually (flip_int_less_lower I) f)"
+    using minit0_eventually_eq[of n "(flip_int_less_lower I)" f]
+    by auto
+  thm evtly[unfolded f_def]
+
+  show ?thesis
+  using assms minit0_always_safe_bounded_eq[OF safe_\<psi>, of n I] evtly[unfolded f_def]
+  unfolding
+    safe_formula_dual_def release_safe_bounded_def minit0.simps Let_def if_not_P[OF mem]
+    minit0_TT_eq[of n] minit0_eventually_eq minit0_always_safe_bounded_eq[OF safe_\<psi>]
+  by (auto simp add: safe_assignment_def eventually_def)
+qed
 
 definition (in maux) minit :: "Formula.formula \<Rightarrow> ('msaux, 'muaux, 'mtaux) mstate" where
   "minit \<phi> = (let n = Formula.nfv \<phi> in \<lparr>mstate_i = 0, mstate_m = minit0 n \<phi>, mstate_n = n\<rparr>)"
@@ -1412,7 +1670,7 @@ lemma lookahead_ts_code[code]: "lookahead_ts nts' nts ts t =
 
 primrec (in maux) meval :: "nat \<Rightarrow> ts list \<Rightarrow> Formula.database \<Rightarrow> ('msaux, 'muaux, 'mtaux) mformula \<Rightarrow>
     (nat set \<times> event_data table) list \<times> ('msaux, 'muaux, 'mtaux) mformula" where
-  "meval n ts db (MRel rel) = (replicate (length ts) ({}, rel), MRel rel)"
+  "meval n ts db (MRel V rel) = (replicate (length ts) (V, rel), MRel V rel)"
 \<comment> \<open>TODO: compute fvs at runtime\<close>
 | "meval n ts db (MPred V e tms) = (map (\<lambda>X. (V, (\<lambda>f. Table.tabulate f 0 n) ` Option.these
     (match tms ` X))) (case Mapping.lookup db e of None \<Rightarrow> replicate (length ts) {} | Some xs \<Rightarrow> xs), MPred V e tms)"
