@@ -1085,10 +1085,6 @@ fun split_constraint :: "Formula.formula \<Rightarrow> Formula.trm \<times> bool
 | "split_constraint (Formula.Neg (Formula.LessEq t1 t2)) = (t1, False, MLessEq, t2)"
 | "split_constraint _ = undefined"
 
-fun remove_neg :: "Formula.formula \<Rightarrow> Formula.formula" where
-  "remove_neg (Formula.Neg \<phi>) = \<phi>"
-| "remove_neg \<phi> = \<phi>"
-
 lemma size_remove_neg[termination_simp]: "size (remove_neg \<phi>) \<le> size \<phi>"
   by (cases \<phi>) simp_all
 
@@ -3415,6 +3411,7 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
     wf_mbufn (progress \<sigma> P (Formula.Ands l') j) (map (\<lambda>\<psi>. progress \<sigma> P \<psi> j) (l_pos @ map remove_neg l_neg)) (map (\<lambda>\<psi> i.
       qtable n (Formula.fv \<psi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<psi>)) (l_pos @ map remove_neg l_neg)) buf \<Longrightarrow>
     (l_pos, l_neg) = partition safe_formula l' \<Longrightarrow>
+    l_pos \<noteq> [] \<Longrightarrow>
     list_all safe_formula (map remove_neg l_neg) \<Longrightarrow>
     A_pos = map fv l_pos \<Longrightarrow>
     A_neg = map fv l_neg \<Longrightarrow>
@@ -3868,8 +3865,9 @@ next
     by auto
 
   have "wf_mformula \<sigma> 0 P V n R (MAnds A_pos A_neg (mpos @ mneg) (replicate (length l) [])) (formula.Ands l)"
-    using wf_mformula.Ands[OF wf_l qtable Ands(1) list_all_remove_neg(2) A_pos_def A_neg_def fvs]
+    using wf_mformula.Ands[OF wf_l qtable Ands(1-2) list_all_remove_neg(2) A_pos_def A_neg_def fvs]
     by auto
+
   then show ?case
     using Ands(1)
     unfolding mpos_def mneg_def A_pos_def A_neg_def
@@ -6120,7 +6118,7 @@ next
     by (metis (no_types, lifting) case_prodD in_set_impl_in_set_zip2)
   then have "\<forall>\<phi>'\<in>set (l_pos @ l_neg). \<forall>x\<in>fv \<phi>'. x < n"
     using fv_remove_neg
-    by auto
+    by fastforce
   then show ?case using Ands by auto
 next
   case (Agg P V b n R \<phi> \<phi>' y f g0 \<omega>)
@@ -6774,6 +6772,9 @@ next
 next
   case (MAnds A_pos A_neg l buf)
   note mbufn_take.simps[simp del] mbufn_add.simps[simp del] mmulti_join.simps[simp del]
+  have not_release: "\<And>\<phi>' I \<psi>'. wf_mformula \<sigma> j P V n R (MAnds A_pos A_neg l buf) (release_safe_0 \<phi>' I \<psi>') = False"
+    using wf_mformula_release[of \<sigma> j P V n R "(MAnds A_pos A_neg l buf)"]
+    by auto
 
   from MAnds.prems obtain pos neg l' where
     wf_l: "list_all2 (wf_mformula \<sigma> j P V n R) l (pos @ map remove_neg neg)" and
@@ -6785,7 +6786,7 @@ next
     A_eq: "A_pos = map fv pos" "A_neg = map fv neg" and
     fv_subset: "\<Union> (set A_neg) \<subseteq> \<Union> (set A_pos)" and
     "\<phi>' = Formula.Ands l'"
-    by (cases rule: wf_mformula.cases) simp
+  proof (cases rule: wf_mformula.cases) qed (auto simp add: not_release)
   have progress_eq: "progress \<sigma> P' (formula.Ands l') (j + \<delta>) =
       Mini (progress \<sigma> P (formula.Ands l') j) (map (\<lambda>\<psi>. progress \<sigma> P' \<psi> (j + \<delta>)) (pos @ map remove_neg neg))"
     using \<open>pos \<noteq> []\<close> posneg
@@ -6858,39 +6859,53 @@ next
         elim: mbufn_take_induct[OF _ wf_mbufn_add[OF wf_buf]])
 next
   case (MOr \<phi> \<psi> buf)
+  (* could be release here..*)
   from MOr.prems show ?case
     by (cases rule: wf_mformula.cases)
       (auto dest!: MOr.IH split: if_splits prod.splits intro!: wf_mformula.Or qtable_union
         elim: mbuf2_take_add'(1) list.rel_mono_strong[OF mbuf2_take_add'(2)])
 next
   case (MNeg \<phi>)
+  have not_release: "\<And>\<phi>' I \<psi>'. wf_mformula \<sigma> j P V n R (MNeg \<phi>) (release_safe_0 \<phi>' I \<psi>') = False"
+    using wf_mformula_release[of \<sigma> j P V n R "(MNeg \<phi>)"]
+    by auto
   have *: "qtable n {} (mem_restr R) (\<lambda>v. P v) X \<Longrightarrow>
     \<not> qtable n {} (mem_restr R) (\<lambda>v. \<not> P v) empty_table \<Longrightarrow> x \<in> X \<Longrightarrow> False" for P x X
     using nullary_qtable_cases qtable_unit_empty_table by fastforce
   from MNeg.prems show ?case
     by (cases rule: wf_mformula.cases)
       (auto 0 4 intro!: wf_mformula.Neg dest!: MNeg.IH
-        simp add: list.rel_map
+        simp add: list.rel_map not_release
         dest: nullary_qtable_cases qtable_unit_empty_table intro!: qtable_empty_unit_table
         elim!: list.rel_mono_strong elim: *)
 next
   case (MExists \<phi>)
+  have not_release: "\<And>\<phi>' I \<psi>'. wf_mformula \<sigma> j P V n R (MExists \<phi>) (release_safe_0 \<phi>' I \<psi>') = False"
+    using wf_mformula_release[of \<sigma> j P V n R "(MExists \<phi>)"]
+    by auto
   from MExists.prems show ?case
     by (cases rule: wf_mformula.cases)
-      (force simp: list.rel_map fvi_Suc sat_fv_cong nth_Cons'
+      (force simp: list.rel_map fvi_Suc sat_fv_cong nth_Cons' not_release
         intro!: wf_mformula.Exists dest!: MExists.IH qtable_project_fv
         elim!: list.rel_mono_strong table_fvi_tl qtable_cong sat_fv_cong[THEN iffD1, rotated -1]
         split: if_splits)+
 next
   case (MAgg g0 y \<omega> b f \<phi>)
+  have not_release: "\<And>\<phi>' I \<psi>'. wf_mformula \<sigma> j P V n R (MAgg g0 y \<omega> b f \<phi>) (release_safe_0 \<phi>' I \<psi>') = False"
+    using wf_mformula_release[of \<sigma> j P V n R "(MAgg g0 y \<omega> b f \<phi>)"]
+    by auto
   from MAgg.prems show ?case
     using wf_mformula_wf_set[OF MAgg.prems(1), unfolded wf_set_def]
     by (cases rule: wf_mformula.cases)
-      (auto 0 3 simp add: list.rel_map simp del: sat.simps fvi.simps split: prod.split
+      (auto 0 3 simp add: list.rel_map not_release simp del: sat.simps fvi.simps split: prod.split
         intro!: wf_mformula.Agg qtable_eval_agg dest!: MAgg.IH elim!: list.rel_mono_strong)
 next
   case (MPrev I \<phi> first buf nts)
-  from MPrev.prems show ?case
+  have not_release: "\<And>\<phi>' I' \<psi>'. wf_mformula \<sigma> j P V n R (MPrev I \<phi> first buf nts) (release_safe_0 \<phi>' I' \<psi>') = False"
+    using wf_mformula_release[of \<sigma> j P V n R "(MPrev I \<phi> first buf nts)"]
+    by auto
+
+  from MPrev.prems not_release show ?case
   proof (cases rule: wf_mformula.cases)
     case (Prev \<psi>)
     let ?xs = "fst (meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>)"
@@ -6918,9 +6933,13 @@ next
       by (auto 0 3 simp: map_Suc_upt[symmetric] list.rel_map qtable_empty_iff mini_def
           simp del: upt_Suc elim!: wf_mformula.Prev list.rel_mono_strong dest: wf_envs_progress_le
           split: prod.split if_split_asm) (* slow 25 sec*)
-  qed
+  qed (auto simp add: not_release)
 next
   case (MNext I \<phi> first nts)
+  have not_release: "\<And>\<phi>' I' \<psi>'. wf_mformula \<sigma> j P V n R (MNext I \<phi> first nts) (release_safe_0 \<phi>' I' \<psi>') = False"
+    using wf_mformula_release[of \<sigma> j P V n R "(MNext I \<phi> first nts)"]
+    by auto
+
   from MNext.prems show ?case
   proof (cases rule: wf_mformula.cases)
     case (Next \<psi>)
@@ -6959,9 +6978,13 @@ next
         (auto 0 3 simp: qtable_empty_iff le_Suc_eq le_diff_conv mini_def list.rel_map
           elim!: wf_mformula.Next list.rel_mono_strong list_all2_appendI intro!: list.rel_refl
           split: prod.split list.splits if_split_asm)  (* slow 15 sec*)
-  qed
+  qed (auto simp add: not_release)
 next
   case (MSince args \<phi> \<psi> buf nts aux)
+  have not_release: "\<And>\<phi>' I' \<psi>'. wf_mformula \<sigma> j P V n R (MSince args \<phi> \<psi> buf nts aux) (release_safe_0 \<phi>' I' \<psi>') = False"
+    using wf_mformula_release[of \<sigma> j P V n R "(MSince args \<phi> \<psi> buf nts aux)"]
+    by auto
+
   note sat.simps[simp del]
   from MSince.prems obtain \<phi>'' \<phi>''' \<psi>'' I where Since_eq: "\<phi>' = Formula.Since \<phi>''' I \<psi>''"
     and pos: "if args_pos args then \<phi>''' = \<phi>'' else \<phi>''' = Formula.Neg \<phi>''"
@@ -6976,7 +6999,7 @@ next
     and args_n: "args_n args = n"
     and args_L: "args_L args = Formula.fv \<phi>''"
     and args_R: "args_R args = Formula.fv \<psi>''"
-    by (cases rule: wf_mformula.cases) (auto)
+    by (cases rule: wf_mformula.cases) (auto simp add: not_release)
   have \<phi>''': "Formula.fv \<phi>''' = Formula.fv \<phi>''" "progress \<sigma> P \<phi>''' j = progress \<sigma> P \<phi>'' j"
     "progress \<sigma> P' \<phi>''' j = progress \<sigma> P' \<phi>'' j" for j
     using pos by (simp_all split: if_splits)
@@ -7025,6 +7048,10 @@ next
               mbuf2t_take_add'(2)[OF _ wf_envs_P_simps[OF MSince.prems(2)] buf nts_snoc])
 next
   case (MUntil args \<phi> \<psi> buf nts t aux)
+  have not_release: "\<And>\<phi>' I' \<psi>'. wf_mformula \<sigma> j P V n R (MUntil args \<phi> \<psi> buf nts t aux) (release_safe_0 \<phi>' I' \<psi>') = False"
+    using wf_mformula_release[of \<sigma> j P V n R "(MUntil args \<phi> \<psi> buf nts t aux)"]
+    by auto
+
   note sat.simps[simp del] progress_simps[simp del]
   from MUntil.prems obtain \<phi>'' \<phi>''' \<psi>'' I where Until_eq: "\<phi>' = Formula.Until \<phi>''' I \<psi>''"
     and pos: "if args_pos args then \<phi>''' = \<phi>'' else \<phi>''' = Formula.Neg \<phi>''"
@@ -7042,7 +7069,7 @@ next
     and t: "t = (if j = 0 then 0 else \<tau> \<sigma> (min (j - 1) (min (progress \<sigma> P \<phi>'' j) (progress \<sigma> P \<psi>'' j))))"
     and length_aux: "progress \<sigma> P (Formula.Until \<phi>''' I \<psi>'') j + length_muaux args aux =
       min (progress \<sigma> P \<phi>'' j) (progress \<sigma> P \<psi>'' j)"
-    by (cases rule: wf_mformula.cases) (auto)
+    by (cases rule: wf_mformula.cases) (auto simp add: not_release)
   define pos where args_pos: "pos = args_pos args"
   have \<phi>''': "progress \<sigma> P \<phi>''' j = progress \<sigma> P \<phi>'' j"  "progress \<sigma> P' \<phi>''' j = progress \<sigma> P' \<phi>'' j" for j
     using pos by (simp_all add: progress.simps split: if_splits)
@@ -7216,10 +7243,17 @@ next
         elim: mbuf2t_take_add'(1)[OF _ wf_envs_P_simps[OF MUntil.prems(2)] buf nts_snoc]
         mbuf2t_take_add'(2)[OF _ wf_envs_P_simps[OF MUntil.prems(2)] buf nts_snoc])
 next
+  case (MAndTrigger V_\<phi> \<phi> buf1 args \<alpha>' \<beta>' buf2 nts aux)
+  show ?case by blast
+next
   case (MTrigger args \<phi> \<psi> buf nts t aux)
   show ?case by blast
 next
   case (MMatchP I mr mrs \<phi>s buf nts aux)
+  have not_release: "\<And>\<phi>' I' \<psi>'. wf_mformula \<sigma> j P V n R (MMatchP I mr mrs \<phi>s buf nts aux) (release_safe_0 \<phi>' I' \<psi>') = False"
+    using wf_mformula_release[of \<sigma> j P V n R "(MMatchP I mr mrs \<phi>s buf nts aux)"]
+    by auto
+
   note sat.simps[simp del] mbufnt_take.simps[simp del] mbufn_add.simps[simp del]
   from MMatchP.prems obtain r \<psi>s where eq: "\<phi>' = Formula.MatchP I r"
     and safe: "safe_regex Past Strict r"
@@ -7229,7 +7263,7 @@ next
     and buf: "wf_mbufn' \<sigma> P V j n R r buf"
     and nts: "wf_ts_regex \<sigma> P j r nts"
     and aux: "wf_matchP_aux \<sigma> V n R I r aux (progress \<sigma> P (Formula.MatchP I r) j)"
-    by (cases rule: wf_mformula.cases) (auto)
+    by (cases rule: wf_mformula.cases) (auto simp add: not_release)
   have nts_snoc: "list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [progress_regex \<sigma> P r j..< j + \<delta>] (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>])"
     using nts unfolding wf_ts_regex_def
     by (subst upt_add_eq_append) (auto simp add: wf_envs_progress_regex_le[OF MMatchP.prems(2)] list.rel_map
@@ -7270,6 +7304,10 @@ next
         dest!: MMatchP.IH[OF _ _ MMatchP.prems(2)] split: prod.splits)
 next
   case (MMatchF I mr mrs \<phi>s buf nts t aux)
+  have not_release: "\<And>\<phi>' I' \<psi>'. wf_mformula \<sigma> j P V n R (MMatchF I mr mrs \<phi>s buf nts t aux) (release_safe_0 \<phi>' I' \<psi>') = False"
+    using wf_mformula_release[of \<sigma> j P V n R "(MMatchF I mr mrs \<phi>s buf nts t aux)"]
+    by auto
+
   note sat.simps[simp del] mbufnt_take.simps[simp del] mbufn_add.simps[simp del] progress_simps[simp del]
   from MMatchF.prems obtain r \<psi>s where eq: "\<phi>' = Formula.MatchF I r"
     and safe: "safe_regex Futu Strict r"
@@ -7281,7 +7319,7 @@ next
     and aux: "wf_matchF_aux \<sigma> V n R I r aux (progress \<sigma> P (Formula.MatchF I r) j) 0"
     and t: "t = (if j = 0 then 0 else \<tau> \<sigma> (min (j - 1) (progress_regex \<sigma> P r j)))"
     and length_aux: "progress \<sigma> P (Formula.MatchF I r) j + length aux = progress_regex \<sigma> P r j"
-    by (cases rule: wf_mformula.cases) (auto)
+    by (cases rule: wf_mformula.cases) (auto simp add: not_release)
   have nts_snoc: "list_all2 (\<lambda>i t. t = \<tau> \<sigma> i)
     [progress_regex \<sigma> P r j..< j + \<delta>] (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>])"
     using nts unfolding wf_ts_regex_def

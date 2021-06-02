@@ -894,9 +894,19 @@ qed auto
 
 subsection \<open>Safe formulas\<close>
 
+fun remove_neg :: "formula \<Rightarrow> formula" where
+  "remove_neg (Neg \<phi>) = \<phi>"
+| "remove_neg \<phi> = \<phi>"
+
+lemma fvi_remove_neg[simp]: "fvi b (remove_neg \<phi>) = fvi b \<phi>"
+  by (cases \<phi>) simp_all
+
 lemma partition_cong[fundef_cong]:
   "xs = ys \<Longrightarrow> (\<And>x. x\<in>set xs \<Longrightarrow> f x = g x) \<Longrightarrow> partition f xs = partition g ys"
   by (induction xs arbitrary: ys) auto
+
+lemma size_remove_neg[termination_simp]: "size (remove_neg \<phi>) \<le> size \<phi>"
+  by (cases \<phi>) simp_all
 
 fun is_constraint :: "formula \<Rightarrow> bool" where
   "is_constraint (Eq t1 t2) = True"
@@ -1642,6 +1652,9 @@ declare fvi.simps(17) [simp del]
 
 lemma release_fvi[simp]: "fvi b (Release \<phi> I \<psi>) = fvi b (release_safe_0 \<phi> I \<psi>)"
   by (auto simp add: release_safe_0_def always_safe_0_def TT_def FF_def fvi.simps(17))
+
+lemma convert_multiway_remove_neg: "safe_formula (remove_neg \<phi>) \<Longrightarrow> convert_multiway (remove_neg \<phi>) = remove_neg (convert_multiway \<phi>)"
+  by (cases \<phi>) (auto elim: case_NegE simp add: release_safe_0_def)
 
 lemma fv_convert_multiway: "fvi b (convert_multiway \<phi>) = fvi b \<phi>"
 proof (induction \<phi> arbitrary: b rule: safe_formula.induct)
