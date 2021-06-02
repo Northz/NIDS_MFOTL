@@ -6216,10 +6216,10 @@ lemma nth_partition: "i < length xs \<Longrightarrow>
 lemma qtable_bin_join:
   assumes "qtable n A P Q1 X" "qtable n B P Q2 Y" "\<not> b \<Longrightarrow> B \<subseteq> A" "C = A \<union> B"
     "\<And>x. wf_tuple n C x \<Longrightarrow> P x \<Longrightarrow> P (restrict A x) \<and> P (restrict B x)"
-    "\<And>x. b \<Longrightarrow> wf_tuple n C x \<Longrightarrow> P x \<Longrightarrow> Q x \<longleftrightarrow> Q1 (restrict A x) \<and> ((Y \<noteq> empty_table \<and> B = {}) \<or> Q2 (restrict B x))"
+    "\<And>x. b \<Longrightarrow> wf_tuple n C x \<Longrightarrow> P x \<Longrightarrow> Q x \<longleftrightarrow> Q1 (restrict A x) \<and> Q2 (restrict B x)"
     "\<And>x. \<not> b \<Longrightarrow> wf_tuple n C x \<Longrightarrow> P x \<Longrightarrow> Q x \<longleftrightarrow> Q1 (restrict A x) \<and> \<not> Q2 (restrict B x)"
   shows "qtable n C P Q (bin_join n A X b B Y)"
-  using qtable_join'[OF assms] bin_join_table[of n A X B Y b] assms(1,2)
+  using qtable_join[OF assms] bin_join_table[of n A X B Y b] assms(1,2)
   by (auto simp add: qtable_def)
 
 lemma restrict_update: "y \<notin> A \<Longrightarrow> y < length x \<Longrightarrow> restrict A (x[y:=z]) = restrict A x"
@@ -6664,135 +6664,15 @@ next
   show ?case unfolding Let
     by (auto simp: fun_upd_def intro!: wf_mformula.Let)
 next
-  case (MAnd \<phi> pos \<psi> buf db P P' V n R \<gamma>)
-  
+  case (MAnd A_\<phi> \<phi> pos A_\<psi> \<psi> buf)
+  have not_release: "\<And>\<phi>' I \<psi>'. wf_mformula \<sigma> j P V n R (MAnd A_\<phi> \<phi> pos A_\<psi> \<psi> buf) (release_safe_0 \<phi>' I \<psi>') = False"
+    using wf_mformula_release[of \<sigma> j P V n R "(MAnd A_\<phi> \<phi> pos A_\<psi> \<psi> buf)"]
+    by auto
   from MAnd.prems show ?case
-  proof (cases rule: wf_mformula.cases)
-    case (And \<alpha> \<beta>)
-
-    obtain xs \<phi>' where \<phi>_eval_eq: "(xs, \<phi>') = meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<phi>"
-      by (metis prod.exhaust)
-
-    obtain ys \<psi>' where \<psi>_eval_eq: "(ys, \<psi>') = meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<psi>"
-      by (metis prod.exhaust)
-
-    obtain zs \<gamma>' where and_eval_eq: "(zs, \<gamma>') = meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db (MAnd \<phi> pos \<psi> buf)"
-      by (metis prod.exhaust)
-
-    have "(zs, \<gamma>') = (case mbuf2_take (\<lambda>(V1, r1) (V2, r2). (V1 \<union> V2, bin_join n V1 r1 pos V2 r2)) (mbuf2_add xs ys buf) of (zs, buf') \<Rightarrow> (zs, MAnd \<phi>' pos \<psi>' buf'))"
-      using and_eval_eq
-      unfolding meval.simps Let_def \<phi>_eval_eq[symmetric] \<psi>_eval_eq[symmetric]
-      by auto
-    then have buf_take:
-      "zs = fst (mbuf2_take (\<lambda>(V1, r1) (V2, r2). (V1 \<union> V2, bin_join n V1 r1 pos V2 r2)) (mbuf2_add xs ys buf))"
-      "\<gamma>' = MAnd \<phi>' pos \<psi>' (snd (mbuf2_take (\<lambda>(V1, r1) (V2, r2). (V1 \<union> V2, bin_join n V1 r1 pos V2 r2)) (mbuf2_add xs ys buf)))"
-      by (auto split:prod.splits)
-    define buf' where "buf' = snd (mbuf2_take (\<lambda>(V1, r1) (V2, r2). (V1 \<union> V2, bin_join n V1 r1 pos V2 r2)) (mbuf2_add xs ys buf))"
-    then have buf_take_pair: "(zs, buf') = mbuf2_take (\<lambda>(V1, r1) (V2, r2). (V1 \<union> V2, bin_join n V1 r1 pos V2 r2)) (mbuf2_add xs ys buf)"
-      using buf_take
-      by auto
-    have rel: "rel_mapping (\<le>) P P'"
-      using MAnd.prems(2)
-      by auto
-
-    have "wf_mformula \<sigma> (j + \<delta>) P' V n R \<gamma>' \<gamma>"
-      using and_eval_eq MAnd.prems And
-      by (auto dest!: MAnd.IH split: prod.splits intro!: wf_mformula.And elim: mbuf2_take_add'(1))
-    moreover have "list_all2 (\<lambda>i (dfvs, a). qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<gamma>) a)
-       [Monitor.progress \<sigma> P \<gamma> j..<Monitor.progress \<sigma> P' \<gamma> (j + \<delta>)] zs"
-    proof -
-      have list_all_qtable:
-        "list_all2 (\<lambda>i (dfvs, a). qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<alpha>) a)
-         [Monitor.progress \<sigma> P \<alpha> j..<Monitor.progress \<sigma> P' \<alpha> (j + \<delta>)] xs"
-        "list_all2 (\<lambda>i (dfvs, a). qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<beta>) a)
-         [Monitor.progress \<sigma> P \<beta> j..<Monitor.progress \<sigma> P' \<beta> (j + \<delta>)] ys"
-        using MAnd.IH(1)[OF And(1) MAnd.prems(2)] \<phi>_eval_eq MAnd.IH(2)[OF And(2) MAnd.prems(2)] \<psi>_eval_eq
-        by auto
-      have progress_simps:
-        "\<And>j. min (Monitor.progress \<sigma> P \<alpha> j) (Monitor.progress \<sigma> P \<beta> j) = Monitor.progress \<sigma> P \<gamma> j"
-        "\<And>j. min (Monitor.progress \<sigma> P' \<alpha> j) (Monitor.progress \<sigma> P' \<beta> j) = Monitor.progress \<sigma> P' \<gamma> j"
-        using And(3)
-        by (auto split: if_splits)
-      have zs_props:
-        "wf_mbuf2' \<sigma> P' V (j + \<delta>) n R \<alpha> \<beta> buf'"
-        "list_all2 (\<lambda>i Z. \<exists>V1 X V2 Y.
-              qtable n V1 (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<alpha>) X \<and>
-              qtable n V2 (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<beta>) Y \<and>
-              Z = (V1 \<union> V2, bin_join n V1 X pos V2 Y)
-        )
-        [(Monitor.progress \<sigma> P \<gamma> j)..<(Monitor.progress \<sigma> P' \<gamma> (j + \<delta>))] zs"
-        using mbuf2_take_add'[OF buf_take_pair[symmetric] And(4) rel list_all_qtable]
-        by (auto simp add: progress_simps)
-     
-      have "True"
-        using qtable_bin_join
-        by auto
-      {
-        fix i dfvs r
-        assume "(i, dfvs, r) \<in> set (zip [Monitor.progress \<sigma> P \<gamma> j..<Monitor.progress \<sigma> P' \<gamma> (j + \<delta>)] zs)"
-        then obtain V1 X V2 Y where qtable:
-          "qtable n V1 (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<alpha>) X"
-          "qtable n V2 (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<beta>) Y"
-          "(dfvs, r) = (V1 \<union> V2, bin_join n V1 X pos V2 Y)"
-          using zs_props
-          unfolding list_all2_iff
-          by blast
-        then have eqs:
-          "dfvs = V1 \<union> V2"
-          "r = bin_join n V1 X pos V2 Y"
-          by auto
-
-        have "safe_formula \<gamma>"
-          by auto
-        moreover have "\<And>V \<phi>. \<not>safe_assignment V (formula.Neg \<phi>)"
-          unfolding safe_assignment_def
-          by auto
-        ultimately have
-          "safe_formula \<alpha>"
-          "\<not> pos \<Longrightarrow>
-            safe_formula (Formula.Neg \<beta>) \<or>
-            is_constraint (Formula.Neg \<beta>) \<or>
-            safe_formula \<beta>"
-          using And(3)
-          by (auto split: if_splits)
-        moreover have
-          "wf_dfvs V1 X n \<sigma> V i \<alpha>"
-          "wf_dfvs V2 Y n \<sigma> V i \<beta>"
-          by auto
-        ultimately have fv_subset:
-          "\<not> pos \<Longrightarrow> V2 \<subseteq> V1"
-          using And(3)
-          unfolding wf_dfvs_def
-          by auto
-
-        have restr:
-          "(\<And>x. wf_tuple n dfvs x \<Longrightarrow> mem_restr R x \<Longrightarrow> mem_restr R (restrict V1 x) \<and> mem_restr R (restrict V2 x))"
-          by auto
-        have pos_imp: "(\<And>x. pos \<Longrightarrow> wf_tuple n dfvs x \<Longrightarrow> mem_restr R x \<Longrightarrow> (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<gamma>) x = (Formula.sat \<sigma> V (map the (restrict V1 x)) i \<alpha> \<and> (Formula.sat \<sigma> V (map the (restrict V2 x)) i \<beta>)))"
-          using And(3) fv_subset
-          by (auto simp: sat_the_restrict)
-        have neg_pos_imp: "(\<And>x. \<not>pos \<Longrightarrow> wf_tuple n dfvs x \<Longrightarrow> mem_restr R x \<Longrightarrow> (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<gamma>) x = (Formula.sat \<sigma> V (map the (restrict V1 x)) i \<alpha> \<and> \<not>Formula.sat \<sigma> V (map the (restrict V2 x)) i \<beta>))"
-          using fv_subset And(3)
-          by (auto simp: sat_the_restrict)
-
-        have "qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<gamma>) r"
-          using qtable_bin_join[OF qtable(1-2) fv_subset(1) eqs(1) restr pos_imp neg_pos_imp, of pos]
-          unfolding eqs(2)
-          by auto
-      }
-      then show ?thesis
-        using zs_props
-        unfolding list_all2_iff
-        by auto
-    qed
-    ultimately show ?thesis
-      using and_eval_eq
-      by auto
-  qed
-    (*apply (cases rule: wf_mformula.cases)
-    apply (auto simp: sat_the_restrict simp del: bin_join.simps
+    by (cases rule: wf_mformula.cases)
+      (auto simp: sat_the_restrict not_release simp del: bin_join.simps
         dest!: MAnd.IH split: if_splits prod.splits intro!: wf_mformula.And qtable_bin_join
-        elim: mbuf2_take_add'(1) list.rel_mono_strong[OF mbuf2_take_add'(2)])*)
+        elim: mbuf2_take_add'(1) list.rel_mono_strong[OF mbuf2_take_add'(2)])
 next
   case (MAndAssign \<phi> conf)
   from MAndAssign.prems obtain \<phi>'' x t \<psi>'' where
