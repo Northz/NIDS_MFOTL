@@ -1688,7 +1688,7 @@ primrec (in maux) meval :: "nat \<Rightarrow> ts list \<Rightarrow> Formula.data
     (let (xs, \<phi>) = meval n ts db \<phi> in
     (map (\<lambda>(r). (eval_assignment conf ` r)) xs, MAndAssign \<phi> conf))"
 | "meval n ts db (MAndRel \<phi> conf) =
-    (let (xs, \<phi>) = meval n ts db \<phi> in map (\<lambda>(r). (Set.filter (eval_constraint conf) r)) xs, MAndRel \<phi> conf)"
+    (let (xs, \<phi>) = meval n ts db \<phi> in (map (\<lambda>(r). (Set.filter (eval_constraint conf) r)) xs, MAndRel \<phi> conf))"
 | "meval n ts db (MAndTrigger V_\<phi> \<phi> buf1 args \<phi>' \<psi>' buf2 nts aux) = (let
     (as, \<phi>) = meval n ts db \<phi>;
     (xs, \<phi>') = meval n ts db \<phi>';
@@ -6675,6 +6675,9 @@ next
         elim: mbuf2_take_add'(1) list.rel_mono_strong[OF mbuf2_take_add'(2)])
 next
   case (MAndAssign \<phi> conf)
+  have not_release: "\<And>\<phi>' I \<psi>'. wf_mformula \<sigma> j P V n R (MAndAssign \<phi> conf) (release_safe_0 \<phi>' I \<psi>') = False"
+    using wf_mformula_release[of \<sigma> j P V n R "(MAndAssign \<phi> conf)"]
+    by auto
   from MAndAssign.prems obtain \<phi>'' x t \<psi>'' where
     wf_envs: "wf_envs \<sigma> j \<delta> P P' V db" and
     \<phi>'_eq: "\<phi>' = formula.And \<phi>'' \<psi>''" and
@@ -6684,7 +6687,7 @@ next
     fv_t_subset: "fv_trm t \<subseteq> fv \<phi>''" and
     conf: "(x, t) = conf" and
     \<psi>''_eqs: "\<psi>'' = formula.Eq (trm.Var x) t \<or> \<psi>'' = formula.Eq t (trm.Var x)"
-    by (cases rule: wf_mformula.cases)
+    by (cases rule: wf_mformula.cases) (auto simp add: not_release)
   from wf_\<phi> wf_envs obtain xs \<phi>\<^sub>n where
     meval_eq: "meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi> = (xs, \<phi>\<^sub>n)" and
     wf_\<phi>\<^sub>n: "wf_mformula \<sigma> (j + \<delta>) P' V n R \<phi>\<^sub>n \<phi>''" and
@@ -6754,13 +6757,20 @@ next
   qed
 next
   case (MAndRel \<phi> conf)
+  have not_release: "\<And>\<phi>' I \<psi>'. wf_mformula \<sigma> j P V n R (MAndRel \<phi> conf) (release_safe_0 \<phi>' I \<psi>') = False"
+    using wf_mformula_release[of \<sigma> j P V n R "(MAndRel \<phi> conf)"]
+    by auto
   from MAndRel.prems show ?case
-    by (cases rule: wf_mformula.cases)
-      (auto simp: progress_constraint progress_le list.rel_map fv_formula_of_constraint
+  proof (cases rule: wf_mformula.cases)
+    case (AndRel \<alpha>' \<beta>')
+    then show ?thesis
+      using MAndRel.prems
+      by (auto simp: progress_constraint progress_le list.rel_map fv_formula_of_constraint
         Un_absorb2 wf_mformula_wf_set[unfolded wf_set_def] split: prod.splits
-        dest!: MAndRel.IH[where db=db and P=P and P'=P'] eval_constraint_sat_eq[THEN iffD2]
+        dest!: MAndRel.IH[of P V n R \<alpha>' P' db] eval_constraint_sat_eq[THEN iffD2]
         intro!: wf_mformula.AndRel
         elim!: list.rel_mono_strong qtable_filter eval_constraint_sat_eq[THEN iffD1])
+  qed (auto simp add: not_release)  
 next
   case (MAnds A_pos A_neg l buf)
   note mbufn_take.simps[simp del] mbufn_add.simps[simp del] mmulti_join.simps[simp del]
