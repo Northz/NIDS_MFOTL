@@ -1698,7 +1698,7 @@ primrec (in maux) meval :: "nat \<Rightarrow> ts list \<Rightarrow> Formula.data
         bin_join n V_\<phi> r1 True V_trigger r2 \<comment> \<open>fix pos=True for the and join\<close>
     ) (mbuf2_add as zs_trigger buf1)
     in
-    ([], MAndTrigger V_\<phi> \<phi> buf1 args \<phi>' \<psi>' buf2 nts aux)
+    (zs, MAndTrigger V_\<phi> \<phi> buf1 args \<phi>' \<psi>' buf2 nts aux)
 )"
 | "meval n ts db (MAnds A_pos A_neg L buf) =
     (let R = map (meval n ts db) L in
@@ -3226,14 +3226,8 @@ subsection \<open>Correctness\<close>
 
 subsubsection \<open>Invariants\<close>
 
-definition wf_mbuf2 :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> (nat \<Rightarrow> event_data table \<Rightarrow> bool) \<Rightarrow> (nat \<Rightarrow> event_data table \<Rightarrow> bool) \<Rightarrow>
-    event_data mbuf2 \<Rightarrow> bool" where
+definition wf_mbuf2 where
   "wf_mbuf2 i ja jb P Q buf \<longleftrightarrow> i \<le> ja \<and> i \<le> jb \<and> (case buf of (xs, ys) \<Rightarrow>
-    list_all2 P [i..<ja] xs \<and> list_all2 Q [i..<jb] ys)"
-
-definition wf_mbuf2t :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> (nat \<Rightarrow> event_data table \<Rightarrow> bool) \<Rightarrow> (nat \<Rightarrow> nat set \<times> event_data table \<Rightarrow> bool) \<Rightarrow>
-    event_data mbuft2 \<Rightarrow> bool" where
-  "wf_mbuf2t i ja jb P Q buf \<longleftrightarrow> i \<le> ja \<and> i \<le> jb \<and> (case buf of (xs, ys) \<Rightarrow>
     list_all2 P [i..<ja] xs \<and> list_all2 Q [i..<jb] ys)"
 
 inductive list_all3 :: "('a \<Rightarrow> 'b \<Rightarrow> 'c \<Rightarrow> bool) \<Rightarrow> 'a list \<Rightarrow> 'b list \<Rightarrow> 'c list \<Rightarrow> bool" for P :: "('a \<Rightarrow> 'b \<Rightarrow> 'c \<Rightarrow> bool)" where
@@ -3291,9 +3285,9 @@ definition wf_mbuf2' :: "Formula.trace \<Rightarrow> _ \<Rightarrow> _ \<Rightar
     (\<lambda>i (r). qtable n (fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>) r)
     (\<lambda>i (r). qtable n (fv \<psi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<psi>) r) buf"
 
-definition wf_mbuf2t' :: "Formula.trace \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> event_data list set \<Rightarrow>
+definition wf_mbuft2' :: "Formula.trace \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> event_data list set \<Rightarrow>
   Formula.formula \<Rightarrow> Formula.formula \<Rightarrow> event_data mbuft2 \<Rightarrow> bool" where
-  "wf_mbuf2t' \<sigma> P V j n R \<phi> \<psi> buf \<longleftrightarrow> wf_mbuf2t (min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j))
+  "wf_mbuft2' \<sigma> P V j n R \<phi> \<psi> buf \<longleftrightarrow> wf_mbuf2 (min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j))
     (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j)
     (\<lambda>i (r). qtable n (fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>) r)
     (\<lambda>i (dfvs, r). qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<psi>) r) buf"
@@ -3459,7 +3453,7 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
     wf_mformula \<sigma> j P V n R (MAndRel \<phi> conf) (Formula.And \<phi>' \<psi>')"
   | And_Trigger: "
     wf_mformula \<sigma> j P V n R \<alpha> \<alpha>' \<Longrightarrow>
-    wf_mbuf2t' \<sigma> P V j n R \<alpha>' (Formula.Trigger \<phi>'' I \<psi>') buf1 \<Longrightarrow>
+    wf_mbuft2' \<sigma> P V j n R \<alpha>' (Formula.Trigger \<phi>'' I \<psi>') buf1 \<Longrightarrow>
     wf_mformula \<sigma> j P V n R \<psi> \<psi>' \<Longrightarrow>
     if args_pos args then \<phi>'' = \<phi>' else \<phi>'' = Formula.Neg \<phi>' \<Longrightarrow>
     wf_mformula \<sigma> j P V n R \<phi> \<phi>' \<Longrightarrow>
@@ -3744,10 +3738,10 @@ next
     by auto
   have wf_buf:
     "wf_mbuf2' \<sigma> P V 0 n R \<phi> t ([], [])"
-    "wf_mbuf2t' \<sigma> P V 0 n R \<phi> t ([], [])"
+    "wf_mbuft2' \<sigma> P V 0 n R \<phi> t ([], [])"
     "wf_mbuf2' \<sigma> P V 0 n R \<phi>' \<psi>' ([],[])"
     "wf_ts \<sigma> P 0  \<phi>' \<psi>' []"
-    unfolding wf_mbuf2'_def wf_mbuf2t'_def wf_mbuf2_def wf_mbuf2t_def wf_ts_def
+    unfolding wf_mbuf2'_def wf_mbuft2'_def wf_mbuf2_def wf_mbuf2_def wf_ts_def
     by (auto simp add: And_Trigger(9))
 
   show ?case
@@ -3834,10 +3828,10 @@ next
     by auto
   have wf_buf:
     "wf_mbuf2' \<sigma> P V 0 n R \<phi> t ([],[])"
-    "wf_mbuf2t' \<sigma> P V 0 n R \<phi> t ([], [])"
+    "wf_mbuft2' \<sigma> P V 0 n R \<phi> t ([], [])"
     "wf_mbuf2' \<sigma> P V 0 n R \<phi>' \<psi>' ([],[])"
     "wf_ts \<sigma> P 0  \<phi>' \<psi>' []"
-    unfolding wf_mbuf2'_def wf_mbuf2t'_def wf_mbuf2_def wf_mbuf2t_def wf_ts_def
+    unfolding wf_mbuf2'_def wf_mbuft2'_def wf_mbuf2_def wf_mbuf2_def wf_ts_def
     by (auto simp add: And_Not_Trigger(9))
 
   show ?case
@@ -6041,6 +6035,47 @@ lemma mbuf2_take_add':
   using pre rm unfolding wf_mbuf2'_def
   by (force intro!: mbuf2_take_eqD[OF eq] wf_mbuf2_add[OF _ xs ys] progress_mono_gen[OF \<open>j \<le> j'\<close> rm])+
 
+lemma mbuft2_take_add':
+  assumes eq: "mbuf2_take f (mbuf2_add xs ys buf) = (zs, buf')"
+    and pre: "wf_mbuft2' \<sigma> P V j n R \<phi> \<psi> buf"
+    and rm: "rel_mapping (\<le>) P P'"
+    and xs: "list_all2 (\<lambda>i r. qtable n (fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>) r)
+      [progress \<sigma> P \<phi> j..<progress \<sigma> P' \<phi> j'] xs"
+    and ys: "list_all2 (\<lambda>i (dfvs, r). qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<psi>) r)
+      [progress \<sigma> P \<psi> j..<progress \<sigma> P' \<psi> j'] ys"
+    and "j \<le> j'"
+  shows "wf_mbuft2' \<sigma> P' V j' n R \<phi> \<psi> buf'"
+  and "list_all2 (\<lambda>i Z. \<exists>X V_Y Y.
+      qtable n (fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>) X \<and>
+      qtable n V_Y (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<psi>) Y \<and>
+      Z = f X (V_Y, Y))
+      [min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j)..<min (progress \<sigma> P' \<phi> j') (progress \<sigma> P' \<psi> j')] zs"
+proof -
+  show "wf_mbuft2' \<sigma> P' V j' n R \<phi> \<psi> buf'"
+    using pre rm unfolding wf_mbuft2'_def
+    by (force intro!: mbuf2_take_eqD[OF eq] wf_mbuf2_add[OF _ xs ys] progress_mono_gen[OF \<open>j \<le> j'\<close> rm])+
+
+  have progress:
+    "Monitor.progress \<sigma> P \<phi> j \<le> Monitor.progress \<sigma> P' \<phi> j'"
+    "Monitor.progress \<sigma> P \<psi> j \<le> Monitor.progress \<sigma> P' \<psi> j'"
+    using progress_mono_gen[OF \<open>j \<le> j'\<close> rm]
+    by auto
+
+  have wf_add: "wf_mbuf2 (min (Monitor.progress \<sigma> P \<phi> j) (Monitor.progress \<sigma> P \<psi> j)) (Monitor.progress \<sigma> P' \<phi> j') (Monitor.progress \<sigma> P' \<psi> j')
+     (\<lambda>i. qtable n (fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>)) (\<lambda>i (dfvs, r). qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<psi>) r)
+     (mbuf2_add xs ys buf)"
+    using wf_mbuf2_add[OF pre[unfolded wf_mbuft2'_def]  xs ys progress]
+    by auto
+
+  show "list_all2 (\<lambda>i Z. \<exists>X V_Y Y.
+      qtable n (fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>) X \<and>
+      qtable n V_Y (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<psi>) Y \<and>
+      Z = f X (V_Y, Y))
+      [min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j)..<min (progress \<sigma> P' \<phi> j') (progress \<sigma> P' \<psi> j')] zs"
+    using mbuf2_take_eqD[OF eq wf_add]
+    by auto
+qed
+
 lemma mbuf2t_take_add':
   assumes eq: "mbuf2t_take f z (mbuf2_add xs ys buf) nts = (z', buf', nts')"
     and bounded: "pred_mapping (\<lambda>x. x \<le> j) P" "pred_mapping (\<lambda>x. x \<le> j') P'"
@@ -6055,6 +6090,23 @@ lemma mbuf2t_take_add':
   shows "wf_mbuf2' \<sigma> P' V j' n R \<phi> \<psi> buf'"
     and "wf_ts \<sigma> P' j' \<phi> \<psi> nts'"
   using pre_buf pre_nts bounded rm unfolding wf_mbuf2'_def wf_ts_def
+  by (auto intro!: mbuf2t_take_eqD[OF eq] wf_mbuf2_add[OF _ xs ys] progress_mono_gen[OF \<open>j \<le> j'\<close> rm]
+      progress_le_gen)
+
+lemma mbuft2t_take_add':
+  assumes eq: "mbuf2t_take f z (mbuf2_add xs ys buf) nts = (z', buf', nts')"
+    and bounded: "pred_mapping (\<lambda>x. x \<le> j) P" "pred_mapping (\<lambda>x. x \<le> j') P'"
+    and rm: "rel_mapping (\<le>) P P'"
+    and pre_buf: "wf_mbuft2' \<sigma> P V j n R \<phi> \<psi> buf"
+    and pre_nts: "list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j)..<j'] nts"
+    and xs: "list_all2 (\<lambda>i (r). qtable n (fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>) r)
+      [progress \<sigma> P \<phi> j..<progress \<sigma> P' \<phi> j'] xs"
+    and ys: "list_all2 (\<lambda>i (dfvs, r). qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<psi>) r)
+      [progress \<sigma> P \<psi> j..<progress \<sigma> P' \<psi> j'] ys"
+    and "j \<le> j'"
+  shows "wf_mbuft2' \<sigma> P' V j' n R \<phi> \<psi> buf'"
+    and "wf_ts \<sigma> P' j' \<phi> \<psi> nts'"
+  using pre_buf pre_nts bounded rm unfolding wf_mbuft2'_def wf_ts_def
   by (auto intro!: mbuf2t_take_eqD[OF eq] wf_mbuf2_add[OF _ xs ys] progress_mono_gen[OF \<open>j \<le> j'\<close> rm]
       progress_le_gen)
 
@@ -7880,7 +7932,7 @@ next
       elim!: list.rel_mono_strong qtable_filter eval_constraint_sat_eq[THEN iffD1])
 next
   case (And_Trigger P V n R \<phi>' \<phi> \<alpha> I \<beta> buf1 \<beta>' args \<gamma> \<gamma>' buf2 nts aux)
-  have ?case sorry
+
   define xs where "xs = fst (meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<phi>')"
   define \<phi>'' where "\<phi>'' = snd (meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<phi>')"
   have xtuple_eq: "meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<phi>' = (xs, \<phi>'')"
@@ -7959,11 +8011,11 @@ next
     by (auto split: prod.splits)*)
   define zs' where "zs' = fst (fst tuple)"
   define aux' where "aux' = snd (fst tuple)"
-  define buf' where "buf' = fst (snd tuple)"
+  define buf2' where "buf2' = fst (snd tuple)"
   define nts' where "nts' = snd (snd tuple)"
 
-  have tuple_eq: "tuple = ((zs', aux'), buf', nts')"
-    unfolding zs'_def aux'_def buf'_def nts'_def Let_def
+  have tuple_eq: "tuple = ((zs', aux'), buf2', nts')"
+    unfolding zs'_def aux'_def buf2'_def nts'_def Let_def
     by auto
 
   (*have \<eta>_eq: "\<eta> = MTrigger args \<gamma>' \<beta>' buf' nts' aux'"
@@ -7984,8 +8036,8 @@ next
     by (subst upt_add_eq_append) (auto simp add: wf_envs_progress_le[THEN min.coboundedI1] list.rel_map
       intro!: list_all2_appendI list.rel_refl)
 
-  have wf_buf_ts:
-    "wf_mbuf2' \<sigma> P' V (j + \<delta>) n R \<gamma> \<beta> buf'"
+  have wf_buf_ts_trigger:
+    "wf_mbuf2' \<sigma> P' V (j + \<delta>) n R \<gamma> \<beta> buf2'"
     "wf_ts \<sigma> P' (j + \<delta>) \<gamma> \<beta> nts'"
     using mbuf2t_take_add'[OF tuple_eq[unfolded tuple_def] pred_mapping buf nts_snoc IH_\<gamma>(2) IH_\<beta>(2)]
     by auto
@@ -8348,25 +8400,101 @@ next
   qed (auto)
   (* same but this time without the conjunction *)
   then have update_trigger:
-    "wf_trigger_aux \<sigma> V R args \<gamma> \<beta> (snd (zs', aux')) (Monitor.progress \<sigma> P' (formula.Trigger \<alpha> I \<beta>) (j + \<delta>))"
+    "wf_trigger_aux \<sigma> V R args \<gamma> \<beta> aux' (Monitor.progress \<sigma> P' (formula.Trigger \<alpha> I \<beta>) (j + \<delta>))"
     "list_all2 (\<lambda>i (dfvs, r). qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>)) r)
-     [Monitor.progress \<sigma> P (formula.Trigger \<alpha> I \<beta>) j..<Monitor.progress \<sigma> P' (formula.Trigger \<alpha> I \<beta>) (j + \<delta>)] (fst (zs', aux'))"
+     [Monitor.progress \<sigma> P (formula.Trigger \<alpha> I \<beta>) j..<Monitor.progress \<sigma> P' (formula.Trigger \<alpha> I \<beta>) (j + \<delta>)] zs'"
     by auto
 
-  thm update_trigger
+  define tuple' where "tuple' = mbuf2_take (\<lambda>r1 (V_trigger, r2).
+      bin_join n (fv \<phi>) r1 True V_trigger r2
+  ) (mbuf2_add xs zs' buf1)"
+
+  have zs_eq: "zs = fst tuple'"
+    unfolding zs_def meval.simps tuple'_def Let_def
+    apply (auto simp only: xtuple_eq atuple_eq btuple_eq tuple_def[unfolded Let_def, symmetric] tuple_eq)
+    by (simp add: case_prod_beta')
+    
+  define buf1' where "buf1' = snd tuple'"
+
+  have tuple'_eq: "tuple' = (zs, buf1')"
+    unfolding zs_eq buf1'_def
+    by auto
+
+  have \<chi>''_eq: "\<chi>'' = MAndTrigger (fv \<phi>) \<phi>'' buf1' args \<gamma>'' \<beta>'' buf2' nts' aux'"
+    unfolding \<chi>''_def meval.simps Let_def
+    apply (auto simp only: xtuple_eq atuple_eq btuple_eq tuple_def[unfolded Let_def, symmetric]
+        tuple_eq tuple'_def[unfolded Let_def, symmetric] tuple'_eq)
+    by (simp add: case_prod_beta')
+
+  have buf_and:
+    "wf_mbuft2' \<sigma> P' V (j + \<delta>) n R \<phi> (formula.Trigger \<alpha> I \<beta>) buf1'"
+    "list_all2
+     (\<lambda>i Z. \<exists>X V_Y Y.
+                qtable n (fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>) X \<and>
+                qtable n V_Y (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>)) Y \<and>
+                Z = bin_join n (fv \<phi>) X True V_Y Y)
+     [min (Monitor.progress \<sigma> P \<phi> j) (Monitor.progress \<sigma> P (formula.Trigger \<alpha> I \<beta>) j)..<
+      min (Monitor.progress \<sigma> P' \<phi> (j + \<delta>)) (Monitor.progress \<sigma> P' (formula.Trigger \<alpha> I \<beta>) (j + \<delta>))]
+     zs"
+    using mbuft2_take_add'[OF tuple'_eq[unfolded tuple'_def] And_Trigger(2) pred_mapping(3) IH_\<phi>(2) update_trigger(2)]
+    by auto
 
   have "wf_mformula \<sigma> (j + \<delta>) P' V n R \<chi>'' (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>))"
-  proof -
-    have "True"
-      by auto
-    then show ?thesis
-      using wf_mformula.And_Trigger[OF IH_\<phi>(1) _ IH_\<beta>(1) pos IH_\<gamma>(1) pos_eq args_ivl args_n args_L args_R fv_l_n fvs]
-      by auto
-  qed
+    unfolding \<chi>''_eq
+    using wf_mformula.And_Trigger[OF IH_\<phi>(1) buf_and(1) IH_\<beta>(1) pos IH_\<gamma>(1) pos_eq args_ivl args_n args_L args_R fv_l_n fvs wf_buf_ts_trigger update_trigger(1)]
+    by auto
   moreover have "list_all2
        (\<lambda>i. qtable n (fv (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>))) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>))))
-       [Monitor.progress \<sigma> P (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>)) j..<Monitor.progress \<sigma> P' (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>)) (j + \<delta>)] zs"
-    by auto
+       [Monitor.progress \<sigma> P (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>)) j..<Monitor.progress \<sigma> P' (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>)) (j + \<delta>)] zs" 
+  proof -
+    have "length [Monitor.progress \<sigma> P (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>)) j..<Monitor.progress \<sigma> P' (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>)) (j + \<delta>)] = length zs"
+      using buf_and(2)
+      unfolding list_all2_iff
+      by auto
+    moreover have "\<And>i r. (i, r)\<in>set (zip [Monitor.progress \<sigma> P (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>)) j..<Monitor.progress \<sigma> P' (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>)) (j + \<delta>)] zs) \<Longrightarrow>
+        qtable n (fv (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>))) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>))) r"
+    proof -
+      fix i r
+      assume "(i, r)\<in>set (zip [Monitor.progress \<sigma> P (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>)) j..<Monitor.progress \<sigma> P' (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>)) (j + \<delta>)] zs)"
+      then have "(i, r)\<in>set (zip [min (Monitor.progress \<sigma> P \<phi> j) (Monitor.progress \<sigma> P (formula.Trigger \<alpha> I \<beta>) j)..< min (Monitor.progress \<sigma> P' \<phi> (j + \<delta>)) (Monitor.progress \<sigma> P' (formula.Trigger \<alpha> I \<beta>) (j + \<delta>))] zs)"
+        by auto
+      then have "\<exists>X V_Y Y.
+           qtable n (fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>) X \<and>
+           qtable n V_Y (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>)) Y \<and> r = bin_join n (fv \<phi>) X True V_Y Y"
+        using buf_and(2)
+        unfolding list_all2_iff
+        by fast
+      then obtain X V_Y Y where qtables:
+        "qtable n (fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>) X"
+        "qtable n V_Y (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>)) Y"
+        "r = bin_join n (fv \<phi>) X True V_Y Y"
+        by blast
+
+      then have fvs: "(fv (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>))) = fv \<phi> \<union> V_Y"
+        by auto
+
+      have "\<And>x. Formula.sat \<sigma> V (map the (restrict (fv \<phi>) x)) i \<phi> = Formula.sat \<sigma> V (map the x) i \<phi>"
+        using sat_the_restrict
+        by auto
+      
+
+      have qtable_pos: "(\<And>x.
+          wf_tuple n (fv (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>))) x \<Longrightarrow>
+          mem_restr R x \<Longrightarrow>
+          Formula.sat \<sigma> V (map the x) i (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>)) =
+          (Formula.sat \<sigma> V (map the (restrict (fv \<phi>) x)) i \<phi> \<and> Formula.sat \<sigma> V (map the (restrict V_Y x)) i (formula.Trigger \<alpha> I \<beta>)))"
+        using sat_the_restrict
+        by auto
+
+      then show "qtable n (fv (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>))) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>))) r"
+        unfolding qtables(3)
+        using qtable_bin_join[OF qtables(1-2) _ fvs _ qtable_pos, of True]
+        by auto
+    qed
+    ultimately show ?thesis
+      unfolding list_all2_iff
+      by blast
+  qed
 
   ultimately show ?case using ztuple_eq by auto 
 next
