@@ -6938,9 +6938,474 @@ proof -
     using sorted_auxlist' auxlist_props auxlist_mem auxlist_len
     unfolding wf_trigger_aux_def diff_Suc_1
     by blast
+qed
 
-  have "sorted (map fst auxlist')"
-    using sorted(2)
+lemma (in maux) trigger_sat_equiv:
+  assumes restr: "mem_restr R x"
+  assumes wf_x: "wf_tuple (args_n args) (args_R args) x"
+  assumes pos: "if args_pos args then \<alpha> = \<gamma> else \<alpha> = formula.Neg \<gamma>"
+  assumes args_n: "args_n args = n"
+  assumes args_ivl: "args_ivl args = I"
+  assumes args_L: "args_L args = fv \<gamma>"
+  assumes args_R: "args_R args = fv \<beta>"
+  assumes fvi_subset: "if mem I 0 then fv \<gamma> \<subseteq> fv \<beta> else fv \<gamma> = fv \<beta>"
+  assumes fv_l_n: "\<forall>x\<in>fv \<beta>. x < n"
+  assumes valid_mtaux: "valid_mtaux args (\<tau> \<sigma> k) (update_mtaux args (\<tau> \<sigma> k) X Y aux) (filter (\<lambda>(t, _). memR (args_ivl args) (\<tau> \<sigma> k - t)) auxlist')"
+  assumes sorted: "sorted_wrt (\<lambda>x y. fst x \<le> fst y) auxlist'"
+  assumes auxlist_len: "length auxlist' = Suc k"
+  assumes auxlist_props: "(\<forall>(i, t, l, r)\<in>set (zip [0..<length auxlist'] auxlist').
+       Suc k \<noteq> 0 \<and>
+       t = \<tau> \<sigma> i \<and>
+       t \<le> \<tau> \<sigma> k \<and>
+       qtable (args_n args) (fv \<gamma>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<gamma>) l \<and>
+       qtable (args_n args) (fv \<beta>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<beta>) r
+    )"
+   assumes auxlist_mem: "(\<forall>i.
+        Suc k \<noteq> 0 \<and>
+        i \<le> k
+        \<longrightarrow>
+        (\<exists>X. (\<tau> \<sigma> i, X) = auxlist'!i)
+    )"
+   assumes non_empty: "length (filter (\<lambda> (t, _). mem (args_ivl args) (\<tau> \<sigma> k - t)) auxlist') > 0"
+   shows "x \<in> snd (trigger_results args (\<tau> \<sigma> k) (filter (\<lambda>(t, _). memR (args_ivl args) (\<tau> \<sigma> k - t)) auxlist')) = Formula.sat \<sigma> V (map the x) k (formula.Trigger \<alpha> I \<beta>)"
+proof -
+  have sorted: "sorted (map fst auxlist')"
+    using sorted sorted_map
+    by blast
+
+  define offset where "offset = length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (\<tau> \<sigma> k - t)) auxlist')"
+  then have offset_leq: "offset \<le> length auxlist'"
+    by auto
+
+  define auxlist'' where "auxlist'' = (filter (\<lambda>(t, _). memR (args_ivl args) (\<tau> \<sigma> k - t)) auxlist')"
+  then have auxlist''_eq: "auxlist'' = drop offset auxlist'"
+    using drop_filter_memR[OF sorted, of "args_ivl args" "\<tau> \<sigma> k"]
+    unfolding offset_def
+    by auto
+
+  have auxlist'_filter_sum: "length (filter (\<lambda>(t, _). memR (args_ivl args) ((\<tau> \<sigma> k) - t)) auxlist') + length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) ((\<tau> \<sigma> k) - t)) auxlist') = length auxlist'"
+    using sum_length_filter_compl[of "(\<lambda>(t, _). memR (args_ivl args) ((\<tau> \<sigma> k) - t))" auxlist']
+    by (simp add: case_prod_beta')
+
+  have idx_shift: "\<And>i. i < length auxlist'' \<Longrightarrow> auxlist''!i = auxlist'!(offset + i) \<and> offset + i < length auxlist'"
+    unfolding auxlist''_eq
+    using nth_drop[OF offset_leq]
+    by auto
+
+  have idx_shift_rev: "\<And>i. i <length auxlist' \<Longrightarrow> memR (args_ivl args) (\<tau> \<sigma> k - (fst (auxlist'!i))) \<Longrightarrow> auxlist'!i = auxlist''!(i - offset) \<and> (i - offset) \<in> {0..<length auxlist''}"
+  proof -
+    fix i
+    assume assms: "i <length auxlist'" "memR (args_ivl args) (\<tau> \<sigma> k - (fst (auxlist'!i)))"
+    have i_mem: "i \<in> {0..<length auxlist'}"
+      using assms(1)
+      by auto
+
+    have "i < length auxlist'' + offset"
+      using assms auxlist'_filter_sum
+      unfolding auxlist''_def offset_def
+      by auto
+    moreover have "i \<ge> offset"
+    proof -
+      {
+        assume "i < offset"
+        then have "auxlist'!i \<in> set (take offset auxlist')"
+          using i_mem
+          by (metis atLeastLessThan_iff image_eqI nth_image offset_leq)
+        moreover have "take offset auxlist' = filter (\<lambda>(t, _). \<not> memR (args_ivl args) (\<tau> \<sigma> k - t)) auxlist'"
+          using take_filter_not_memR[OF sorted, of "args_ivl args" "\<tau> \<sigma> k"]
+          unfolding offset_def
+          by auto
+        ultimately have "auxlist'!i \<in> set (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (\<tau> \<sigma> k - t)) auxlist')"
+          by auto
+        then have "\<not> memR (args_ivl args) (\<tau> \<sigma> k - (fst (auxlist'!i)))"
+          by auto
+        then have "False" using assms(2) by auto
+      }
+      then show ?thesis using le_def by blast
+    qed
+    ultimately have "i \<in> {offset..<length auxlist'' + offset}"
+      by auto
+    then have
+      "(i - offset) \<in> {0..<length auxlist''}"
+      "auxlist''!(i - offset) = auxlist'!i"
+      using idx_shift
+      by auto
+    then show "auxlist'!i = auxlist''!(i - offset) \<and> (i - offset) \<in> {0..<length auxlist''}"
+      by auto
+  qed
+
+  have filter_inv: "(filter (\<lambda> (t, _). mem (args_ivl args) ((\<tau> \<sigma> k) - t)) auxlist'') = (filter (\<lambda> (t, _). mem (args_ivl args) ((\<tau> \<sigma> k) - t)) auxlist')"
+    unfolding auxlist''_def filter_filter
+    by (metis (mono_tags, lifting) case_prod_beta')
+
+  define z where "z = snd (trigger_results args (\<tau> \<sigma> k) auxlist'')"
+
+
+
+  have z_eq: "z = {
+    tuple. wf_tuple (args_n args) (args_R args) tuple \<and>
+      (\<forall>i \<in> {0..<(length auxlist'')}.
+        let (t, l, r) = auxlist''!i in
+        mem (args_ivl args) ((\<tau> \<sigma> k) - t) \<longrightarrow> 
+        (
+          tuple \<in> r \<or>
+          (\<exists>j \<in> {i<..<(length auxlist'')}.
+            join_cond (args_pos args) ((fst o snd) (auxlist''!j)) (proj_tuple (join_mask (args_n args) (args_L args)) tuple)
+          )
+        )
+      )
+    }"
+    using non_empty filter_inv
+    unfolding z_def
+    by auto
+
+  have fv_subset: "fv \<gamma> \<subseteq> fv \<beta> " using fvi_subset by (auto split: if_splits)
+
+  define proj_x where "proj_x = proj_tuple (join_mask (args_n args) (args_L args)) x"
+  have len_x: "length x = args_n args"
+    using wf_x
+    unfolding wf_tuple_def
+    by auto
+  
+  have restr_proj_x: "mem_restr R proj_x"
+    using restr
+    unfolding proj_x_def proj_tuple_join_mask_restrict[OF len_x]
+    by simp
+
+  have len_x_eq: "length (join_mask (args_n args) (args_L args)) = length x"
+    using wf_x
+    unfolding wf_tuple_def join_mask_def
+    by auto
+
+  have join_mask_fv_\<gamma>:
+    "i < length (proj_tuple (join_mask (args_n args) (fv \<gamma>)) x) \<and> i < length x \<and> join_mask (args_n args) (fv \<gamma>) ! i"
+    if mem: "i \<in> fv \<gamma>" for i
+    using wf_x args_n args_R args_L fvi_subset fv_l_n mem
+    unfolding wf_tuple_def join_mask_def
+    by (auto simp add: proj_tuple_alt split: if_splits)
+
+  have wf_proj_x: "wf_tuple (args_n args) (fv \<gamma>) proj_x"
+    using wf_x
+    unfolding proj_x_def proj_tuple_join_mask_restrict[OF len_x] args_R args_L
+    by (simp add: fv_subset wf_tuple_restrict_simple)
+
+  have proj_sat_equiv: "\<And>j''. Formula.sat \<sigma> V (map the x) j'' \<gamma> = Formula.sat \<sigma> V (map the proj_x) j'' \<gamma>"
+    apply (rule sat_fv_cong)
+    using nth_map wf_x args_L args_R fv_l_n fvi_subset proj_tuple_nth[OF _ _ len_x_eq]
+    unfolding proj_x_def
+    by (auto simp add: wf_tuple_def dest!: join_mask_fv_\<gamma>)
+
+  have "x \<in> z = Formula.sat \<sigma> V (map the x) k (formula.Trigger \<alpha> I \<beta>)"
+  proof (rule iffI)
+    assume assm: "x \<in> z"
+    then have auxlist_trigger: "(\<forall>i \<in> {0..<(length auxlist'')}.
+        let (t, l, r) = auxlist''!i in
+        mem (args_ivl args) ((\<tau> \<sigma> k) - t) \<longrightarrow> 
+        (
+          x \<in> r \<or>
+          (\<exists>j \<in> {i<..<(length auxlist'')}.
+            join_cond (args_pos args) ((fst o snd) (auxlist''!j)) (proj_tuple (join_mask (args_n args) (args_L args)) x)
+          )
+        )
+      )"
+      using z_eq
+      by auto
+    {
+      fix i
+      assume i_props: "i \<le> k" "mem I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+      then have "\<exists>X. (\<tau> \<sigma> i, X) = auxlist' ! i"
+        using allE[OF auxlist_mem, of i]
+        by auto
+      then obtain l r where lr_props: "(\<tau> \<sigma> i, l, r) = auxlist' ! i"
+        by auto
+      then have memR: "memR (args_ivl args) (\<tau> \<sigma> k - (fst (auxlist' ! i)))"
+        using i_props[folded args_ivl]
+        by (metis fstI)
+
+      have i_mem: "i < length auxlist'"
+        using i_props(1) auxlist_len
+        by auto
+
+      define j where "j = i - offset"
+
+      have j_props:
+        "auxlist' ! i = auxlist'' ! j"
+        "j \<in> {0..<length auxlist''}"
+        using idx_shift_rev[OF i_mem memR]
+        unfolding j_def
+        by auto
+
+      then have lr_j_props:
+        "auxlist'' ! j = (\<tau> \<sigma> i, l, r)"
+        "mem (args_ivl args) (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+        using i_props(2) lr_props args_ivl
+        by auto
+
+      have "(let (t, l, r) = auxlist'' ! j
+            in mem (args_ivl args) (\<tau> \<sigma> k - t) \<longrightarrow>
+            x \<in> r \<or> (\<exists>j\<in>{j<..<length auxlist''}. join_cond (args_pos args) ((fst \<circ> snd) (auxlist'' ! j)) (proj_tuple (join_mask (args_n args) (args_L args)) x))
+        )"
+        using ballE[OF auxlist_trigger, of j] j_props(2)
+        by blast
+      then have "x \<in> r \<or> (\<exists>j\<in>{j<..<length auxlist''}. join_cond (args_pos args) ((fst \<circ> snd) (auxlist'' ! j)) (proj_tuple (join_mask (args_n args) (args_L args)) x))"
+        using lr_j_props
+        by auto
+      moreover {
+        assume x_mem: "x \<in> r"
+        have "(i, \<tau> \<sigma> i, l, r)\<in>set (zip [0..<length auxlist'] auxlist')"
+          using i_props(1) lr_props
+          by (metis add_diff_inverse_nat fst_conv i_mem in_set_zip length_upt minus_eq not_less_zero nth_upt snd_conv)
+        then have "qtable (args_n args) (fv \<beta>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<beta>) r"
+          using auxlist_props
+          by auto
+        then have "Formula.sat \<sigma> V (map the x) i \<beta>"
+          using x_mem restr 
+          unfolding qtable_def
+          by auto
+      }
+      moreover {
+        assume "\<exists>k\<in>{j<..<length auxlist''}. join_cond (args_pos args) ((fst \<circ> snd) (auxlist'' ! k)) (proj_tuple (join_mask (args_n args) (args_L args)) x)"
+        then obtain j' where j'_props:
+          "j'\<in>{j<..<length auxlist''}"
+          "join_cond (args_pos args) ((fst \<circ> snd) (auxlist'' ! j')) (proj_tuple (join_mask (args_n args) (args_L args)) x)"
+          by blast
+
+        define j'' where "j'' = offset + j'"
+
+        have "length auxlist'' = length auxlist' - offset"
+          using auxlist'_filter_sum
+          unfolding offset_def auxlist''_def
+          by auto
+        then have "j'\<in>{i - offset<..<length auxlist' - offset}"
+          using j'_props(1)
+          unfolding j_def
+          by auto
+        then have j''_mem: "j'' \<in> {i<..<length auxlist'}"
+          unfolding j''_def
+          by auto
+
+        obtain t l r where tlr_eq: "(t, l, r) = auxlist'' ! j'"
+          by (metis prod.collapse)
+        moreover have "((fst \<circ> snd) (auxlist'' ! j')) = l"
+          by (metis comp_def fst_conv snd_conv tlr_eq)
+        ultimately have join_cond: "join_cond (args_pos args) l (proj_tuple (join_mask (args_n args) (args_L args)) x)"
+          using j'_props(2)
+          by auto
+        
+        have j'_l: "j'<length auxlist''"
+          using j'_props
+          by auto
+        have k_shift: "auxlist'' ! j' = auxlist' ! (j'')"
+          using idx_shift[OF j'_l]
+          unfolding j''_def
+          by auto
+        then have tlr_eq': "(t, l, r) = auxlist' ! (j'')"
+          using tlr_eq
+          by auto
+        then have "(j'', t, l, r)\<in>set (zip [0..<length auxlist'] auxlist')"
+          using j'_l j''_mem
+          using in_set_zip
+          by fastforce
+        then have qtable: "qtable (args_n args) (fv \<gamma>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) j'' \<gamma>) l"
+          using auxlist_props
+          by auto
+
+        have "Formula.sat \<sigma> V (map the x) j'' \<alpha>"
+        proof (cases "args_pos args")
+          case True
+          have mem: "proj_x \<in> l"
+            using True join_cond
+            unfolding proj_x_def
+            by auto
+          then have "Formula.sat \<sigma> V (map the proj_x) j'' \<gamma>"
+            using qtable restr_proj_x
+            unfolding qtable_def
+            by auto
+          then show ?thesis
+            using proj_sat_equiv True pos
+            by auto
+        next
+          case False
+          then have not_mem: "proj_x \<notin> l"
+            using join_cond
+            unfolding proj_x_def
+            by auto
+          
+          have "\<not>Formula.sat \<sigma> V (map the x) j'' \<gamma> "
+            using not_mem qtable restr_proj_x proj_sat_equiv wf_proj_x
+            unfolding qtable_def
+            by blast
+          then show ?thesis
+            using False pos
+            by auto
+        qed
+        moreover have "j'' \<in> {i <.. k}"
+          using j''_mem auxlist_len
+          by auto
+        ultimately have "\<exists>k \<in> {i <.. k}. Formula.sat \<sigma> V (map the x) k \<alpha>"
+          by auto
+      }
+      ultimately have "Formula.sat \<sigma> V (map the x) i \<beta> \<or> (\<exists>k \<in> {i <.. k}. Formula.sat \<sigma> V (map the x) k \<alpha>)"
+        by auto
+    }
+    then show "Formula.sat \<sigma> V (map the x) k (formula.Trigger \<alpha> I \<beta>)"
+      by auto
+  next
+    assume assm: "Formula.sat \<sigma> V (map the x) k (formula.Trigger \<alpha> I \<beta>)"
+    then have sat: "\<forall>j\<le>k. (mem I (\<tau> \<sigma> k - \<tau> \<sigma> j)) \<longrightarrow> (Formula.sat \<sigma> V (map the x) j \<beta> \<or> (\<exists>k \<in> {j <.. k}. Formula.sat \<sigma> V (map the x) k \<alpha>))"
+      by auto
+
+    have wf: "wf_tuple (args_n args) (args_R args) x"
+      using wf_x
+      by auto
+
+    have "\<forall>i\<in>{0..<length auxlist''}.
+      let (t, l, r) = auxlist'' ! i in
+        mem (args_ivl args) (\<tau> \<sigma> k - t) \<longrightarrow>
+        x \<in> r \<or>
+        (\<exists>j\<in>{i<..<length auxlist''}. join_cond (args_pos args) ((fst \<circ> snd) (auxlist'' ! j)) (proj_tuple (join_mask (args_n args) (args_L args)) x))"
+    proof -
+      {
+        fix i
+        define t where "t = fst (auxlist'' ! i)"
+        define l where "l = (fst o snd) (auxlist'' ! i)"
+        define r where "r = (snd o snd) (auxlist'' ! i)"
+        define i' where "i' = offset + i"
+
+        assume assm: "i\<in>{0..<length auxlist''}" "mem (args_ivl args) (\<tau> \<sigma> k - t)"
+        
+        have i'_props:
+          "auxlist'' ! i = auxlist' ! i'"
+          "i' < length auxlist'"
+          using idx_shift[of i] assm(1)
+          unfolding i'_def
+          by auto
+        moreover have "(t,l,r) = auxlist'' ! i"
+          unfolding t_def l_def r_def
+          by auto
+        moreover obtain X' where X'_props: "(\<tau> \<sigma> i', X') = auxlist' ! i'"
+          using allE[OF auxlist_mem, of i' "\<exists>X. (\<tau> \<sigma> i', X) = auxlist' ! i'"] auxlist_len i'_props(2)
+          by auto
+        ultimately have tlr_props:
+          "t = \<tau> \<sigma> i'"
+          "(t, l, r) = auxlist' ! i'"
+          by (metis fst_conv)+
+        then have "mem I (\<tau> \<sigma> k - \<tau> \<sigma> i')"
+          using assm(2) args_ivl
+          by auto
+        then have "Formula.sat \<sigma> V (map the x) i' \<beta> \<or> (\<exists>k\<in>{i'<..k}. Formula.sat \<sigma> V (map the x) k \<alpha>)"
+          using sat i'_props(2) auxlist_len
+          by auto
+        moreover {
+          assume assm: "Formula.sat \<sigma> V (map the x) i' \<beta>"
+          have "(i', t, l, r)\<in>set (zip [0..<length auxlist'] auxlist')"
+            using i'_props tlr_props(2) in_set_zip
+            by fastforce
+          then have "qtable (args_n args) (fv \<beta>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i' \<beta>) r"
+            using auxlist_props
+            by auto
+          then have "x \<in> r"
+            using wf_x[unfolded args_R] restr assm
+            unfolding qtable_def
+            by auto
+        }
+        moreover {
+          assume "\<exists>k\<in>{i'<..k}. Formula.sat \<sigma> V (map the x) k \<alpha>"
+          then obtain j where j_props: "j\<in>{i'<..k}" "Formula.sat \<sigma> V (map the x) j \<alpha>"
+            by auto
+          obtain t l r where tlr_def: "(t, l, r) = auxlist' ! j"
+            by (metis prod_cases3)
+          moreover have j_l: "j < length auxlist'"
+            using j_props(1) auxlist_len
+            by auto
+          ultimately have "(j, t, l, r)\<in>set (zip [0..<length auxlist'] auxlist')"
+            using in_set_zip by fastforce
+          then have qtable: "qtable (args_n args) (fv \<gamma>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) j \<gamma>) l"
+            using auxlist_props
+            by auto
+
+          define j' where "j' = j - offset"
+
+          have "length auxlist'' + offset = Suc k"
+            using auxlist'_filter_sum auxlist_len
+            unfolding offset_def auxlist''_def
+            by auto
+          then have "j\<in>{offset + i<..<length auxlist'' + offset}"
+            using j_props(1)
+            unfolding i'_def
+            by auto
+          then have j'_mem: "j' \<in> {i<..<length auxlist''}"
+            unfolding j'_def
+            by auto
+          then have "auxlist'' ! j' = auxlist' ! j"
+            using idx_shift
+            unfolding j'_def
+            by auto
+          then have tlr_eq: "(t, l, r) = auxlist'' ! j'"
+            using tlr_def
+            by auto
+
+          have "\<exists>j\<in>{i<..<length auxlist''}. join_cond (args_pos args) ((fst \<circ> snd) (auxlist'' ! j)) (proj_tuple (join_mask (args_n args) (args_L args)) x)"
+          proof (cases "args_pos args")
+            case True
+            then have sat: "Formula.sat \<sigma> V (map the proj_x) j \<gamma>"
+              using j_props pos proj_sat_equiv
+              by auto
+            then have "proj_x \<in> l"
+              using qtable restr_proj_x wf_proj_x
+              unfolding qtable_def
+              by auto
+            then have "proj_x \<in> ((fst \<circ> snd) (auxlist'' ! j'))"
+              using tlr_eq
+              by (metis comp_def fst_conv snd_conv)
+            then have "\<exists>j\<in>{i<..<length auxlist''}. proj_x \<in> ((fst \<circ> snd) (auxlist'' ! j))"
+              using j'_mem
+              by auto
+            then show ?thesis
+              using True
+              unfolding proj_x_def
+              by auto
+          next
+            case False
+            then have sat: "Formula.sat \<sigma> V (map the proj_x) j (Formula.Neg \<gamma>)"
+              using j_props pos proj_sat_equiv
+              by auto
+            then have "proj_x \<notin> l"
+              using qtable restr_proj_x wf_proj_x
+              unfolding qtable_def
+              by auto
+            then have "proj_x \<notin> ((fst \<circ> snd) (auxlist'' ! j'))"
+              using tlr_eq
+              by (metis comp_def fst_conv snd_conv)
+            then have "\<exists>j\<in>{i<..<length auxlist''}. proj_x \<notin> ((fst \<circ> snd) (auxlist'' ! j))"
+              using j'_mem
+              by auto
+            then show ?thesis
+              using False
+              unfolding proj_x_def
+              by auto
+          qed
+        }
+        ultimately have "x \<in> r \<or>
+         (\<exists>j\<in>{i<..<length auxlist''}. join_cond (args_pos args) ((fst \<circ> snd) (auxlist'' ! j)) (proj_tuple (join_mask (args_n args) (args_L args)) x))"
+          by blast
+      }
+      then show ?thesis
+        unfolding Let_def
+        by (auto split: prod.splits) fastforce
+    qed
+    then show "x \<in> z"
+      using wf
+      unfolding z_eq
+      by auto
+  qed
+  moreover have "fv \<beta> = fst (trigger_results args (\<tau> \<sigma> k) (filter (\<lambda>(t, _). memR (args_ivl args) (\<tau> \<sigma> k - t)) auxlist'))"
+    using non_empty args_R filter_inv
+    unfolding auxlist''_def trigger_results.simps
+    by auto
+  ultimately show ?thesis
+    using non_empty
+    unfolding z_def auxlist''_def
     by auto
 qed
 
@@ -7475,6 +7940,13 @@ next
     and fvs: "if mem I 0 then fv \<gamma> \<subseteq> fv \<beta> else fv \<gamma> = fv \<beta>"
     by auto
 
+  have args_props:
+    "args_n args = n"
+    "args_R args = fv \<alpha> \<union> fv \<beta>"
+    "fv \<gamma> = fv \<alpha>"
+    using pos args_n args_L args_R fvi_subset
+    by (auto split: if_splits)
+
   define tuple where "tuple = mbuf2t_take (\<lambda>r1 r2 t (zs, aux). let
     aux = update_mtaux args t r1 r2 aux;
     (fv_z, z) = result_mtaux args aux
@@ -7523,7 +7995,7 @@ next
     using pos
     by (simp_all split: if_splits)
 
-  have update: "wf_trigger_aux \<sigma> V R args \<gamma> \<beta> (snd (zs', aux')) (Monitor.progress \<sigma> P' (formula.Trigger \<alpha> I \<beta>) (j + \<delta>)) \<and>
+  have update_trigger: "wf_trigger_aux \<sigma> V R args \<gamma> \<beta> (snd (zs', aux')) (Monitor.progress \<sigma> P' (formula.Trigger \<alpha> I \<beta>) (j + \<delta>)) \<and>
   list_all2 (\<lambda>i (dfvs, r). qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>)) r)
     [progress \<sigma> P (formula.Trigger \<alpha> I \<beta>) j..<progress \<sigma> P' (formula.Trigger \<alpha> I \<beta>) (j + \<delta>)] (fst (zs', aux'))"
   unfolding progress_simps \<alpha>_\<gamma>_props
@@ -7556,10 +8028,332 @@ next
       unfolding qtable_def
       by auto
 
-    (*define zs' where "zs' = fst (let aux = update_mtaux args (\<tau> \<sigma> k) X Y aux; (fv_z, z) = result_mtaux args aux in (zs @ [z], aux))"
-    define aux' where "aux' = snd (let aux = update_mtaux args (\<tau> \<sigma> k) X Y aux; (fv_z, z) = result_mtaux args aux in (zs @ [z], aux))"*)
-    show ?case sorry
+    have wf_trigger: "wf_trigger_aux \<sigma> V R args \<gamma> \<beta> aux k"
+      using step(6)
+      unfolding aux_def
+      by auto
+    then have fv_subset: "fv \<gamma> \<subseteq> fv \<beta> "
+      unfolding wf_trigger_aux_def
+      by auto
+
+    have wf_trigger_aux: "wf_trigger_aux \<sigma> V R args \<gamma> \<beta> (update_mtaux args (\<tau> \<sigma> k) X Y aux) (Suc k)"
+      using update_trigger[OF wf_trigger step(4-5) args_n args_L args_R]
+      by auto
+
+    then obtain auxlist' where
+      valid_mtaux: "valid_mtaux args (\<tau> \<sigma> k) (update_mtaux args (\<tau> \<sigma> k) X Y aux) (filter (\<lambda>(t, _). memR (args_ivl args) (\<tau> \<sigma> k - t)) auxlist')" and
+      sorted_wrt: "sorted_wrt (\<lambda>x y. fst x \<le> fst y) auxlist'" and
+      auxlist_len: "length auxlist' = Suc k" and
+      auxlist_props: "(\<forall>(i, t, l, r)\<in>set (zip [0..<length auxlist'] auxlist').
+         Suc k \<noteq> 0 \<and>
+         t = \<tau> \<sigma> i \<and>
+         t \<le> \<tau> \<sigma> k \<and>
+         qtable (args_n args) (fv \<gamma>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<gamma>) l \<and>
+         qtable (args_n args) (fv \<beta>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<beta>) r
+      )" and
+      auxlist_mem: "(\<forall>i.
+          Suc k \<noteq> 0 \<and>
+          i \<le> k
+          \<longrightarrow>
+          (\<exists>X. (\<tau> \<sigma> i, X) = auxlist'!i)
+      )"
+      unfolding wf_trigger_aux_def
+      by auto
+
+    define zs' where "zs' = fst (let aux = update_mtaux args (\<tau> \<sigma> k) X Y aux; (fv_z, z) = result_mtaux args aux in (zs @ [(fv_z, z)], aux))"
+    define aux' where "aux' = snd (let aux = update_mtaux args (\<tau> \<sigma> k) X Y aux; (fv_z, z) = result_mtaux args aux in (zs @ [(fv_z, z)], aux))"
+
+    have "wf_trigger_aux \<sigma> V R args \<gamma> \<beta> (snd (case acc of (zs, aux) \<Rightarrow> let aux = update_mtaux args (\<tau> \<sigma> k) X Y aux; (fv_z, z) = result_mtaux args aux in (zs @ [(fv_z, z)], aux))) (Suc k)"
+      using wf_trigger_aux
+      unfolding z_eq Let_def
+      by (auto split: prod.splits)
+    moreover have "list_all2 (\<lambda>i a. case a of (dfvs, r) \<Rightarrow> qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>)) r)
+     [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<Suc k]
+     (fst (case acc of (zs, aux) \<Rightarrow> let aux = update_mtaux args (\<tau> \<sigma> k) X Y aux; (fv_z, z) = result_mtaux args aux in (zs @ [(fv_z, z)], aux)))"
+    proof -
+      have aux'_eq: "aux' = update_mtaux args (\<tau> \<sigma> k) X Y aux"
+        unfolding aux'_def Let_def
+        by (auto split: prod.splits)
+      define fv_z where "fv_z = fst (result_mtaux args aux')"
+      define z where "z = snd (result_mtaux args aux')"
+      define auxlist'' where "auxlist'' = (filter (\<lambda>(t, _). memR (args_ivl args) (\<tau> \<sigma> k - t)) auxlist')"
+
+      have valid_mtaux': "valid_mtaux args (\<tau> \<sigma> k) aux' auxlist''"
+        unfolding aux'_eq auxlist''_def
+        using valid_mtaux
+        by auto
+      have z_eq: "z = snd (trigger_results args (\<tau> \<sigma> k) auxlist'')"
+        unfolding z_def
+        using valid_result_mtaux[OF valid_mtaux']
+        by (auto)
+
+      have fv_z_eq: "fv_z = fst (trigger_results args (\<tau> \<sigma> k) auxlist'')"
+        unfolding fv_z_def
+        using valid_result_mtaux[OF valid_mtaux']
+        by (auto)
+
+      have filter_inv: "(filter (\<lambda> (t, _). mem (args_ivl args) ((\<tau> \<sigma> k) - t)) auxlist'') = (filter (\<lambda> (t, _). mem (args_ivl args) ((\<tau> \<sigma> k) - t)) auxlist')"
+        unfolding auxlist''_def filter_filter
+        by (metis (mono_tags, lifting) case_prod_beta')
+
+      show ?thesis
+      proof (cases "0 < length (filter (\<lambda>(t, _). mem (args_ivl args) (\<tau> \<sigma> k - t)) auxlist')")
+        case non_empty: True
+        have equiv: "(x \<in> z) = Formula.sat \<sigma> V (map the x) k (formula.Trigger \<alpha> I \<beta>)" if
+          restr: "mem_restr R x" and
+          wf_x: "wf_tuple (args_n args) (args_R args) x"
+        for x
+          unfolding z_eq auxlist''_def
+          using trigger_sat_equiv[OF restr wf_x pos args_n args_ivl args_L args_R fvi_subset fv_l_n valid_mtaux sorted_wrt auxlist_len auxlist_props auxlist_mem non_empty]
+          by auto
+
+        have "fv_z = args_R args"
+          using non_empty filter_inv
+          unfolding fv_z_eq auxlist''_def trigger_results.simps
+          by auto
+        then have fv_z_eq'': "fv_z = fv \<alpha> \<union> fv \<beta>"
+          using args_props
+          by auto
+  
+        have "result_mtaux args aux' = trigger_results args (\<tau> \<sigma> k) auxlist''"
+          using valid_result_mtaux[OF valid_mtaux]
+          unfolding aux'_def auxlist''_def
+          by auto
+        moreover have "(length (filter (\<lambda> (t, _). mem (args_ivl args) ((\<tau> \<sigma> k) - t)) auxlist'') > 0)"
+          using filter_inv non_empty
+          unfolding auxlist''_def
+          by auto
+        ultimately have z_eq': "z = {
+          tuple. wf_tuple (args_n args) (args_R args) tuple \<and>
+            (\<forall>i \<in> {0..<(length auxlist'')}.
+              let (t, l, r) = auxlist''!i in
+              mem (args_ivl args) ((\<tau> \<sigma> k) - t) \<longrightarrow> 
+              (
+                tuple \<in> r \<or>
+                (\<exists>j \<in> {i<..<(length auxlist'')}.
+                  join_cond (args_pos args) ((fst o snd) (auxlist''!j)) (proj_tuple (join_mask (args_n args) (args_L args)) tuple)
+                )
+              )
+            )
+          }"
+          unfolding z_def
+          by auto
+  
+        have args_R_simp: "args_R args = fv \<alpha> \<union> fv \<beta>"
+          using args_L args_R pos fvi_subset
+          by (auto split: if_splits)
+        have table: "table n (fv \<alpha> \<union> fv \<beta>) z"
+          using z_eq'
+          unfolding table_def args_R_simp args_n
+          by auto
+  
+        have correctness: "(\<And>x. x \<in> z \<Longrightarrow> wf_tuple n (fv \<alpha> \<union> fv \<beta>) x \<Longrightarrow> mem_restr R x \<Longrightarrow> Formula.sat \<sigma> V (map the x) k (formula.Trigger \<alpha> I \<beta>))"
+          using equiv args_props
+          by auto
+  
+        have completeness: "\<And>x. wf_tuple n (fv \<alpha> \<union> fv \<beta>) x \<Longrightarrow> mem_restr R x \<Longrightarrow> Formula.sat \<sigma> V (map the x) k (formula.Trigger \<alpha> I \<beta>) \<Longrightarrow> x \<in> z"
+          using equiv args_props
+          by auto
+  
+        have qtable_k: "qtable n (fv \<alpha> \<union> fv \<beta>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) k (formula.Trigger \<alpha> I \<beta>)) z"
+          using qtableI[OF table correctness completeness]
+          by auto
+  
+        have zs'_eq: "zs' = zs @ [(fv_z, z)]"
+          unfolding zs'_def fv_z_def z_def aux'_eq  Let_def
+          by (auto split: prod.splits)
+  
+        have IH: "list_all2
+          (\<lambda>i (dfvs, r). qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>)) r)
+          [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<k] zs"
+          using step(6) zs_def args_props(3)
+          by auto
+        then have "length [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<k] = length zs"
+          unfolding list_all2_iff
+          by auto
+        then have len: "length [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<Suc k] = length zs'"
+          unfolding zs'_eq length_append
+          by (simp add: step(1))
+  
+        moreover have "(\<forall>(i, (dfvs, r)) \<in> set (zip [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<Suc k] zs').
+        qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>)) r)"
+        proof -
+          {
+            fix i dfvs r
+            assume assm: "(i, (dfvs, r)) \<in> set (zip [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<Suc k] zs')"
+            
+            have "length [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<k] = length zs"
+              using step(6) zs_def
+              unfolding list_all2_iff
+              by auto
+            moreover have "[min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<k] @ [k] =
+                           [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<Suc k]"
+              by (simp add: step(1))
+            ultimately have zip_eq:
+              "zip ([min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<Suc k]) zs' =
+               zip [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<k] zs @ zip [k] [(fv_z, z)]"
+              unfolding zs'_eq
+              using zip_append[of "[min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<k]" "zs" "[k]" "[(fv_z, z)]"]
+              by auto
+            {
+              assume "(i, (dfvs, r)) \<in> set (zip [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<k] zs)"
+              then have "qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>)) r"
+                using step(6) args_props(3) zs_def
+                unfolding list_all2_iff
+                by auto
+            }
+            moreover {
+              assume "(i, (dfvs, r)) \<notin> set (zip [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<k] zs)"
+              then have "(i, dfvs, r) = (k, fv_z, z)"
+                using assm zip_eq
+                by auto
+              then have "qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>)) r"
+                using qtable_k fv_z_eq''
+                by auto
+            }
+            ultimately have "qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>)) r"
+              by blast
+          }
+          then show ?thesis by auto
+        qed
+  
+        ultimately show ?thesis
+          unfolding list_all2_iff zs'_def zs_def aux_def
+          by (auto split: prod.splits)
+        
+      next
+        case False
+        then have empty: "length (filter (\<lambda>(t, _). mem (args_ivl args) (\<tau> \<sigma> k - t)) auxlist') = 0"
+          by auto
+
+        have sat: "\<And>v. Formula.sat \<sigma> V v k (formula.Trigger \<alpha> I \<beta>)"
+        proof -
+          fix v
+          have "\<forall>j\<le>k. \<not> mem I (\<tau> \<sigma> k - \<tau> \<sigma> j)"
+          proof -
+            {
+              assume "\<exists>j\<le>k. mem I (\<tau> \<sigma> k - \<tau> \<sigma> j)"
+              then obtain j where j_props: "j \<le> k" "mem I (\<tau> \<sigma> k - \<tau> \<sigma> j)"
+                by blast
+              then obtain X where "(\<tau> \<sigma> j, X) = auxlist' ! j"
+                using auxlist_mem
+                by auto
+              then have  "(\<tau> \<sigma> j, X) \<in> set (filter (\<lambda>(t, _). mem (args_ivl args) (\<tau> \<sigma> k - t)) auxlist')"
+                using auxlist_len j_props args_ivl
+                by auto
+              then have "False"
+                using empty length_pos_if_in_set[of "(\<tau> \<sigma> j, X)"]
+                by auto
+            }
+            then show ?thesis by blast
+          qed
+          then have "(\<forall>j\<le>k. (mem I (\<tau> \<sigma> k - \<tau> \<sigma> j)) \<longrightarrow> (Formula.sat \<sigma> V v j \<beta> \<or> (\<exists>k \<in> {j <.. k}. Formula.sat \<sigma> V v k \<alpha>)))"
+            by auto
+          then show "Formula.sat \<sigma> V v k (formula.Trigger \<alpha> I \<beta>)"
+            by auto
+        qed
+
+        have z_eq': "z = {replicate (args_n args) None}"
+          using empty filter_inv
+          unfolding z_eq auxlist''_def trigger_results.simps
+          by auto
+
+        have fv_z_eq': "fv_z = {}"
+          using empty filter_inv
+          unfolding fv_z_eq auxlist''_def trigger_results.simps
+          by auto
+
+        have table: "table n {} z"
+          unfolding fv_z_eq' z_eq'
+          by (simp add: args_n table_def wf_tuple_unit_table)
+
+        have correctness: "(\<And>x. x \<in> z \<Longrightarrow> wf_tuple n {} x \<Longrightarrow> mem_restr R x \<Longrightarrow> Formula.sat \<sigma> V (map the x) k (formula.Trigger \<alpha> I \<beta>))"
+          using sat
+          by auto
+  
+        have completeness: "\<And>x. wf_tuple n {} x \<Longrightarrow> mem_restr R x \<Longrightarrow> Formula.sat \<sigma> V (map the x) k (formula.Trigger \<alpha> I \<beta>) \<Longrightarrow> x \<in> z"
+          using sat
+          unfolding z_eq'
+          by (simp add: args_n wf_tuple_unit_table)
+  
+        have qtable_k: "qtable n {} (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) k (formula.Trigger \<alpha> I \<beta>)) z"
+          using qtableI[OF table correctness completeness]
+          by auto
+  
+        have zs'_eq: "zs' = zs @ [(fv_z, z)]"
+          unfolding zs'_def fv_z_def z_def aux'_eq  Let_def
+          by (auto split: prod.splits)
+  
+        have IH: "list_all2
+          (\<lambda>i (dfvs, r). qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>)) r)
+          [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<k] zs"
+          using step(6) zs_def args_props(3)
+          by auto
+        then have "length [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<k] = length zs"
+          unfolding list_all2_iff
+          by auto
+        then have len: "length [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<Suc k] = length zs'"
+          unfolding zs'_eq length_append
+          by (simp add: step(1))
+  
+        moreover have "(\<forall>(i, (dfvs, r)) \<in> set (zip [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<Suc k] zs').
+        qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>)) r)"
+        proof -
+          {
+            fix i dfvs r
+            assume assm: "(i, (dfvs, r)) \<in> set (zip [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<Suc k] zs')"
+            
+            have "length [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<k] = length zs"
+              using step(6) zs_def
+              unfolding list_all2_iff
+              by auto
+            moreover have "[min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<k] @ [k] =
+                           [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<Suc k]"
+              by (simp add: step(1))
+            ultimately have zip_eq:
+              "zip ([min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<Suc k]) zs' =
+               zip [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<k] zs @ zip [k] [(fv_z, z)]"
+              unfolding zs'_eq
+              using zip_append[of "[min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<k]" "zs" "[k]" "[(fv_z, z)]"]
+              by auto
+            {
+              assume "(i, (dfvs, r)) \<in> set (zip [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<k] zs)"
+              then have "qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>)) r"
+                using step(6) args_props(3) zs_def
+                unfolding list_all2_iff
+                by auto
+            }
+            moreover {
+              assume "(i, (dfvs, r)) \<notin> set (zip [min (Monitor.progress \<sigma> P \<gamma> j) (Monitor.progress \<sigma> P \<beta> j)..<k] zs)"
+              then have "(i, dfvs, r) = (k, fv_z, z)"
+                using assm zip_eq
+                by auto
+              then have "qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>)) r"
+                using qtable_k fv_z_eq'
+                by auto
+            }
+            ultimately have "qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>)) r"
+              by blast
+          }
+          then show ?thesis by auto
+        qed
+  
+        ultimately show ?thesis
+          unfolding list_all2_iff zs'_def zs_def aux_def
+          by (auto split: prod.splits)
+      qed
+    qed
+
+    ultimately show ?case using args_props(3) by auto
   qed (auto)
+  (* same but this time without the conjunction *)
+  then have update_trigger:
+    "wf_trigger_aux \<sigma> V R args \<gamma> \<beta> (snd (zs', aux')) (Monitor.progress \<sigma> P' (formula.Trigger \<alpha> I \<beta>) (j + \<delta>))"
+    "list_all2 (\<lambda>i (dfvs, r). qtable n dfvs (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>)) r)
+     [Monitor.progress \<sigma> P (formula.Trigger \<alpha> I \<beta>) j..<Monitor.progress \<sigma> P' (formula.Trigger \<alpha> I \<beta>) (j + \<delta>)] (fst (zs', aux'))"
+    by auto
+
+  thm update_trigger
 
   have "wf_mformula \<sigma> (j + \<delta>) P' V n R \<chi>'' (formula.And \<phi> (formula.Trigger \<alpha> I \<beta>))"
   proof -
@@ -8320,7 +9114,7 @@ next
 
     then obtain auxlist' where
       valid_mtaux: "valid_mtaux args (\<tau> \<sigma> k) (update_mtaux args (\<tau> \<sigma> k) X Y aux) (filter (\<lambda>(t, _). memR (args_ivl args) (\<tau> \<sigma> k - t)) auxlist')" and
-      sorted: "sorted_wrt (\<lambda>x y. fst x \<le> fst y) auxlist'" and
+      sorted_wrt: "sorted_wrt (\<lambda>x y. fst x \<le> fst y) auxlist'" and
       auxlist_len: "length auxlist' = Suc k" and
       auxlist_props: "(\<forall>(i, t, l, r)\<in>set (zip [0..<length auxlist'] auxlist').
          Suc k \<noteq> 0 \<and>
@@ -8339,7 +9133,7 @@ next
       by auto
 
     then have sorted: "sorted (map fst auxlist')"
-      using sorted
+      using sorted_wrt
       by (simp add: sorted_map)
     have "\<exists>X. (\<tau> \<sigma> k, X) \<in> set auxlist'"
       using auxlist_mem auxlist_len
@@ -8366,70 +9160,28 @@ next
         by (auto split: prod.splits)
       define fv_z where "fv_z = fst (result_mtaux args aux')"
       define z where "z = snd (result_mtaux args aux')"
-
-      define offset where "offset = length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (\<tau> \<sigma> k - t)) auxlist')"
-      then have offset_leq: "offset \<le> length auxlist'"
-        by auto
-
       define auxlist'' where "auxlist'' = (filter (\<lambda>(t, _). memR (args_ivl args) (\<tau> \<sigma> k - t)) auxlist')"
-      then have auxlist''_eq: "auxlist'' = drop offset auxlist'"
-        using drop_filter_memR[OF sorted, of "args_ivl args" "\<tau> \<sigma> k"]
-        unfolding offset_def
+
+      have valid_mtaux': "valid_mtaux args (\<tau> \<sigma> k) aux' auxlist''"
+        unfolding aux'_eq auxlist''_def
+        using valid_mtaux
+        by auto
+      have z_eq: "z = snd (trigger_results args (\<tau> \<sigma> k) auxlist'')"
+        unfolding z_def
+        using valid_result_mtaux[OF valid_mtaux']
+        by (auto)
+
+      have equiv: "(x \<in> z) =
+         Formula.sat \<sigma> V (map the x) k (formula.Trigger \<alpha> I \<beta>)" if
+          restr: "mem_restr R x" and
+          wf_x: "wf_tuple (args_n args) (args_R args) x"
+        for x
+        unfolding z_eq auxlist''_def
+        using trigger_sat_equiv[OF restr wf_x pos args_n args_ivl args_L args_R fvi_subset fv_l_n valid_mtaux sorted_wrt auxlist_len auxlist_props auxlist_mem non_empty]
         by auto
 
-      have auxlist'_filter_sum: "length (filter (\<lambda>(t, _). memR (args_ivl args) (cur' - t)) auxlist') + length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (cur' - t)) auxlist') = length auxlist'"
-        using sum_length_filter_compl[of "(\<lambda>(t, _). memR (args_ivl args) (cur' - t))" auxlist']
-        by (simp add: case_prod_beta')
-
-      have idx_shift: "\<And>i. i < length auxlist'' \<Longrightarrow> auxlist''!i = auxlist'!(offset + i) \<and> offset + i < length auxlist'"
-        unfolding auxlist''_eq
-        using nth_drop[OF offset_leq]
-        by auto
-
-      have idx_shift_rev: "\<And>i. i <length auxlist' \<Longrightarrow> memR (args_ivl args) (\<tau> \<sigma> k - (fst (auxlist'!i))) \<Longrightarrow> auxlist'!i = auxlist''!(i - offset) \<and> (i - offset) \<in> {0..<length auxlist''}"
-      proof -
-        fix i
-        assume assms: "i <length auxlist'" "memR (args_ivl args) (\<tau> \<sigma> k - (fst (auxlist'!i)))"
-        have i_mem: "i \<in> {0..<length auxlist'}"
-          using assms(1)
-          by auto
-
-        have "i < length auxlist'' + offset"
-          using assms auxlist'_filter_sum
-          unfolding auxlist''_def offset_def cur'_def
-          by auto
-        moreover have "i \<ge> offset"
-        proof -
-          {
-            assume "i < offset"
-            then have "auxlist'!i \<in> set (take offset auxlist')"
-              using i_mem
-              by (metis atLeastLessThan_iff image_eqI nth_image offset_leq)
-            moreover have "take offset auxlist' = filter (\<lambda>(t, _). \<not> memR (args_ivl args) (\<tau> \<sigma> k - t)) auxlist'"
-              using take_filter_not_memR[OF sorted, of "args_ivl args" "\<tau> \<sigma> k"]
-              unfolding offset_def
-              by auto
-            ultimately have "auxlist'!i \<in> set (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (\<tau> \<sigma> k - t)) auxlist')"
-              by auto
-            then have "\<not> memR (args_ivl args) (\<tau> \<sigma> k - (fst (auxlist'!i)))"
-              by auto
-            then have "False" using assms(2) by auto
-          }
-          then show ?thesis using le_def by blast
-        qed
-        ultimately have "i \<in> {offset..<length auxlist'' + offset}"
-          by auto
-        then have
-          "(i - offset) \<in> {0..<length auxlist''}"
-          "auxlist''!(i - offset) = auxlist'!i"
-          using idx_shift
-          by auto
-        then show "auxlist'!i = auxlist''!(i - offset) \<and> (i - offset) \<in> {0..<length auxlist''}"
-          by auto
-      qed
-
-      have filter_inv: "(filter (\<lambda> (t, _). mem (args_ivl args) (cur' - t)) auxlist'') = (filter (\<lambda> (t, _). mem (args_ivl args) (cur' - t)) auxlist')"
-        unfolding auxlist''_def cur'_def filter_filter
+      have filter_inv: "(filter (\<lambda> (t, _). mem (args_ivl args) ((\<tau> \<sigma> k) - t)) auxlist'') = (filter (\<lambda> (t, _). mem (args_ivl args) ((\<tau> \<sigma> k) - t)) auxlist')"
+        unfolding auxlist''_def filter_filter
         by (metis (mono_tags, lifting) case_prod_beta')
 
       have "result_mtaux args aux' = trigger_results args cur' auxlist''"
@@ -8440,7 +9192,7 @@ next
         using filter_inv non_empty
         unfolding cur'_def auxlist''_def
         by auto
-      ultimately have z_eq: "z = {
+      ultimately have z_eq': "z = {
         tuple. wf_tuple (args_n args) (args_R args) tuple \<and>
           (\<forall>i \<in> {0..<(length auxlist'')}.
             let (t, l, r) = auxlist''!i in
@@ -8460,357 +9212,9 @@ next
         using args_L args_R pos fvi_subset
         by (auto split: if_splits)
       have table: "table n (fv \<alpha> \<union> fv \<beta>) z"
-        using z_eq
+        using z_eq'
         unfolding table_def args_R_simp args_n
         by auto
-
-      have equiv: "x \<in> z = Formula.sat \<sigma> V (map the x) k (formula.Trigger \<alpha> I \<beta>)" if
-        restr: "mem_restr R x" and
-        wf_x: "wf_tuple (args_n args) (args_R args) x"
-      for x
-      proof -
-
-        define proj_x where "proj_x = proj_tuple (join_mask (args_n args) (args_L args)) x"
-        have len_x: "length x = args_n args"
-          using wf_x
-          unfolding wf_tuple_def
-          by auto
-        
-        have restr_proj_x: "mem_restr R proj_x"
-          using restr
-          unfolding proj_x_def proj_tuple_join_mask_restrict[OF len_x]
-          by simp
-
-        have len_x_eq: "length (join_mask (args_n args) (args_L args)) = length x"
-          using wf_x
-          unfolding wf_tuple_def join_mask_def
-          by auto
-
-        have join_mask_fv_\<gamma>:
-          "i < length (proj_tuple (join_mask (args_n args) (fv \<gamma>)) x) \<and> i < length x \<and> join_mask (args_n args) (fv \<gamma>) ! i"
-          if mem: "i \<in> fv \<gamma>" for i
-          using wf_x args_n args_R args_L fvi_subset fv_l_n mem
-          unfolding wf_tuple_def join_mask_def
-          by (auto simp add: proj_tuple_alt split: if_splits)
-
-        have wf_proj_x: "wf_tuple (args_n args) (fv \<gamma>) proj_x"
-          using wf_x
-          unfolding proj_x_def proj_tuple_join_mask_restrict[OF len_x] args_R args_L
-          by (simp add: fv_subset wf_tuple_restrict_simple)
-
-        have proj_sat_equiv: "\<And>j''. Formula.sat \<sigma> V (map the x) j'' \<gamma> = Formula.sat \<sigma> V (map the proj_x) j'' \<gamma>"
-          apply (rule sat_fv_cong)
-          using nth_map wf_x Trigger_0(7,8-11,15) proj_tuple_nth[OF _ _ len_x_eq]
-          unfolding proj_x_def
-          by (auto simp add: wf_tuple_def dest!: join_mask_fv_\<gamma>)
-
-        show ?thesis
-        proof (rule iffI)
-          assume assm: "x \<in> z"
-          then have auxlist_trigger: "(\<forall>i \<in> {0..<(length auxlist'')}.
-              let (t, l, r) = auxlist''!i in
-              mem (args_ivl args) (cur' - t) \<longrightarrow> 
-              (
-                x \<in> r \<or>
-                (\<exists>j \<in> {i<..<(length auxlist'')}.
-                  join_cond (args_pos args) ((fst o snd) (auxlist''!j)) (proj_tuple (join_mask (args_n args) (args_L args)) x)
-                )
-              )
-            )"
-            using z_eq
-            by auto
-          {
-            fix i
-            assume i_props: "i \<le> k" "mem I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
-            then have "\<exists>X. (\<tau> \<sigma> i, X) = auxlist' ! i"
-              using allE[OF auxlist_mem, of i]
-              by auto
-            then obtain l r where lr_props: "(\<tau> \<sigma> i, l, r) = auxlist' ! i"
-              by auto
-            then have memR: "memR (args_ivl args) (\<tau> \<sigma> k - (fst (auxlist' ! i)))"
-              using i_props[folded args_ivl]
-              by (metis fstI)
-
-            have i_mem: "i < length auxlist'"
-              using i_props(1) auxlist_len
-              by auto
-
-            define j where "j = i - offset"
-
-            have j_props:
-              "auxlist' ! i = auxlist'' ! j"
-              "j \<in> {0..<length auxlist''}"
-              using idx_shift_rev[OF i_mem memR]
-              unfolding j_def
-              by auto
-
-            then have lr_j_props:
-              "auxlist'' ! j = (\<tau> \<sigma> i, l, r)"
-              "mem (args_ivl args) (\<tau> \<sigma> k - \<tau> \<sigma> i)"
-              using i_props(2) lr_props args_ivl
-              by auto
-
-            have "(let (t, l, r) = auxlist'' ! j
-                  in mem (args_ivl args) (\<tau> \<sigma> k - t) \<longrightarrow>
-                  x \<in> r \<or> (\<exists>j\<in>{j<..<length auxlist''}. join_cond (args_pos args) ((fst \<circ> snd) (auxlist'' ! j)) (proj_tuple (join_mask (args_n args) (args_L args)) x))
-              )"
-              using ballE[OF auxlist_trigger, of j] j_props(2)
-              unfolding cur'_def
-              by blast
-            then have "x \<in> r \<or> (\<exists>j\<in>{j<..<length auxlist''}. join_cond (args_pos args) ((fst \<circ> snd) (auxlist'' ! j)) (proj_tuple (join_mask (args_n args) (args_L args)) x))"
-              using lr_j_props
-              by auto
-            moreover {
-              assume x_mem: "x \<in> r"
-              have "(i, \<tau> \<sigma> i, l, r)\<in>set (zip [0..<length auxlist'] auxlist')"
-                using i_props(1) lr_props
-                by (metis add_diff_inverse_nat fst_conv i_mem in_set_zip length_upt minus_eq not_less_zero nth_upt snd_conv)
-              then have "qtable (args_n args) (fv \<beta>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<beta>) r"
-                using auxlist_props
-                by auto
-              then have "Formula.sat \<sigma> V (map the x) i \<beta>"
-                using x_mem restr 
-                unfolding qtable_def
-                by auto
-            }
-            moreover {
-              assume "\<exists>k\<in>{j<..<length auxlist''}. join_cond (args_pos args) ((fst \<circ> snd) (auxlist'' ! k)) (proj_tuple (join_mask (args_n args) (args_L args)) x)"
-              then obtain j' where j'_props:
-                "j'\<in>{j<..<length auxlist''}"
-                "join_cond (args_pos args) ((fst \<circ> snd) (auxlist'' ! j')) (proj_tuple (join_mask (args_n args) (args_L args)) x)"
-                by blast
-
-              define j'' where "j'' = offset + j'"
-
-              have "length auxlist'' = length auxlist' - offset"
-                using auxlist'_filter_sum
-                unfolding offset_def cur'_def auxlist''_def
-                by auto
-              then have "j'\<in>{i - offset<..<length auxlist' - offset}"
-                using j'_props(1)
-                unfolding j_def
-                by auto
-              then have j''_mem: "j'' \<in> {i<..<length auxlist'}"
-                unfolding j''_def
-                by auto
-
-              obtain t l r where tlr_eq: "(t, l, r) = auxlist'' ! j'"
-                by (metis prod.collapse)
-              moreover have "((fst \<circ> snd) (auxlist'' ! j')) = l"
-                by (metis comp_def fst_conv snd_conv tlr_eq)
-              ultimately have join_cond: "join_cond (args_pos args) l (proj_tuple (join_mask (args_n args) (args_L args)) x)"
-                using j'_props(2)
-                by auto
-              
-              have j'_l: "j'<length auxlist''"
-                using j'_props
-                by auto
-              have k_shift: "auxlist'' ! j' = auxlist' ! (j'')"
-                using idx_shift[OF j'_l]
-                unfolding j''_def
-                by auto
-              then have tlr_eq': "(t, l, r) = auxlist' ! (j'')"
-                using tlr_eq
-                by auto
-              then have "(j'', t, l, r)\<in>set (zip [0..<length auxlist'] auxlist')"
-                using j'_l j''_mem
-                using in_set_zip
-                by fastforce
-              then have qtable: "qtable (args_n args) (fv \<gamma>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) j'' \<gamma>) l"
-                using auxlist_props
-                by auto
-
-              have "Formula.sat \<sigma> V (map the x) j'' \<alpha>"
-              proof (cases "args_pos args")
-                case True
-                have mem: "proj_x \<in> l"
-                  using True join_cond
-                  unfolding proj_x_def
-                  by auto
-                then have "Formula.sat \<sigma> V (map the proj_x) j'' \<gamma>"
-                  using qtable restr_proj_x
-                  unfolding qtable_def
-                  by auto
-                then show ?thesis
-                  using proj_sat_equiv True pos
-                  by auto
-              next
-                case False
-                then have not_mem: "proj_x \<notin> l"
-                  using join_cond
-                  unfolding proj_x_def
-                  by auto
-                
-                have "\<not>Formula.sat \<sigma> V (map the x) j'' \<gamma> "
-                  using not_mem qtable restr_proj_x proj_sat_equiv wf_proj_x
-                  unfolding qtable_def
-                  by blast
-                then show ?thesis
-                  using False pos
-                  by auto
-              qed
-              moreover have "j'' \<in> {i <.. k}"
-                using j''_mem auxlist_len
-                by auto
-              ultimately have "\<exists>k \<in> {i <.. k}. Formula.sat \<sigma> V (map the x) k \<alpha>"
-                by auto
-            }
-            ultimately have "Formula.sat \<sigma> V (map the x) i \<beta> \<or> (\<exists>k \<in> {i <.. k}. Formula.sat \<sigma> V (map the x) k \<alpha>)"
-              by auto
-          }
-          then show "Formula.sat \<sigma> V (map the x) k (formula.Trigger \<alpha> I \<beta>)"
-            by auto
-        next
-          assume assm: "Formula.sat \<sigma> V (map the x) k (formula.Trigger \<alpha> I \<beta>)"
-          then have sat: "\<forall>j\<le>k. (mem I (\<tau> \<sigma> k - \<tau> \<sigma> j)) \<longrightarrow> (Formula.sat \<sigma> V (map the x) j \<beta> \<or> (\<exists>k \<in> {j <.. k}. Formula.sat \<sigma> V (map the x) k \<alpha>))"
-            by auto
-
-          have wf: "wf_tuple (args_n args) (args_R args) x"
-            using wf_x
-            by auto
-
-          have "\<forall>i\<in>{0..<length auxlist''}.
-            let (t, l, r) = auxlist'' ! i in
-              mem (args_ivl args) (cur' - t) \<longrightarrow>
-              x \<in> r \<or>
-              (\<exists>j\<in>{i<..<length auxlist''}. join_cond (args_pos args) ((fst \<circ> snd) (auxlist'' ! j)) (proj_tuple (join_mask (args_n args) (args_L args)) x))"
-          proof -
-            {
-              fix i
-              define t where "t = fst (auxlist'' ! i)"
-              define l where "l = (fst o snd) (auxlist'' ! i)"
-              define r where "r = (snd o snd) (auxlist'' ! i)"
-              define i' where "i' = offset + i"
-
-              assume assm: "i\<in>{0..<length auxlist''}" "mem (args_ivl args) (cur' - t)"
-              
-              have i'_props:
-                "auxlist'' ! i = auxlist' ! i'"
-                "i' < length auxlist'"
-                using idx_shift[of i] assm(1)
-                unfolding i'_def
-                by auto
-              moreover have "(t,l,r) = auxlist'' ! i"
-                unfolding t_def l_def r_def
-                by auto
-              moreover obtain X' where X'_props: "(\<tau> \<sigma> i', X') = auxlist' ! i'"
-                using allE[OF auxlist_mem, of i' "\<exists>X. (\<tau> \<sigma> i', X) = auxlist' ! i'"] auxlist_len i'_props(2)
-                by auto
-              ultimately have tlr_props:
-                "t = \<tau> \<sigma> i'"
-                "(t, l, r) = auxlist' ! i'"
-                by (metis fst_conv)+
-              then have "mem I (\<tau> \<sigma> k - \<tau> \<sigma> i')"
-                using assm(2) args_ivl
-                unfolding cur'_def
-                by auto
-              then have "Formula.sat \<sigma> V (map the x) i' \<beta> \<or> (\<exists>k\<in>{i'<..k}. Formula.sat \<sigma> V (map the x) k \<alpha>)"
-                using sat i'_props(2) auxlist_len
-                by auto
-              moreover {
-                assume assm: "Formula.sat \<sigma> V (map the x) i' \<beta>"
-                have "(i', t, l, r)\<in>set (zip [0..<length auxlist'] auxlist')"
-                  using i'_props tlr_props(2) in_set_zip
-                  by fastforce
-                then have "qtable (args_n args) (fv \<beta>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i' \<beta>) r"
-                  using auxlist_props
-                  by auto
-                then have "x \<in> r"
-                  using wf_x[unfolded args_R] restr assm
-                  unfolding qtable_def
-                  by auto
-              }
-              moreover {
-                assume "\<exists>k\<in>{i'<..k}. Formula.sat \<sigma> V (map the x) k \<alpha>"
-                then obtain j where j_props: "j\<in>{i'<..k}" "Formula.sat \<sigma> V (map the x) j \<alpha>"
-                  by auto
-                obtain t l r where tlr_def: "(t, l, r) = auxlist' ! j"
-                  by (metis prod_cases3)
-                moreover have j_l: "j < length auxlist'"
-                  using j_props(1) auxlist_len
-                  by auto
-                ultimately have "(j, t, l, r)\<in>set (zip [0..<length auxlist'] auxlist')"
-                  using in_set_zip by fastforce
-                then have qtable: "qtable (args_n args) (fv \<gamma>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) j \<gamma>) l"
-                  using auxlist_props
-                  by auto
-
-                define j' where "j' = j - offset"
-
-                have "length auxlist'' + offset = Suc k"
-                  using auxlist'_filter_sum auxlist_len
-                  unfolding offset_def cur'_def auxlist''_def
-                  by auto
-                then have "j\<in>{offset + i<..<length auxlist'' + offset}"
-                  using j_props(1)
-                  unfolding i'_def
-                  by auto
-                then have j'_mem: "j' \<in> {i<..<length auxlist''}"
-                  unfolding j'_def
-                  by auto
-                then have "auxlist'' ! j' = auxlist' ! j"
-                  using idx_shift
-                  unfolding j'_def
-                  by auto
-                then have tlr_eq: "(t, l, r) = auxlist'' ! j'"
-                  using tlr_def
-                  by auto
-
-                have "\<exists>j\<in>{i<..<length auxlist''}. join_cond (args_pos args) ((fst \<circ> snd) (auxlist'' ! j)) (proj_tuple (join_mask (args_n args) (args_L args)) x)"
-                proof (cases "args_pos args")
-                  case True
-                  then have sat: "Formula.sat \<sigma> V (map the proj_x) j \<gamma>"
-                    using j_props pos proj_sat_equiv
-                    by auto
-                  then have "proj_x \<in> l"
-                    using qtable restr_proj_x wf_proj_x
-                    unfolding qtable_def
-                    by auto
-                  then have "proj_x \<in> ((fst \<circ> snd) (auxlist'' ! j'))"
-                    using tlr_eq
-                    by (metis comp_def fst_conv snd_conv)
-                  then have "\<exists>j\<in>{i<..<length auxlist''}. proj_x \<in> ((fst \<circ> snd) (auxlist'' ! j))"
-                    using j'_mem
-                    by auto
-                  then show ?thesis
-                    using True
-                    unfolding proj_x_def
-                    by auto
-                next
-                  case False
-                  then have sat: "Formula.sat \<sigma> V (map the proj_x) j (Formula.Neg \<gamma>)"
-                    using j_props pos proj_sat_equiv
-                    by auto
-                  then have "proj_x \<notin> l"
-                    using qtable restr_proj_x wf_proj_x
-                    unfolding qtable_def
-                    by auto
-                  then have "proj_x \<notin> ((fst \<circ> snd) (auxlist'' ! j'))"
-                    using tlr_eq
-                    by (metis comp_def fst_conv snd_conv)
-                  then have "\<exists>j\<in>{i<..<length auxlist''}. proj_x \<notin> ((fst \<circ> snd) (auxlist'' ! j))"
-                    using j'_mem
-                    by auto
-                  then show ?thesis
-                    using False
-                    unfolding proj_x_def
-                    by auto
-                qed
-              }
-              ultimately have "x \<in> r \<or>
-               (\<exists>j\<in>{i<..<length auxlist''}. join_cond (args_pos args) ((fst \<circ> snd) (auxlist'' ! j)) (proj_tuple (join_mask (args_n args) (args_L args)) x))"
-                by blast
-            }
-            then show ?thesis
-              unfolding Let_def
-              by (auto split: prod.splits) fastforce
-          qed
-          then show "x \<in> z"
-            using wf
-            unfolding z_eq
-            by auto
-        qed
-      qed
 
       have correctness: "(\<And>x. x \<in> z \<Longrightarrow> wf_tuple n (fv \<alpha> \<union> fv \<beta>) x \<Longrightarrow> mem_restr R x \<Longrightarrow> Formula.sat \<sigma> V (map the x) k (formula.Trigger \<alpha> I \<beta>))"
         using equiv args_props
