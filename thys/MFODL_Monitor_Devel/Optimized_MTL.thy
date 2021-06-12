@@ -1,8 +1,6 @@
 (*<*)
-theory Optimized_MTL_TEMP
-  imports
-    Formula
-    Optimized_Join
+theory Optimized_MTL
+  imports Monitor
 begin
 (*>*)
 
@@ -208,173 +206,6 @@ qed
 
 subsection \<open>Optimized data structure for Since\<close>
 
-(* COPY START *)
-
-type_synonym ts = nat
-
-type_synonym 'a msaux = "(ts \<times> 'a table) list"
-type_synonym 'a muaux = "(ts \<times> 'a table \<times> 'a table) list"
-
-datatype mconstraint = MEq | MLess | MLessEq
-
-record args =
-  args_ivl :: \<I>
-  args_n :: nat
-  args_L :: "nat set"
-  args_R :: "nat set"
-  args_pos :: bool
-
-fun eq_rel :: "nat \<Rightarrow> Formula.trm \<Rightarrow> Formula.trm \<Rightarrow> event_data table" where
-  "eq_rel n (Formula.Const x) (Formula.Const y) = (if x = y then unit_table n else empty_table)"
-| "eq_rel n (Formula.Var x) (Formula.Const y) = singleton_table n x y"
-| "eq_rel n (Formula.Const x) (Formula.Var y) = singleton_table n y x"
-| "eq_rel n _ _ = undefined"
-
-lemma regex_atms_size: "x \<in> regex.atms r \<Longrightarrow> size x < regex.size_regex size r"
-  by (induct r) auto
-
-lemma atms_size:
-  assumes "x \<in> atms r"
-  shows "size x < Regex.size_regex size r"
-proof -
-  { fix y assume "y \<in> regex.atms r" "case y of formula.Neg z \<Rightarrow> x = z | _ \<Rightarrow> False"
-    then have "size x < Regex.size_regex size r"
-      by (cases y rule: formula.exhaust) (auto dest: regex_atms_size)
-  }
-  with assms show ?thesis
-    unfolding atms_def
-    by (auto split: formula.splits dest: regex_atms_size)
-qed
-
-definition init_args :: "\<I> \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> bool \<Rightarrow> args" where
-  "init_args I n L R pos = \<lparr>args_ivl = I, args_n = n, args_L = L, args_R = R, args_pos = pos\<rparr>"
-
-locale msaux =
-  fixes valid_msaux :: "args \<Rightarrow> ts \<Rightarrow> 'msaux \<Rightarrow> event_data msaux \<Rightarrow> bool"
-    and init_msaux :: "args \<Rightarrow> 'msaux"
-    and add_new_ts_msaux :: "args \<Rightarrow> ts \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
-    and join_msaux :: "args \<Rightarrow> event_data table \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
-    and add_new_table_msaux :: "args \<Rightarrow> event_data table \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
-    and result_msaux :: "args \<Rightarrow> 'msaux \<Rightarrow> event_data table"
-  assumes valid_init_msaux: "L \<subseteq> R \<Longrightarrow>
-    valid_msaux (init_args I n L R pos) 0 (init_msaux (init_args I n L R pos)) []"
-  assumes valid_add_new_ts_msaux: "valid_msaux args cur aux auxlist \<Longrightarrow> nt \<ge> cur \<Longrightarrow>
-    valid_msaux args nt (add_new_ts_msaux args nt aux)
-    (filter (\<lambda>(t, rel). memR (args_ivl args) (nt - t)) auxlist)"
-  assumes valid_join_msaux: "valid_msaux args cur aux auxlist \<Longrightarrow>
-    table (args_n args) (args_L args) rel1 \<Longrightarrow>
-    valid_msaux args cur (join_msaux args rel1 aux)
-    (map (\<lambda>(t, rel). (t, join rel (args_pos args) rel1)) auxlist)"
-  assumes valid_add_new_table_msaux: "valid_msaux args cur aux auxlist \<Longrightarrow>
-    table (args_n args) (args_R args) rel2 \<Longrightarrow>
-    valid_msaux args cur (add_new_table_msaux args rel2 aux)
-    (case auxlist of
-      [] => [(cur, rel2)]
-    | ((t, y) # ts) \<Rightarrow> if t = cur then (t, y \<union> rel2) # ts else (cur, rel2) # auxlist)"
-    and valid_result_msaux: "valid_msaux args cur aux auxlist \<Longrightarrow> result_msaux args aux =
-    foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist, memL (args_ivl args) (cur - t)] {}"
-
-fun check_before :: "\<I> \<Rightarrow> ts \<Rightarrow> (ts \<times> 'a \<times> 'b) \<Rightarrow> bool" where
-  "check_before I dt (t, a, b) \<longleftrightarrow> \<not> memR I (dt - t)"
-
-fun proj_thd :: "('a \<times> 'b \<times> 'c) \<Rightarrow> 'c" where
-  "proj_thd (t, a1, a2) = a2"
-
-definition update_until :: "args \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> event_data muaux \<Rightarrow> event_data muaux" where
-  "update_until args rel1 rel2 nt aux =
-    (map (\<lambda>x. case x of (t, a1, a2) \<Rightarrow> (t, if (args_pos args) then join a1 True rel1 else a1 \<union> rel1,
-      if mem  (args_ivl args) (nt - t) then a2 \<union> join rel2 (args_pos args) a1 else a2)) aux) @
-    [(nt, rel1, if memL (args_ivl args) 0 then rel2 else empty_table)]"
-
-lemma map_proj_thd_update_until: "map proj_thd (takeWhile (check_before (args_ivl args) nt) auxlist) =
-  map proj_thd (takeWhile (check_before (args_ivl args) nt) (update_until args rel1 rel2 nt auxlist))"
-proof (induction auxlist)
-  case Nil
-  then show ?case by (simp add: update_until_def)
-next
-  case (Cons a auxlist)
-  then show ?case
-    by (auto simp add: update_until_def split: if_splits prod.splits)
-qed
-
-fun eval_until :: "\<I> \<Rightarrow> ts \<Rightarrow> event_data muaux \<Rightarrow> event_data table list \<times> event_data muaux" where
-  "eval_until I nt [] = ([], [])"
-| "eval_until I nt ((t, a1, a2) # aux) = (if \<not> memR I (nt - t) then
-    (let (xs, aux) = eval_until I nt aux in (a2 # xs, aux)) else ([], (t, a1, a2) # aux))"
-
-lemma eval_until_length:
-  "eval_until I nt auxlist = (res, auxlist') \<Longrightarrow> length auxlist = length res + length auxlist'"
-  by (induction I nt auxlist arbitrary: res auxlist' rule: eval_until.induct)
-    (auto split: if_splits prod.splits)
-
-lemma eval_until_res: "eval_until I nt auxlist = (res, auxlist') \<Longrightarrow>
-  res = map proj_thd (takeWhile (check_before I nt) auxlist)"
-  by (induction I nt auxlist arbitrary: res auxlist' rule: eval_until.induct)
-    (auto split: prod.splits)
-
-lemma eval_until_auxlist': "eval_until I nt auxlist = (res, auxlist') \<Longrightarrow>
-  auxlist' = drop (length res) auxlist"
-  by (induction I nt auxlist arbitrary: res auxlist' rule: eval_until.induct)
-    (auto split: if_splits prod.splits)
-
-locale muaux =
-  fixes valid_muaux :: "args \<Rightarrow> ts \<Rightarrow> 'muaux \<Rightarrow> event_data muaux \<Rightarrow> bool"
-    and init_muaux :: "args \<Rightarrow> 'muaux"
-    and add_new_muaux :: "args \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> 'muaux \<Rightarrow> 'muaux"
-    and length_muaux :: "args \<Rightarrow> 'muaux \<Rightarrow> nat"
-    and eval_muaux :: "args \<Rightarrow> ts \<Rightarrow> 'muaux \<Rightarrow> event_data table list \<times> 'muaux"
-  assumes valid_init_muaux: "L \<subseteq> R \<Longrightarrow>
-    valid_muaux (init_args I n L R pos) 0 (init_muaux (init_args I n L R pos)) []"
-  assumes valid_add_new_muaux: "valid_muaux args cur aux auxlist \<Longrightarrow>
-    table (args_n args) (args_L args) rel1 \<Longrightarrow>
-    table (args_n args) (args_R args) rel2 \<Longrightarrow>
-    nt \<ge> cur \<Longrightarrow>
-    valid_muaux args nt (add_new_muaux args rel1 rel2 nt aux)
-    (update_until args rel1 rel2 nt auxlist)"
-  assumes valid_length_muaux: "valid_muaux args cur aux auxlist \<Longrightarrow> length_muaux args aux = length auxlist"
-  assumes valid_eval_muaux: "valid_muaux args cur aux auxlist \<Longrightarrow> nt \<ge> cur \<Longrightarrow>
-    eval_muaux args nt aux = (res, aux') \<Longrightarrow> eval_until (args_ivl args) nt auxlist = (res', auxlist') \<Longrightarrow>
-    res = res' \<and> valid_muaux args cur aux' auxlist'"
-
-locale maux = msaux valid_msaux init_msaux add_new_ts_msaux join_msaux add_new_table_msaux result_msaux +
-  muaux valid_muaux init_muaux add_new_muaux length_muaux eval_muaux
-  for valid_msaux :: "args \<Rightarrow> ts \<Rightarrow> 'msaux \<Rightarrow> event_data msaux \<Rightarrow> bool"
-    and init_msaux :: "args \<Rightarrow> 'msaux"
-    and add_new_ts_msaux :: "args \<Rightarrow> ts \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
-    and join_msaux :: "args \<Rightarrow> event_data table \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
-    and add_new_table_msaux :: "args \<Rightarrow> event_data table \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
-    and result_msaux :: "args \<Rightarrow> 'msaux \<Rightarrow> event_data table"
-    and valid_muaux :: "args \<Rightarrow> ts \<Rightarrow> 'muaux \<Rightarrow> event_data muaux \<Rightarrow> bool"
-    and init_muaux :: "args \<Rightarrow> 'muaux"
-    and add_new_muaux :: "args \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> 'muaux \<Rightarrow> 'muaux"
-    and length_muaux :: "args \<Rightarrow> 'muaux \<Rightarrow> nat"
-    and eval_muaux :: "args \<Rightarrow> nat \<Rightarrow> 'muaux \<Rightarrow> event_data table list \<times> 'muaux"
-
-lemma in_foldr_UnI: "x \<in> A \<Longrightarrow> A \<in> set xs \<Longrightarrow> x \<in> foldr (\<union>) xs {}"
-  by (induction xs) auto
-
-lemma in_foldr_UnE: "x \<in> foldr (\<union>) xs {} \<Longrightarrow> (\<And>A. A \<in> set xs \<Longrightarrow> x \<in> A \<Longrightarrow> P) \<Longrightarrow> P"
-  by (induction xs) auto
-
-lemma sat_the_restrict: "fv \<phi> \<subseteq> A \<Longrightarrow> Formula.sat \<sigma> V (map the (restrict A v)) i \<phi> = Formula.sat \<sigma> V (map the v) i \<phi>"
-  by (rule sat_fv_cong) (auto intro!: map_the_restrict)
-
-lemma eps_the_restrict: "fv_regex r \<subseteq> A \<Longrightarrow> Regex.eps (Formula.sat \<sigma> V (map the (restrict A v))) i r = Regex.eps (Formula.sat \<sigma> V (map the v)) i r"
-  by (rule eps_fv_cong) (auto intro!: map_the_restrict)
-
-lemma sorted_wrt_filter[simp]: "sorted_wrt R xs \<Longrightarrow> sorted_wrt R (filter P xs)"
-  by (induct xs) auto
-
-lemma concat_map_filter[simp]:
-  "concat (map f (filter P xs)) = concat (map (\<lambda>x. if P x then f x else []) xs)"
-  by (induct xs) auto
-
-lemma map_filter_alt:
-  "map f (filter P xs) = concat (map (\<lambda>x. if P x then [f x] else []) xs)"
-  by (induct xs) auto
-
-(* COPY END *)
-
 type_synonym 'a mmsaux = "ts \<times> ts \<times> bool list \<times> bool list \<times>
   (ts \<times> 'a table) queue \<times> (ts \<times> 'a table) queue \<times>
   (('a tuple, ts) mapping) \<times> (('a tuple, ts) mapping)"
@@ -483,8 +314,6 @@ lemma safe_max_Some_dest_in: "finite X \<Longrightarrow> safe_max X = Some x \<L
 lemma safe_max_Some_dest_le: "finite X \<Longrightarrow> safe_max X = Some x \<Longrightarrow> y \<in> X \<Longrightarrow> y \<le> x"
   using Max_ge by (auto simp add: safe_max_def split: if_splits)
 
-(* START: COMMON DEFINITIONS*)
-
 definition newest_tuple_in_mapping :: "
   ('b \<Rightarrow> 'a table) \<Rightarrow>
   ('a tuple \<Rightarrow> 'a tuple) \<Rightarrow>
@@ -509,8 +338,6 @@ lemma "newest_tuple_in_mapping entry_to_db id data_in tuple_in (\<lambda>x. vali
   (\<forall>as. Mapping.lookup tuple_in as = safe_max (fst `
     {tas \<in> ts_tuple_rel_f entry_to_db (set (linearize data_in)). valid_tuple tuple_since tas \<and> as = snd tas}))"
   by (auto simp add: newest_tuple_in_mapping_def)
-
-(* END: COMMON DEFINITIONS*)
 
 fun valid_mmsaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Rightarrow> 'a msaux \<Rightarrow> bool" where
   "valid_mmsaux args cur (nt, gc, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) ys \<longleftrightarrow>

@@ -1,6 +1,6 @@
 theory Optimized_Trigger
   imports
-    Optimized_MTL_TEMP
+    Optimized_MTL
 begin
 
 type_synonym ts = nat
@@ -6540,6 +6540,5 @@ lemma valid_update_mmtaux: "
 interpretation mmtaux: mtaux valid_mmtaux init_mmtaux update_mmtaux result_mmtaux
   using valid_init_mmtaux valid_update_mmtaux valid_result_mmtaux
   by unfold_locales
-    
 
 end
