@@ -3,8 +3,6 @@ theory Optimized_Trigger
     Optimized_MTL
 begin
 
-type_synonym ts = nat
-
 (* simply stores all tables for \<phi> and \<psi> in [0, b] *)
 type_synonym 'a mtaux = "(ts \<times> 'a table \<times> 'a table) list"
 
@@ -16,66 +14,6 @@ definition relL :: "(ts \<times> 'a table \<times> 'a table) \<Rightarrow> 'a ta
 
 definition relR :: "(ts \<times> 'a table \<times> 'a table) \<Rightarrow> 'a table" where
   "relR = (snd o snd)"
-
-fun trigger_results :: "args \<Rightarrow> ts \<Rightarrow> 'a mtaux \<Rightarrow> (nat set \<times> 'a table)" where
-  "trigger_results args cur auxlist = (
-    if (length (filter (\<lambda> (t, _, _). mem (args_ivl args) (cur - t)) auxlist) > 0) then (
-      (args_R args), {
-      tuple. wf_tuple (args_n args) (args_R args) tuple \<and>
-        \<comment> \<open>pretty much the definition of trigger\<close>
-        (\<forall>i \<in> {0..<(length auxlist)}.
-          let (t, l, r) = auxlist!i in
-          mem (args_ivl args) (cur - t) \<longrightarrow> 
-          \<comment> \<open>either \<psi> holds or there is a later database where the same tuple satisfies \<phi>\<close>
-          (
-            tuple \<in> r \<or>
-            (\<exists>j \<in> {i<..<(length auxlist)}.
-              join_cond (args_pos args) ((fst o snd) (auxlist!j)) (proj_tuple (join_mask (args_n args) (args_L args)) tuple) \<comment> \<open>t < t' is given as the list is sorted\<close>
-            )
-          )
-        )
-      }
-    ) else
-    ({}, {replicate (args_n args) None})
-)"
-
-locale mtaux =
-  fixes valid_mtaux :: "args \<Rightarrow> ts \<Rightarrow> 'mtaux \<Rightarrow> 'a mtaux \<Rightarrow> bool"
-    and init_mtaux :: "args \<Rightarrow> 'mtaux"
-    and update_mtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> 'mtaux \<Rightarrow> 'mtaux"
-    (* and update_mtaux_constraint :: "args \<Rightarrow> ts \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> 'mtaux \<Rightarrow> 'mtaux" *)
-    (* and update_mtaux_safe_assignment :: "args \<Rightarrow> ts \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> 'mtaux \<Rightarrow> 'mtaux" *)
-    and result_mtaux :: "args \<Rightarrow> 'mtaux \<Rightarrow> (nat set \<times> 'a table)"
-
-  (* the initial state should be valid *)
-  assumes valid_init_mtaux: "(
-    if (mem I 0)
-      then
-        L \<subseteq> R
-      else 
-        L = R
-    ) \<Longrightarrow>
-    \<not>mem I 0 \<longrightarrow> pos \<Longrightarrow>
-    let args = init_args I n L R pos in
-    valid_mtaux args 0 (init_mtaux args) []"
-
-  (* assuming the previous state outputted the same result, the next will as well *)
-  assumes valid_update_mtaux: "
-    nt \<ge> cur \<Longrightarrow>
-    table (args_n args) (args_L args) l \<Longrightarrow>
-    table (args_n args) (args_R args) r \<Longrightarrow>
-    valid_mtaux args cur aux auxlist \<Longrightarrow>
-    valid_mtaux
-      args
-      nt
-      (update_mtaux args nt l r aux)
-      ((filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist) @ [(nt, l, r)])
-  "
-
-  and valid_result_mtaux: "
-    valid_mtaux args cur aux auxlist \<Longrightarrow>
-    result_mtaux args aux = trigger_results args cur auxlist
-  "
 
 type_synonym 'a mmtaux = "
   ts \<times>                                 \<comment> \<open>the newest timestamp\<close>
