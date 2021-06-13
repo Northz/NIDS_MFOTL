@@ -217,13 +217,13 @@ proof (rule iffI)
     by auto
   then show "Formula.sat \<sigma> V v i (release_safe_bounded \<phi> I1 \<psi>)"
     using assms I2_def release_safe_bounded_def
-    by simp
+    by auto
 next
   define I2 where "I2 = flip_int_less_lower I1" (* [0, a-1] *)
   assume "Formula.sat \<sigma> V v i (release_safe_bounded \<phi> I1 \<psi>)"
   then have assm: "Formula.sat \<sigma> V v i (Formula.And (eventually I1 Formula.TT) (Formula.Or (Formula.Or (always_safe_bounded I1 \<psi>) (eventually I2 \<phi>)) (eventually I2 (Formula.Next all (Formula.Until \<psi> (int_remove_lower_bound I1) (Formula.And \<phi> \<psi>))))))"
     using assms I2_def release_safe_bounded_def
-    by simp
+    by auto
   then have eventually: "Formula.sat \<sigma> V v i (eventually I1 Formula.TT)" by auto
   then have "Formula.sat \<sigma> V v i (always_safe_bounded I1 \<psi>) \<or> Formula.sat \<sigma> V v i (eventually I2 \<phi>) \<or> Formula.sat \<sigma> V v i (eventually I2 (Formula.Next all (Formula.Until \<psi> (int_remove_lower_bound I1) (Formula.And \<phi> \<psi>))))"
     using assm
@@ -310,21 +310,34 @@ qed
 
 (* verify that the derived rewrite formulas are safe *)
 
+(* this would be the safety in full generality (for the current implementation).
+  for simplicity safe_assignment, is_contraint and nested triggers
+   are currently disallowed
+*)
+definition safe_formula_dual' where "
+  safe_formula_dual' b \<phi> I \<psi> = (if (mem I 0) then
+    (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (
+      safe_formula \<phi> \<or> safe_assignment (fv \<psi>) \<phi> \<or> is_constraint \<phi> \<or>
+      (case \<phi> of formula.Neg x \<Rightarrow> safe_formula x | formula.Trigger x xa xb \<Rightarrow> safe_formula_dual True safe_formula x xa xb
+        | _ \<Rightarrow> False)
+    ))
+      else
+    b \<and> (safe_formula \<phi> \<and> safe_formula \<psi> \<and> fv \<phi> = fv \<psi>))
+"
+
 (* trigger *)
 
 (* [0, b] *)
 lemma
-  assumes "safe_formula \<psi>"
-  assumes "fv \<phi> \<subseteq> fv \<psi>"
-  assumes "safe_formula \<phi> \<or> (is_constraint (Formula.Neg \<phi>) \<and> (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False)))"
+  assumes "safe_formula (Formula.Trigger \<phi> I \<psi>)"
   shows "safe_formula (trigger_safe_0 \<phi> I \<psi>)"
-  using assms by (auto simp add: trigger_safe_0_def)
+  using assms
+  by (auto simp add: trigger_safe_0_def safe_formula_dual_def split: if_splits)
+     (auto split: formula.splits)
 
-lemma trigger_safe_0_conditions: "safe_formula (trigger_safe_0 \<phi> I \<psi>) = (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (
-      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-      (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-    ))"
-by (auto simp add: trigger_safe_0_def)
+lemma "mem I 0 \<Longrightarrow>
+  safe_formula_dual' False \<phi> I \<psi> = safe_formula (trigger_safe_0 \<phi> I \<psi>)"
+  by (auto simp add: trigger_safe_0_def safe_formula_dual'_def split: if_splits)
 
 
 lemma "Formula.future_bounded (trigger_safe_0 \<phi> I \<psi>) = (Formula.future_bounded \<psi> \<and> Formula.future_bounded \<phi>)"
@@ -333,61 +346,22 @@ lemma "Formula.future_bounded (trigger_safe_0 \<phi> I \<psi>) = (Formula.future
 (* [a, \<infinity>] *)
 
 lemma
-  assumes "safe_formula \<psi>"
-  assumes "safe_formula \<phi>"
-  assumes "fv \<phi> = fv \<psi>"
-  (* can this be improved? probably not. if \<psi> holds everywhere, \<phi> can be assigned anything *)
-  (* vice versa, if \<phi> holds at i, everything can be assigned to \<psi> *)
+  assumes "safe_formula_dual True safe_formula \<phi> I \<psi>"
+  assumes "\<not> mem I 0"
   shows "safe_formula (trigger_safe_unbounded \<phi> I \<psi>)"
   using assms
-  by (auto simp add: trigger_safe_unbounded_def once_def historically_safe_unbounded_def)
+  by (auto simp add: trigger_safe_unbounded_def once_def historically_safe_unbounded_def safe_formula_dual_def)
 
 lemma "Formula.future_bounded (trigger_safe_unbounded \<phi> I \<psi>) = (Formula.future_bounded \<psi> \<and> Formula.future_bounded \<phi>)"
   by (auto simp add: trigger_safe_unbounded_def)
-
-(* [a, b] *)
-
-lemma 
-  assumes "\<not>mem I 0"
-  shows "safe_formula (Formula.Trigger \<phi> I \<psi>) = safe_formula (trigger_safe_bounded \<phi> I \<psi>)"
-proof (rule iffI)
-  assume "safe_formula (Formula.Trigger \<phi> I \<psi>)"
-  then show "safe_formula (trigger_safe_bounded \<phi> I \<psi>)"
-    using assms
-    by (simp add: trigger_safe_bounded_def)
-next
-  assume "safe_formula (trigger_safe_bounded \<phi> I \<psi>)"
-  then show "safe_formula (Formula.Trigger \<phi> I \<psi>)"
-  by (simp add: trigger_safe_bounded_def safe_assignment_def)
-qed
-
-lemma "Formula.future_bounded (trigger_safe_bounded \<phi> I \<psi>) = (bounded I \<and> Formula.future_bounded \<psi> \<and> Formula.future_bounded \<phi>)"
-  by (auto simp add: trigger_safe_bounded_def)
 
 (* release *)
 
 (* [0, b] *)
 
-lemma release_safe_0_conditions: "safe_formula (release_safe_0 \<phi> I \<psi>) = (safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> (
-      safe_assignment (fv \<psi>) \<phi> \<or> safe_formula \<phi> \<or>
-      (is_constraint \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))
-    ))"
-  by (auto simp add: release_safe_0_def)
-
-lemma 
-  assumes "mem I 0"
-  shows "safe_formula (Formula.Release \<phi> I \<psi>) = safe_formula (release_safe_0 \<phi> I \<psi>)"
-proof (rule iffI)
-  assume "safe_formula (Formula.Release \<phi> I \<psi>)"
-  then show "safe_formula (release_safe_0 \<phi> I \<psi>)"
-    using assms
-    by (auto simp add: release_safe_0_def)
-next
-  assume assm: "safe_formula (release_safe_0 \<phi> I \<psi>)"
-  then show "safe_formula (Formula.Release \<phi> I \<psi>)"
-    using release_safe_0_conditions[of \<phi> I \<psi>] assms
-    by auto
-qed
+lemma "mem I 0 \<Longrightarrow>
+  safe_formula_dual' False \<phi> I \<psi> = safe_formula (release_safe_0 \<phi> I \<psi>)"
+  by (auto simp add: release_safe_0_def safe_formula_dual'_def split: if_splits)
 
 lemma "Formula.future_bounded (release_safe_0 \<phi> I \<psi>) = (bounded I \<and> Formula.future_bounded \<psi> \<and> Formula.future_bounded \<phi>)"
   by (auto simp add: release_safe_0_def)
@@ -395,18 +369,11 @@ lemma "Formula.future_bounded (release_safe_0 \<phi> I \<psi>) = (bounded I \<an
 (* [a, b] *)
 
 lemma
-  assumes "\<not>mem I 0"
-  shows "safe_formula (Formula.Release \<phi> I \<psi>) = safe_formula (release_safe_bounded \<phi> I \<psi>)"
-proof (rule iffI)
-  assume "safe_formula (Formula.Release \<phi> I \<psi>)"
-  then show "safe_formula (release_safe_bounded \<phi> I \<psi>)"
-    using assms
-    by (simp add: release_safe_bounded_def)
-next
-  assume "safe_formula (release_safe_bounded \<phi> I \<psi>)"
-  then show "safe_formula (Formula.Release \<phi> I \<psi>)"
-  by (simp add: release_safe_bounded_def safe_assignment_def)
-qed
+  assumes "safe_formula_dual True safe_formula \<phi> I \<psi>"
+  assumes "\<not> mem I 0"
+  shows "safe_formula (release_safe_bounded \<phi> I \<psi>)"
+  using assms
+  by (auto simp add: release_safe_bounded_def once_def historically_safe_unbounded_def safe_formula_dual_def)
 
 lemma "Formula.future_bounded (release_safe_bounded \<phi> I \<psi>) = (bounded I \<and> \<not>mem I 0 \<and> Formula.future_bounded \<psi> \<and> Formula.future_bounded \<phi>)"
 proof (rule iffI)
@@ -462,13 +429,13 @@ fun map_formula :: "(Formula.formula \<Rightarrow> Formula.formula) \<Rightarrow
 lemma map_formula_fvi:
   assumes "\<forall>b \<phi>. Formula.fvi b (f \<phi>) = Formula.fvi b \<phi>"
   shows "\<forall>b. Formula.fvi b (map_formula f \<phi>) = Formula.fvi b \<phi>"
-proof (induction \<phi>) qed (auto simp add: assms)
+proof (induction \<phi>) qed (auto simp add: assms release_safe_0_def always_safe_0_def)
 
 
 lemma map_formula_sat:
-  assumes "\<forall>b \<phi>. Formula.fvi b (f \<phi>) = Formula.fvi b \<phi>"
-  assumes "\<forall>\<sigma> V v i \<phi>. Formula.sat \<sigma> V v i (f \<phi>) = Formula.sat \<sigma> V v i \<phi>"
-  shows "\<forall>\<sigma> V v i. Formula.sat \<sigma> V v i \<phi> = Formula.sat \<sigma> V v i (map_formula f \<phi>)"
+  assumes "\<And>b \<phi>. Formula.fvi b (f \<phi>) = Formula.fvi b \<phi>"
+  assumes "\<And>\<sigma> V v i \<phi>. Formula.sat \<sigma> V v i (f \<phi>) = Formula.sat \<sigma> V v i \<phi>"
+  shows "\<And>\<sigma> V v i. Formula.sat \<sigma> V v i \<phi> = Formula.sat \<sigma> V v i (map_formula f \<phi>)"
 using assms proof (induction \<phi>)
   case assm: (Let p \<phi>' \<psi>')
   from assms have nfv_eq: "\<forall>\<phi>. Formula.nfv (map_formula f \<phi>) = Formula.nfv \<phi>"
@@ -522,28 +489,33 @@ next
   then show ?case by blast
 qed (auto split: nat.split)
 
-fun rewrite_historically :: "Formula.formula \<Rightarrow> Formula.formula" where
-  "rewrite_historically (Formula.And (once I1 \<phi>) (historically I2 \<psi>)) = (
-    if (\<phi> = \<psi> \<and> I1 = I2) then
-      if (mem I1 0) then
-        Formula.And (once I1 \<phi>) (rewrite_historically (historically I2 \<psi>))
-      else (
-        if (bounded I1) then
-          Formula.And (once I1 \<phi>) (historically_safe_bounded I1 (rewrite_historically \<phi>))
-        else
-          Formula.And (once I1 \<phi>) (historically_safe_unbounded I1 (rewrite_historically \<phi>))
-      )
-    else
-      (Formula.And (Formula.Since Formula.TT I1 \<phi>) (historically I2 \<psi>))
-  )"
-| "rewrite_historically (historically I \<phi>) = (
+
+fun rewrite_trigger :: "Formula.formula \<Rightarrow> Formula.formula" where
+  "rewrite_trigger (Formula.And \<phi> (Formula.Trigger \<alpha> I \<beta>)) = (
     if (mem I 0) then
-      historically_safe_0 I (rewrite_historically \<phi>)
+      \<comment> \<open>the rewrite function already was applied recursively, hence the trigger should already be rewritten\<close>
+      Formula.And \<phi> (Formula.Trigger \<alpha> I \<beta>)
     else (
-      undefined
+      case \<phi> of (Formula.Since (Formula.Neg (Formula.Exists (Formula.Neg (Formula.Eq (Formula.Var v1) (Formula.Var v2))))) I' (Formula.Neg (Formula.Exists (Formula.Neg (Formula.Eq (Formula.Var v3) (Formula.Var v4)))))) \<Rightarrow> (
+        if I = I' \<and> v1 = 0 \<and> v2 = 0 \<and> v3 = 0 \<and> v4 = 0 then
+          if (bounded I) then
+            trigger_safe_bounded \<alpha> I \<beta>
+          else
+            trigger_safe_unbounded \<alpha> I \<beta>
+        else
+          Formula.And \<phi> (Formula.Trigger \<alpha> I \<beta>)
+        )
+      | _ \<Rightarrow> Formula.And \<phi> (Formula.Trigger \<alpha> I \<beta>)
     )
   )"
-| "rewrite_historically f = f"
+| "rewrite_trigger (Formula.Trigger \<alpha> I \<beta>) = (
+    if (mem I 0) then
+      trigger_safe_0 \<alpha> I \<beta>
+    else (
+      Formula.Trigger \<alpha> I \<beta>
+    )
+  )"
+| "rewrite_trigger f = f"
 
 lemma historically_safe_0_fvi[simp]: "Formula.fvi b (historically_safe_0 I \<phi>) = Formula.fvi b \<phi>"
   by (auto simp add: historically_safe_0_def split: if_splits)
@@ -554,89 +526,8 @@ lemma historically_safe_unbounded_fvi[simp]: "Formula.fvi b (historically_safe_u
 lemma historically_safe_bounded_fvi[simp]: "Formula.fvi b (historically_safe_bounded I \<phi>) = Formula.fvi b \<phi>"
   by (auto simp add: historically_safe_bounded_def)
 
-lemma rewrite_historically_fvi[simp]: "Formula.fvi b (rewrite_historically \<phi>) = Formula.fvi b \<phi>"
-proof (induction \<phi>) qed (auto)
-
-lemma rewrite_historically_sat[simp]: "\<forall>\<sigma> V v i. Formula.sat \<sigma> V v i (rewrite_historically \<phi>) = Formula.sat \<sigma> V v i \<phi>"
-proof (induction \<phi>)
-  case assm: (Historically I \<phi>')
-  {
-    fix \<sigma> V v i
-    {
-      assume mem: "mem I 0"
-      then have "Formula.sat \<sigma> V v i (rewrite_historically (historically I \<phi>')) = Formula.sat \<sigma> V v i (historically_safe_0 I (rewrite_historically \<phi>'))"
-        by auto
-      then have "Formula.sat \<sigma> V v i (rewrite_historically (historically I \<phi>')) = Formula.sat \<sigma> V v i (formula.Historically I (rewrite_historically \<phi>'))"
-        using mem historically_rewrite_0[of I \<sigma> V v i "(rewrite_historically \<phi>')"]
-        by auto
-    }
-    moreover {
-      assume mem: "\<not> mem I 0"
-      {
-        assume b: "bounded I"
-        then have "Formula.sat \<sigma> V v i (rewrite_historically (historically I \<phi>')) = Formula.sat \<sigma> V v i (historically_safe_bounded I (rewrite_historically \<phi>'))"
-          using mem by auto
-        then have "Formula.sat \<sigma> V v i (rewrite_historically (historically I \<phi>')) = Formula.sat \<sigma> V v i (formula.Historically I (rewrite_historically \<phi>'))"
-          using mem b historically_rewrite_bounded[of I \<sigma> V v i "(rewrite_historically \<phi>')"]
-          by auto
-      }
-      moreover {
-        assume b: "\<not> bounded I"
-        then have "Formula.sat \<sigma> V v i (rewrite_historically (historically I \<phi>')) = Formula.sat \<sigma> V v i (historically_safe_unbounded I (rewrite_historically \<phi>'))"
-          using mem by auto
-        then have "Formula.sat \<sigma> V v i (rewrite_historically (historically I \<phi>')) = Formula.sat \<sigma> V v i (formula.Historically I (rewrite_historically \<phi>'))"
-          using mem b historically_rewrite_unbounded[of I \<sigma> V v i "(rewrite_historically \<phi>')"]
-          by auto
-      }
-      ultimately have "Formula.sat \<sigma> V v i (rewrite_historically (historically I \<phi>')) = Formula.sat \<sigma> V v i (formula.Historically I (rewrite_historically \<phi>'))"
-        by auto
-    }
-    ultimately have "Formula.sat \<sigma> V v i (rewrite_historically (historically I \<phi>')) = Formula.sat \<sigma> V v i (formula.Historically I (rewrite_historically \<phi>'))"
-        by auto
-      then have "Formula.sat \<sigma> V v i (rewrite_historically (formula.Historically I \<phi>')) = Formula.sat \<sigma> V v i (formula.Historically I \<phi>')"
-        using assm
-        by auto
-  }
-  then show ?case by blast
-qed (auto)
-
-fun rewrite_always :: "Formula.formula \<Rightarrow> Formula.formula" where
-  "rewrite_always (always I \<phi>) = (
-    if (mem I 0) then
-      always_safe_0 I (rewrite_always \<phi>)
-    else (
-      if (bounded I) then
-        always_safe_bounded I (rewrite_always \<phi>)
-      else
-        undefined
-    )
-  )"
-| "rewrite_always f = f"
-
-lemma always_safe_0_fvi[simp]: "Formula.fvi b (always_safe_0 I \<phi>) = Formula.fvi b \<phi>"
-  by (auto simp add: always_safe_0_def split: if_splits)
-
-lemma always_safe_bounded_fvi[simp]: "Formula.fvi b (always_safe_bounded I \<phi>) = Formula.fvi b \<phi>"
-  by (auto simp add: always_safe_bounded_def)
-
-lemma rewrite_always_fvi[simp]: "Formula.future_bounded \<phi> \<Longrightarrow> Formula.fvi b (rewrite_always \<phi>) = Formula.fvi b \<phi>"
-proof (induction \<phi>) qed (auto)
-
-fun rewrite_trigger :: "Formula.formula \<Rightarrow> Formula.formula" where
-  "rewrite_trigger (Formula.Trigger \<phi> I \<psi>) = (
-    if (mem I 0) then
-      trigger_safe_0 (rewrite_trigger \<phi>) I (rewrite_trigger \<psi>)
-    else (
-      if (bounded I) then
-        trigger_safe_bounded (rewrite_trigger \<phi>) I (rewrite_trigger \<psi>)
-      else
-        trigger_safe_unbounded (rewrite_trigger \<phi>) I (rewrite_trigger \<psi>)
-    )
-  )"
-| "rewrite_trigger f = f"
-
 lemma trigger_safe_0_fvi[simp]: "Formula.fvi b (trigger_safe_0 \<phi> I \<psi>) = Formula.fvi b \<phi> \<union> Formula.fvi b \<psi>"
-  by (auto simp add: trigger_safe_0_def)
+  by (auto simp add: trigger_safe_0_def split: if_splits)
 
 lemma trigger_safe_unbounded_fvi[simp]: "Formula.fvi b (trigger_safe_unbounded \<phi> I \<psi>) = Formula.fvi b \<phi> \<union> Formula.fvi b \<psi>"
   by (auto simp add: trigger_safe_unbounded_def)
@@ -645,26 +536,187 @@ lemma trigger_safe_bounded_fvi[simp]: "Formula.fvi b (trigger_safe_bounded \<phi
   by (auto simp add: trigger_safe_bounded_def)
 
 lemma rewrite_trigger_fvi[simp]: "Formula.fvi b (rewrite_trigger \<phi>) = Formula.fvi b \<phi>"
-proof (induction \<phi>) qed (auto)
+proof (cases \<phi>)
+  case (And \<phi> \<psi>)
+  then show ?thesis
+  proof (cases \<psi>)
+    case (Trigger \<alpha> I \<beta>)
+    then show ?thesis
+    proof (cases "mem I 0")
+      case True
+      then have "(rewrite_trigger (formula.And \<phi> \<psi>)) = Formula.And \<phi> (Formula.Trigger \<alpha> I \<beta>)"
+        unfolding Trigger
+        by auto
+      then show ?thesis
+        unfolding And
+        using Trigger
+        by auto
+    next
+      case not_mem: False
+      then show ?thesis
+        proof (cases "case \<phi> of (Formula.Since (Formula.Neg (Formula.Exists (Formula.Neg (Formula.Eq (Formula.Var v1) (Formula.Var v2))))) I' (Formula.Neg (Formula.Exists (Formula.Neg (Formula.Eq (Formula.Var v3) (Formula.Var v4)))))) \<Rightarrow> True | _ \<Rightarrow> False")
+          case True
+          then obtain v1 v2 v3 v4 I' where \<phi>_eq:
+            "\<phi> = Formula.Since (Formula.Neg (Formula.Exists (Formula.Neg (Formula.Eq (Formula.Var v1) (Formula.Var v2))))) I' (Formula.Neg (Formula.Exists (Formula.Neg (Formula.Eq (Formula.Var v3) (Formula.Var v4)))))"
+            by (auto split: formula.splits trm.splits)
+          show ?thesis
+          proof (cases "I = I' \<and> v1 = 0 \<and> v2 = 0 \<and> v3 = 0 \<and> v4 = 0")
+            case var_eqs: True
+            then have \<phi>_eq': "\<phi> = once I Formula.TT"
+              unfolding \<phi>_eq once_def Formula.TT_def Formula.FF_def
+              by auto
+            show ?thesis
+            proof (cases "bounded I")
+              case True
+              then have "(rewrite_trigger (formula.And \<phi> \<psi>)) = trigger_safe_bounded \<alpha> I \<beta>"
+                using not_mem var_eqs
+                unfolding Trigger \<phi>_eq rewrite_trigger.simps
+                by auto
+              then show ?thesis
+                unfolding And Trigger \<phi>_eq'
+                by auto
+            next
+              case False
+              then have "(rewrite_trigger (formula.And \<phi> \<psi>)) = trigger_safe_unbounded \<alpha> I \<beta>"
+                using not_mem var_eqs
+                unfolding Trigger \<phi>_eq rewrite_trigger.simps
+                by auto
+              then show ?thesis
+                unfolding And Trigger \<phi>_eq'
+                by auto
+            qed
+          next
+            case False
+            then have "(rewrite_trigger (formula.And \<phi> \<psi>)) = Formula.And \<phi> (Formula.Trigger \<alpha> I \<beta>)"
+              using not_mem
+              unfolding Trigger \<phi>_eq rewrite_trigger.simps
+              by auto
+            then show ?thesis
+              unfolding And Trigger
+              by auto
+          qed
+      next
+        case False
+        then have "(rewrite_trigger (formula.And \<phi> \<psi>)) = Formula.And \<phi> (Formula.Trigger \<alpha> I \<beta>)"
+          using not_mem
+          unfolding Trigger rewrite_trigger.simps
+          by (auto split: formula.splits trm.splits)
+        then show ?thesis
+          unfolding And Trigger
+          by auto
+      qed
+    qed
+  qed (auto)
+next
+  case (Trigger \<alpha> I \<beta>)
+  show ?thesis
+  proof (cases "mem I 0")
+    case True
+    then have rewrite: "rewrite_trigger (formula.Trigger \<alpha> I \<beta>) = trigger_safe_0 \<alpha> I \<beta>"
+      by auto
+    show ?thesis
+      unfolding Trigger rewrite
+      using trigger_safe_0_fvi[of b \<alpha> I \<beta>]
+      by auto
+  next
+    case False
+    then have rewrite: "rewrite_trigger (formula.Trigger \<alpha> I \<beta>) = formula.Trigger \<alpha> I \<beta>"
+      by auto
+    then show ?thesis unfolding Trigger by auto
+  qed
+qed (auto)
 
-fun rewrite_release :: "Formula.formula \<Rightarrow> Formula.formula" where
-  "rewrite_release (Formula.Release \<phi> I \<psi>) = (
-    if (mem I 0) then
-      release_safe_0 (rewrite_release \<phi>) I (rewrite_release \<psi>)
-    else (
-      if (bounded I) then
-        release_safe_bounded (rewrite_release \<phi>) I (rewrite_release \<psi>)
-      else
-        undefined
-    )
-  )"
-| "rewrite_release f = f"
+lemma rewrite_trigger_sat[simp]: "Formula.sat \<sigma> V v i (rewrite_trigger \<phi>) = Formula.sat \<sigma> V v i \<phi>"
+proof (cases \<phi>)
+  case (And \<phi> \<psi>)
+  then show ?thesis
+  proof (cases \<psi>)
+    case (Trigger \<alpha> I \<beta>)
+    then show ?thesis
+    proof (cases "mem I 0")
+      case True
+      then have "(rewrite_trigger (formula.And \<phi> \<psi>)) = Formula.And \<phi> (Formula.Trigger \<alpha> I \<beta>)"
+        unfolding Trigger
+        by auto
+      then show ?thesis
+        unfolding And Trigger
+        by auto
+    next
+      case not_mem: False
+      then show ?thesis
+        proof (cases "case \<phi> of (Formula.Since (Formula.Neg (Formula.Exists (Formula.Neg (Formula.Eq (Formula.Var v1) (Formula.Var v2))))) I' (Formula.Neg (Formula.Exists (Formula.Neg (Formula.Eq (Formula.Var v3) (Formula.Var v4)))))) \<Rightarrow> True | _ \<Rightarrow> False")
+          case True
+          then obtain v1 v2 v3 v4 I' where \<phi>_eq:
+            "\<phi> = Formula.Since (Formula.Neg (Formula.Exists (Formula.Neg (Formula.Eq (Formula.Var v1) (Formula.Var v2))))) I' (Formula.Neg (Formula.Exists (Formula.Neg (Formula.Eq (Formula.Var v3) (Formula.Var v4)))))"
+            by (auto split: formula.splits trm.splits)
+          show ?thesis
+          proof (cases "I = I' \<and> v1 = 0 \<and> v2 = 0 \<and> v3 = 0 \<and> v4 = 0")
+            case var_eqs: True
+            then have \<phi>_eq': "\<phi> = once I Formula.TT"
+              unfolding \<phi>_eq once_def Formula.TT_def Formula.FF_def
+              by auto
+            show ?thesis
+            proof (cases "bounded I")
+              case True
+              then have "(rewrite_trigger (formula.And \<phi> \<psi>)) = trigger_safe_bounded \<alpha> I \<beta>"
+                using not_mem var_eqs
+                unfolding Trigger \<phi>_eq rewrite_trigger.simps
+                by auto
+              then show ?thesis
+                unfolding And Trigger \<phi>_eq'
+                using sat_trigger_rewrite_bounded[OF not_mem True]
+                by auto
+            next
+              case False
+              then have "(rewrite_trigger (formula.And \<phi> \<psi>)) = trigger_safe_unbounded \<alpha> I \<beta>"
+                using not_mem var_eqs
+                unfolding Trigger \<phi>_eq rewrite_trigger.simps
+                by auto
+              then show ?thesis
+                unfolding And Trigger \<phi>_eq'
+                using sat_trigger_rewrite_unbounded[OF not_mem False]
+                by auto
+            qed
+          next
+            case False
+            then have "(rewrite_trigger (formula.And \<phi> \<psi>)) = Formula.And \<phi> (Formula.Trigger \<alpha> I \<beta>)"
+              using not_mem
+              unfolding Trigger \<phi>_eq rewrite_trigger.simps
+              by auto
+            then show ?thesis
+              unfolding And Trigger
+              by auto
+          qed
+      next
+        case False
+        then have "(rewrite_trigger (formula.And \<phi> \<psi>)) = Formula.And \<phi> (Formula.Trigger \<alpha> I \<beta>)"
+          using not_mem
+          unfolding Trigger rewrite_trigger.simps
+          by (auto split: formula.splits trm.splits)
+        then show ?thesis
+          unfolding And Trigger
+          by auto
+      qed
+    qed
+  qed (auto)
+next
+  case (Trigger \<alpha> I \<beta>)
+  show ?thesis
+  proof (cases "mem I 0")
+    case True
+    then have rewrite: "rewrite_trigger (formula.Trigger \<alpha> I \<beta>) = trigger_safe_0 \<alpha> I \<beta>"
+      by auto
+    show ?thesis
+      unfolding Trigger rewrite
+      using sat_trigger_rewrite_0[OF True]
+      by auto
+  next
+    case False
+    then have rewrite: "rewrite_trigger (formula.Trigger \<alpha> I \<beta>) = formula.Trigger \<alpha> I \<beta>"
+      by auto
+    then show ?thesis unfolding Trigger by auto
+  qed
+qed (auto)
 
-lemma release_safe_0_fvi[simp]: "Formula.fvi b (release_safe_0 \<phi> I \<psi>) = Formula.fvi b \<phi> \<union> Formula.fvi b \<psi>"
-  by (auto simp add: release_safe_0_def)
 
-lemma release_safe_bounded_fvi[simp]: "Formula.fvi b (release_safe_bounded \<phi> I \<psi>) = Formula.fvi b \<phi> \<union> Formula.fvi b \<psi>"
-  by (auto simp add: release_safe_bounded_def)
-
-lemma rewrite_release_fvi[simp]: "Formula.future_bounded \<phi> \<Longrightarrow> Formula.fvi b (rewrite_release \<phi>) = Formula.fvi b \<phi>"
-proof (induction \<phi>) qed (auto)
+thm map_formula_sat[OF rewrite_trigger_fvi rewrite_trigger_sat]
