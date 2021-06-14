@@ -799,7 +799,9 @@ function
     -> (check_interval intv) && (check_intervals f)
     
   | Since (intv, f1, f2)
+  | Trigger (intv, f1, f2)
   | Until (intv, f1, f2)
+  | Release (intv, f1, f2)
     -> (check_interval intv) && (check_intervals f1) && (check_intervals f2)
 
   | Frex (intv, r) 
@@ -847,6 +849,7 @@ function
   | Implies (f1, f2)
   | Equiv (f1, f2)
   | Since (_, f1, f2)
+  | Trigger (_, f1, f2)
   | Let (_,f1,f2)
     -> (check_bounds f1) && (check_bounds f2)
 
@@ -857,6 +860,8 @@ function
     -> (check_bound intv) && (check_re_bounds r)
 
   | Until (intv, f1, f2)
+    -> (check_bound intv) && (check_bounds f1) && (check_bounds f2)
+  | Release (intv, f1, f2)
     -> (check_bound intv) && (check_bounds f1) && (check_bounds f2)
 and check_re_bounds = function
   | Wild -> true
@@ -960,7 +965,9 @@ let rec check_let = function
   | Implies (f1, f2)
   | Equiv (f1, f2)
   | Since (_, f1, f2)
+  | Trigger (_, f1, f2)
   | Until (_, f1, f2)
+  | Release (_, f1, f2)
     -> (check_let f1) && (check_let f2)
 and check_re_let = function 
   | Wild -> true
@@ -1020,7 +1027,9 @@ let expand_let mode f =
   | Implies (f1, f2) -> Implies (expand_let_rec m f1, expand_let_rec m f2)
   | Equiv (f1, f2) ->  Equiv (expand_let_rec m f1, expand_let_rec m f2)
   | Since (i, f1, f2) -> Since (i, expand_let_rec m f1, expand_let_rec m f2)
+  | Trigger (i, f1, f2) -> Trigger (i, expand_let_rec m f1, expand_let_rec m f2)
   | Until (i, f1, f2) -> Until (i, expand_let_rec m f1, expand_let_rec m f2)
+  | Release (i, f1, f2) -> Release (i, expand_let_rec m f1, expand_let_rec m f2)
 and expand_let_re_rec m = function
   | Wild -> Wild 
   | Test f -> Test (expand_let_rec m f)
@@ -1317,10 +1326,18 @@ let rec type_check_formula (sch, vars) f =
     let (s1,v1,f1) = type_check_formula (sch, vars) f1 in
     let (s2,v2,f2) = type_check_formula (s1, v1) f2 in
     (s2, v2, Since(intv,f1, f2))
+  | Trigger (intv,f1,f2) -> 
+    let (s1,v1,f1) = type_check_formula (sch, vars) f1 in
+    let (s2,v2,f2) = type_check_formula (s1, v1) f2 in
+    (s2, v2, Trigger(intv,f1, f2))
   | Until (intv,f1,f2) -> 
     let (s1,v1,f1) = type_check_formula (sch, vars) f1 in
     let (s2,v2,f2) = type_check_formula (s1, v1) f2 in
     (s2, v2, Until(intv, f1, f2))
+  | Release (intv,f1,f2) -> 
+    let (s1,v1,f1) = type_check_formula (sch, vars) f1 in
+    let (s2,v2,f2) = type_check_formula (s1, v1) f2 in
+    (s2, v2, Release(intv,f1, f2))
     
 
   | Exists (v,f) -> 

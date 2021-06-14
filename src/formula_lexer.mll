@@ -119,7 +119,9 @@ rule
   | "PAST_ALWAYS"               { f "PAST_ALWAYS" lexbuf; PAST_ALWAYS }
   | "HISTORICALLY"              { f "PAST_ALWAYS" lexbuf; PAST_ALWAYS }
   | "SINCE"                     { f "SINCE" lexbuf; SINCE }
+  | "TRIGGER"			{ f "TRIGGER" lexbuf; TRIGGER }
   | "UNTIL"                     { f "UNTIL" lexbuf; UNTIL }
+  | "RELEASE"			{ f "RELEASE" lexbuf; RELEASE}
   | "CNT"                       { f "CNT" lexbuf; CNT }
   | "MIN"                       { f "MIN" lexbuf; MIN }
   | "MAX"                       { f "MAX" lexbuf; MAX }

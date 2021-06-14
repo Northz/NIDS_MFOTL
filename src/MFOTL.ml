@@ -71,7 +71,9 @@ type formula =
   | Always of (interval * formula)
   | PastAlways of (interval * formula)
   | Since of (interval * formula * formula)
+  | Trigger of (interval * formula * formula)
   | Until of (interval * formula * formula)
+  | Release of (interval * formula * formula)
   | Frex of (interval * regex)
   | Prex of (interval * regex)
 and regex = 
@@ -205,10 +207,18 @@ let rec formula_map = function
     let f1 = formula_map f1 in
     let f2 = formula_map f2 in
     mapf (Since (intv,f1,f2))
+  | Trigger (intv,f1,f2) -> 
+    let f1 = formula_map f1 in
+    let f2 = formula_map f2 in
+    mapf (Trigger (intv,f1,f2))
   | Until (intv,f1,f2) -> 
     let f1 = formula_map f1 in
     let f2 = formula_map f2 in
     mapf (Until (intv,f1,f2))
+  | Release (intv,f1,f2) -> 
+    let f1 = formula_map f1 in
+    let f2 = formula_map f2 in
+    mapf (Release (intv,f1,f2))
   | Frex (intv,r) -> mapf (Frex (intv,(formula_re_map r)))
   | Prex (intv,r) -> mapf (Prex (intv,(formula_re_map r)))
 and formula_re_map = function 
@@ -249,7 +259,9 @@ let rec direct_subformulas = function
   | Always (intv,f) -> [f]
   | PastAlways (intv,f) -> [f]
   | Since (intv,f1,f2) -> [f1;f2]
+  | Trigger (intv,f1,f2) -> [f1;f2]
   | Until (intv,f1,f2) -> [f1;f2]
+  | Release (intv,f1,f2) -> [f1;f2]
   | Frex (intv,r) -> direct_re_subformulas r
   | Prex (intv,r) -> direct_re_subformulas r
 and direct_re_subformulas = function 
@@ -277,7 +289,9 @@ let rec temporal_subformulas f =
   | Always (intv,f') -> f::(temporal_subformulas f')
   | PastAlways (intv,f') -> f::(temporal_subformulas f')
   | Since (intv,f1,f2) -> f::((temporal_subformulas f1) @ (temporal_subformulas f2))
+  | Trigger (intv,f1,f2) -> f::((temporal_subformulas f1) @ (temporal_subformulas f2))
   | Until (intv,f1,f2) -> f::((temporal_subformulas f1) @ (temporal_subformulas f2))
+  | Release (intv,f1,f2) -> f::((temporal_subformulas f1) @ (temporal_subformulas f2))
   | Frex (intv,r) -> f::(temporal_re_subformulas r)
   | Prex (intv,r) -> f::(temporal_re_subformulas r)
   | _ -> List.concat (List.map temporal_subformulas (direct_subformulas f))
@@ -294,7 +308,9 @@ let is_temporal = function
   | Prev (intv,f) -> true
   | Next (intv,f) -> true
   | Since (intv,f1,f2) -> true
+  | Trigger (intv,f1,f2) -> true
   | Until (intv,f1,f2) -> true
+  | Release (intv,f1,f2) -> true
   | Eventually (intv,f) -> true
   | Once (intv,f) -> true
   | Always (intv,f) -> true
@@ -329,7 +345,9 @@ let rec is_mfodl = function
   | Always (intv,f)
   | PastAlways (intv,f) -> is_mfodl f
   | Since (intv,f1,f2) -> is_mfodl f1 || is_mfodl f2
+  | Trigger (intv,f1,f2) -> is_mfodl f1 || is_mfodl f2
   | Until (intv,f1,f2) -> is_mfodl f1 || is_mfodl f2
+  | Release (intv,f1,f2) -> is_mfodl f1 || is_mfodl f2
   | Frex (intv,r) 
   | Prex (intv,r) -> true
 
@@ -356,8 +374,10 @@ let rec free_vars = function
   | Once (intv,f) 
   | Always (intv,f) 
   | PastAlways (intv,f) -> free_vars f
-  | Since (intv,f1,f2) 
-  | Until (intv,f1,f2) -> Misc.union (free_vars f2) (free_vars f1)
+  | Since (intv,f1,f2)
+  | Trigger (intv,f1,f2)
+  | Until (intv,f1,f2)
+  | Release (intv,f1,f2) -> Misc.union (free_vars f2) (free_vars f1)
   | Frex (intv,r)
   | Prex (intv,r) -> free_re_vars r
 and free_re_vars = function 
@@ -454,7 +474,9 @@ let rec substitute_vars m =
   | Implies (f1, f2) -> Implies (substitute_vars m f1, substitute_vars m f2)
   | Equiv (f1, f2) ->  Equiv (substitute_vars m f1, substitute_vars m f2)
   | Since (i, f1, f2) -> Since (i, substitute_vars m f1, substitute_vars m f2)
+  | Trigger (i, f1, f2) -> Trigger (i, substitute_vars m f1, substitute_vars m f2)
   | Until (i, f1, f2) -> Until (i, substitute_vars m f1, substitute_vars m f2)
+  | Release (i, f1, f2) -> Release (i, substitute_vars m f1, substitute_vars m f2)
 and substitute_re_vars m = function
   | Wild -> Wild 
   | Test f -> Test (substitute_vars m f)
@@ -494,7 +516,9 @@ let count_pred_uses pred f =
     | Implies (f1, f2)
     | Equiv (f1, f2)
     | Since (_, f1, f2)
-    | Until (_, f1, f2) -> go f1 + go f2
+	| Trigger (_, f1, f2)
+	| Until (_, f1, f2)
+    | Release (_, f1, f2) -> go f1 + go f2
   and go_re = function
     | Wild -> 0
     | Test f -> go f
@@ -565,7 +589,9 @@ let rec type_of_fma = function
   | Always (intv,f) -> "Always"
   | PastAlways (intv,f) -> "PastAlways"
   | Since (intv,f1,f2) -> "Since"
-  | Until (intv,f1,f2) -> "Unitl"
+  | Trigger (intv,f1,f2) -> "Trigger"
+  | Until (intv,f1,f2) -> "Until"
+  | Release (intv,f1,f2) -> "Release"
   | Frex (intv,f1) -> "Frex"
   | Prex (intv,f1) -> "Prex"
 
@@ -760,11 +786,32 @@ let string_of_formula str g =
               " "
               ^
               (string_f_rec false false f2)
+			  
+            | Trigger (intv,f1,f2) ->
+              (string_f_rec false true f1)
+              ^ 
+              " TRIGGER"
+              ^
+              (string_of_interval intv)
+              ^
+              " "
+              ^
+              (string_f_rec false false f2)
 
             | Until (intv,f1,f2) ->
               (string_f_rec false true f1)
               ^
               " UNTIL"
+              ^
+              (string_of_interval intv)
+              ^
+              " "
+              ^
+              (string_f_rec false false f2)
+            | Release (intv,f1,f2) ->
+              (string_f_rec false true f1)
+              ^
+              " RELEASE"
               ^
               (string_of_interval intv)
               ^
@@ -1049,12 +1096,36 @@ let string_of_formula str g =
                 ^
                 (string_f_rec false false f2)
                 ^ ")"
+              | Trigger (intv,f1,f2) ->
+                "(" ^
+                (string_f_rec false true f1)
+                ^ 
+                " TRIGGER"
+                ^
+                (string_of_interval intv)
+                ^
+                " "
+                ^
+                (string_f_rec false false f2)
+                ^ ")"
   
               | Until (intv,f1,f2) ->
                 "(" ^
                 (string_f_rec false true f1)
                 ^
                 " UNTIL"
+                ^
+                (string_of_interval intv)
+                ^
+                " "
+                ^
+                (string_f_rec false false f2)
+                ^ ")"
+              | Release (intv,f1,f2) ->
+                "(" ^
+                (string_f_rec false true f1)
+                ^
+                " RELEASE"
                 ^
                 (string_of_interval intv)
                 ^

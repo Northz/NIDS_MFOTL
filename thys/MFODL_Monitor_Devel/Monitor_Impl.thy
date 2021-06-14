@@ -92,32 +92,32 @@ definition eval_vmuaux :: "args \<Rightarrow> nat \<Rightarrow> event_data vmuau
 
 global_interpretation verimon_maux: maux valid_vmsaux init_vmsaux add_new_ts_vmsaux join_vmsaux
   add_new_table_vmsaux result_vmsaux valid_vmuaux init_vmuaux add_new_vmuaux length_vmuaux
-  eval_vmuaux
-  defines vminit0 = "maux.minit0 (init_vmsaux :: _ \<Rightarrow> event_data vmsaux) (init_vmuaux :: _ \<Rightarrow> event_data vmuaux) :: _ \<Rightarrow> Formula.formula \<Rightarrow> _"
-  and vminit = "maux.minit (init_vmsaux :: _ \<Rightarrow> event_data vmsaux) (init_vmuaux :: _ \<Rightarrow> event_data vmuaux) :: Formula.formula \<Rightarrow> _"
-  and vminit_safe = "maux.minit_safe (init_vmsaux :: _ \<Rightarrow> event_data vmsaux) (init_vmuaux :: _ \<Rightarrow> event_data vmuaux) :: Formula.formula \<Rightarrow> _"
+  eval_vmuaux valid_mmtaux init_mmtaux update_mmtaux result_mmtaux
+  defines vminit0 = "maux.minit0 (init_vmsaux :: _ \<Rightarrow> event_data vmsaux) (init_vmuaux :: _ \<Rightarrow> event_data vmuaux) (init_mmtaux :: _ \<Rightarrow> event_data mmtaux) :: _ \<Rightarrow> Formula.formula \<Rightarrow> _"
+  and vminit = "maux.minit (init_vmsaux :: _ \<Rightarrow> event_data vmsaux) (init_vmuaux :: _ \<Rightarrow> event_data vmuaux) (init_mmtaux :: _ \<Rightarrow> event_data mmtaux) :: Formula.formula \<Rightarrow> _"
+  and vminit_safe = "maux.minit_safe (init_vmsaux :: _ \<Rightarrow> event_data vmsaux) (init_vmuaux :: _ \<Rightarrow> event_data vmuaux) (init_mmtaux :: _ \<Rightarrow> event_data mmtaux) :: Formula.formula \<Rightarrow> _"
   and vmupdate_since = "maux.update_since add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> event_data table)"
-  and vmeval = "maux.meval add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
-  and vmstep = "maux.mstep add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
-  and vmsteps0_stateless = "maux.msteps0_stateless add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
-  and vmsteps_stateless = "maux.msteps_stateless add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
-  and vmonitor = "maux.monitor init_vmsaux add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) init_vmuaux add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
+  and vmeval = "maux.meval add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _) update_mmtaux result_mmtaux"
+  and vmstep = "maux.mstep add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _) update_mmtaux result_mmtaux"
+  and vmsteps0_stateless = "maux.msteps0_stateless add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _) update_mmtaux result_mmtaux"
+  and vmsteps_stateless = "maux.msteps_stateless add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _) update_mmtaux result_mmtaux"
+  and vmonitor = "maux.monitor init_vmsaux add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) init_vmuaux add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _) init_mmtaux update_mmtaux result_mmtaux"
   unfolding valid_vmsaux_def init_vmsaux_def add_new_ts_vmsaux_def join_vmsaux_def
     add_new_table_vmsaux_def result_vmsaux_def valid_vmuaux_def init_vmuaux_def add_new_vmuaux_def
     length_vmuaux_def eval_vmuaux_def
   by unfold_locales auto
 
 global_interpretation default_maux: maux valid_mmsaux "init_mmsaux :: _ \<Rightarrow> event_data mmsaux" add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux result_mmsaux
-  valid_mmuaux "init_mmuaux :: _ \<Rightarrow> event_data mmuaux" add_new_mmuaux' length_mmuaux eval_mmuaux
-  defines minit0 = "maux.minit0 (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: _ \<Rightarrow> Formula.formula \<Rightarrow> _"
-  and minit = "maux.minit (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: Formula.formula \<Rightarrow> _"
-  and minit_safe = "maux.minit_safe (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: Formula.formula \<Rightarrow> _"
+  valid_mmuaux "init_mmuaux :: _ \<Rightarrow> event_data mmuaux" add_new_mmuaux' length_mmuaux eval_mmuaux valid_mmtaux init_mmtaux update_mmtaux result_mmtaux
+  defines minit0 = "maux.minit0 (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) (init_mmtaux :: _ \<Rightarrow> event_data mmtaux) :: _ \<Rightarrow> Formula.formula \<Rightarrow> _"
+  and minit = "maux.minit (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) (init_mmtaux :: _ \<Rightarrow> event_data mmtaux) :: Formula.formula \<Rightarrow> _"
+  and minit_safe = "maux.minit_safe (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) (init_mmtaux :: _ \<Rightarrow> event_data mmtaux) :: Formula.formula \<Rightarrow> _"
   and mupdate_since = "maux.update_since add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> event_data table)"
-  and meval = "maux.meval add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
-  and mstep = "maux.mstep add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
-  and msteps0_stateless = "maux.msteps0_stateless add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
-  and msteps_stateless = "maux.msteps_stateless add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
-  and monitor = "maux.monitor init_mmsaux add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) init_mmuaux add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+  and meval = "maux.meval add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _) update_mmtaux result_mmtaux"
+  and mstep = "maux.mstep add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _) update_mmtaux result_mmtaux"
+  and msteps0_stateless = "maux.msteps0_stateless add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _) update_mmtaux result_mmtaux"
+  and msteps_stateless = "maux.msteps_stateless add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _) update_mmtaux result_mmtaux"
+  and monitor = "maux.monitor init_mmsaux add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) init_mmuaux add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _) init_mmtaux update_mmtaux result_mmtaux"
   by unfold_locales
 
 lemma image_these: "f ` Option.these X = Option.these (map_option f ` X)"

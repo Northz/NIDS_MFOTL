@@ -962,14 +962,14 @@ fun size' :: "formula \<Rightarrow> nat" where
 | "size' (Since \<phi> I \<psi>) = size' \<phi> + size' \<psi> + 1"
 | "size' (Until \<phi> I \<psi>) = size' \<phi> + size' \<psi> + 1"
 | "size' (Trigger \<phi> I \<psi>) = size' \<phi> + size' \<psi> + 1"
-| "size' (Release \<phi> I \<psi>) = size' \<phi> + 6 * size' \<psi> + 13"
+| "size' (Release \<phi> I \<psi>) = 3 * size' \<phi> + 12 * size' \<psi> + 55"
 | "size' (MatchF I r) = Regex.size_regex (size') r"
 | "size' (MatchP I r) = Regex.size_regex (size') r"
 
 declare size'.simps(17) [simp del]
 
-lemma size'_Release[simp]: "size' (Release \<phi> I \<psi>) = size' (release_safe_0 \<phi> I \<psi>) + 1"
-  unfolding release_safe_0_def always_safe_0_def TT_def FF_def
+lemma size'_Release[simp]: "size' (Release \<phi> I \<psi>) = size' (release_safe_0 \<phi> I \<psi>) + size' (release_safe_bounded \<phi> I \<psi>) + 1"
+  unfolding release_safe_0_def release_safe_bounded_def always_safe_0_def always_safe_bounded_def eventually_def once_def TT_def FF_def
   by (auto simp add: size'.simps(17))
 
 lemma safe_formula_dual_size [fundef_cong]:

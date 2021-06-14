@@ -150,12 +150,12 @@
 %token <float> INT RAT
 %token <int*char> TU
 %token LET IN NOT AND OR IMPL EQUIV EX FA
-%token PREV NEXT EVENTUALLY ONCE ALWAYS PAST_ALWAYS SINCE UNTIL BAR FREX PREX
+%token PREV NEXT EVENTUALLY ONCE ALWAYS PAST_ALWAYS SINCE TRIGGER UNTIL RELEASE BAR FREX PREX
 %token CNT MIN MAX SUM AVG MED
 %token END
 %token EOF
 
-%right SINCE UNTIL
+%right SINCE TRIGGER UNTIL RELEASE
 %nonassoc PREV NEXT EVENTUALLY ONCE ALWAYS PAST_ALWAYS 
 %nonassoc EX FA
 %left EQUIV
@@ -217,8 +217,12 @@ formula:
   | PAST_ALWAYS formula             { f "f(palwaysdf)"; PastAlways (dfintv,$2) }
   | formula SINCE interval formula  { f "f(since)"; Since ($3,$1,$4) }
   | formula SINCE formula           { f "f(sincedf)"; Since (dfintv,$1,$3) }
+  | formula TRIGGER interval formula { f "f(triggerdf)"; Trigger ($3,$1,$4) }
+  | formula TRIGGER formula         { f "f(triggerdf)"; Trigger (dfintv,$1,$3) }
   | formula UNTIL interval formula  { f "f(until)"; Until ($3,$1,$4) }
   | formula UNTIL formula           { f "f(untildf)"; Until (dfintv,$1,$3) }
+  | formula RELEASE interval formula { f "f(releasedf)"; Release ($3,$1,$4) }
+  | formula RELEASE formula         { f "f(releasedf)"; Release (dfintv,$1,$3) }
 
   | FREX interval fregex             { f "f(frexd)"; Frex ($2,$3) }
   | FREX fregex                      { f "f(frexdf)"; Frex (dfintv,$2) }

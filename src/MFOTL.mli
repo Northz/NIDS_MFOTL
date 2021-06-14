@@ -91,7 +91,9 @@ type formula =
   | Always of (interval * formula)
   | PastAlways of (interval * formula)
   | Since of (interval * formula * formula)
+  | Trigger of (interval * formula * formula)
   | Until of (interval * formula * formula)
+  | Release of (interval * formula * formula)
   | Frex of (interval * regex)
   | Prex of (interval * regex)
 and regex =

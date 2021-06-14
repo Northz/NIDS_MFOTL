@@ -75,7 +75,9 @@ let get_predicates f =
     | Implies (f1,f2)
     | Equiv (f1,f2)
     | Since (_,f1,f2)
-    | Until (_,f1,f2) -> get_preds bound (get_preds bound preds f1) f2
+	| Trigger (_,f1,f2)
+	| Until (_,f1,f2)
+    | Release (_,f1,f2) -> get_preds bound (get_preds bound preds f1) f2
     | Frex (_, r)
     | Prex (_, r) -> get_re_preds bound preds r
     | Let (p,f1,f2) ->
@@ -154,7 +156,9 @@ let get_tuple_filter f =
     | Implies (f1,f2)
     | Equiv (f1,f2)
     | Since (_,f1,f2)
-    | Until (_,f1,f2) -> get_tuples bound (get_tuples bound tuples f1) f2
+	| Trigger (_,f1,f2)
+	| Until (_,f1,f2)
+    | Release (_,f1,f2) -> get_tuples bound (get_tuples bound tuples f1) f2
     | Frex (_,r)
     | Prex (_,r) -> get_re_tuples bound tuples r
     | Let (p,f1,f2) ->
