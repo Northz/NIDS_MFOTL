@@ -9781,7 +9781,7 @@ next
   have "list_all2 (\<lambda>i. qtable n (fv (release_safe_0 \<phi>' I \<psi>')) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Release \<phi>' I \<psi>')))
     [Monitor.progress \<sigma> P (formula.Release \<phi>' I \<psi>') j..<Monitor.progress \<sigma> P' (formula.Release \<phi>' I \<psi>') (j + \<delta>)] xs"
     using IH(2)
-    unfolding sat_release_rewrite_0[OF Release_0(1-2), symmetric] progress_release_rewrite_0
+    unfolding sat_release_rewrite_0[OF Release_0(1-2), symmetric] progress_release_rewrite_0[OF Release_0(1)]
     by auto
   moreover have "wf_mformula \<sigma> (j + \<delta>) P' V n R \<phi>'' (formula.Release \<phi>' I \<psi>')"
     using wf_mformula.Release_0[OF Release_0(1-3) IH(1)]
