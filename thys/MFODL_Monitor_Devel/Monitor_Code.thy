@@ -1,6 +1,6 @@
 (*<*)
 theory Monitor_Code
-  imports Monitor_Impl
+  imports Monitor_Impl Trigger_Release_Rewrites
 begin
 (*>*)
 
@@ -15,6 +15,8 @@ export_code
   EInt Formula.Var Formula.Agg_Cnt Formula.Pred Regex.Skip Regex.Wild
   (*main functions*)
   convert_multiway vminit_safe minit_safe vmstep mstep mmonitorable_exec
+  (*rewrite functions*)
+  rewrite_trigger
   in OCaml module_name Monitor file_prefix "verified"
 
 (*<*)

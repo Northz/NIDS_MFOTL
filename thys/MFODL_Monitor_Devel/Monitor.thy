@@ -1599,7 +1599,7 @@ subsection \<open>Verdict delay\<close>
 
 context fixes \<sigma> :: Formula.trace begin
 
-fun progress :: "(Formula.name \<rightharpoonup> nat) \<Rightarrow> Formula.formula \<Rightarrow> nat \<Rightarrow> nat" where
+function (sequential) progress :: "(Formula.name \<rightharpoonup> nat) \<Rightarrow> Formula.formula \<Rightarrow> nat \<Rightarrow> nat" where
   "progress P (Formula.Pred e ts) j = (case P e of None \<Rightarrow> j | Some k \<Rightarrow> k)"
 | "progress P (Formula.Let p \<phi> \<psi>) j = progress (P(p \<mapsto> progress P \<phi> j)) \<psi> j"
 | "progress P (Formula.Eq t1 t2) j = j"
@@ -1617,15 +1617,24 @@ fun progress :: "(Formula.name \<rightharpoonup> nat) \<Rightarrow> Formula.form
 | "progress P (Formula.Until \<phi> I \<psi>) j =
     Inf {i. \<forall>k. k < j \<and> k \<le> min (progress P \<phi> j) (progress P \<psi> j) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
 | "progress P (Formula.Trigger \<phi> I \<psi>) j = min (progress P \<phi> j) (progress P \<psi> j)"
-| "progress P (Formula.Release \<phi> I \<psi>) j =
+| "progress P (Formula.Release \<phi> I \<psi>) j = (
     \<comment> \<open>for an actual implementation use Inf {i. \<forall>k. k < j \<and> k \<le> min (progress P \<phi> j) (progress P \<psi> j) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)},
     for the rewrite rules the following is necessary as the rewrite rule of always leads to a
     funny term\<close>
-    Inf ({i. \<forall>k. k < j \<and> k \<le> min (progress P \<psi> j) (progress P \<phi> j) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)} \<union>
-        {i. \<forall>k. k < j \<and> k \<le> progress P \<psi> j \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)})"
+    if mem I 0 then
+      Inf ({i. \<forall>k. k < j \<and> k \<le> min (progress P \<psi> j) (progress P \<phi> j) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)} \<union>
+          {i. \<forall>k. k < j \<and> k \<le> progress P \<psi> j \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)})
+    else
+      (progress P (release_safe_bounded \<phi> I \<psi>) j)
+    )"
 | "progress P (Formula.MatchP I r) j = min_regex_default (progress P) r j"
 | "progress P (Formula.MatchF I r) j =
     Inf {i. \<forall>k. k < j \<and> k \<le> min_regex_default (progress P) r j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
+  by pat_completeness auto
+termination
+  using size'_and_release size'_Release size'_Or size'_release_aux
+  by (relation "measure (\<lambda>(_, \<phi>, _). size' \<phi>)")
+  (auto simp add: Nat.less_Suc_eq_le eventually_def Formula.TT_def Formula.FF_def dest!: sum_list_mem_leq[of _ _ size'] regex_atms_size')
 
 (* sanity check for trigger progress *)
 
@@ -1811,7 +1820,8 @@ proof -
 qed
 
 lemma progress_release_rewrite_0:
-  "progress P (release_safe_0 \<phi> I \<psi>) j = progress P (formula.Release \<phi> I \<psi>) j"
+  assumes "mem I 0"
+  shows "progress P (release_safe_0 \<phi> I \<psi>) j = progress P (formula.Release \<phi> I \<psi>) j"
 proof -
   define A where "A = {i. \<forall>k. k < j \<and> k \<le> min (progress P \<psi> j) (progress P \<phi> j) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
   define B where "B = {i. \<forall>k. k < j \<and> k \<le> progress P \<psi> j \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
@@ -1839,21 +1849,133 @@ proof -
     by auto
 
   then show ?thesis
-    using progress_eq min_Inf[OF non_empty]
+    using progress_eq min_Inf[OF non_empty] assms
     unfolding A_def B_def
     by auto
 qed
 
-lemma progress_release_rewrite_bounded:
-  "Monitor.progress \<sigma> P (release_safe_bounded \<phi>' I \<psi>') j = progress P (formula.Release \<phi>' I \<psi>') j"
+lemma progress_release_safe_bounded_evtl: "min (progress P (Formula.eventually I Formula.TT) j) (progress P (release_safe_bounded \<phi> I \<psi>) j) = progress P (release_safe_bounded \<phi> I \<psi>) j"
   unfolding release_safe_bounded_def
   by auto
 
+lemma progress_eventually_subformulas:
+  assumes "progress P \<phi> j \<le> progress P \<psi> j"
+  shows "(progress P (Formula.eventually I \<phi>) j) \<le> (progress P (Formula.eventually I \<psi>) j)"
+proof -
+  define A where "A = {i. \<forall>k. k < j \<and> k \<le> progress P \<phi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
+  define B where "B = {i. \<forall>k. k < j \<and> k \<le> progress P \<psi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
+  have
+    "progress P \<psi> j \<in> B"
+    unfolding B_def
+    by auto
+  then have B_props: "B \<noteq> {}"
+    by auto
+
+  {
+    fix i
+    assume "i \<in> B"
+    then have "\<forall>k. k < j \<and> k \<le> progress P \<psi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+      unfolding B_def
+      by auto
+    then have "\<forall>k. k < j \<and> k \<le> progress P \<phi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+      using assms
+      by auto
+    then have "i \<in> A"
+      unfolding A_def
+      by auto
+  }
+  then have "B \<subseteq> A" by blast
+  then have "\<Sqinter> A \<le> \<Sqinter> B"
+    using Inf_leq[OF B_props]
+    by auto
+  moreover have
+    "progress P (Formula.eventually I \<phi>) j = \<Sqinter> A"
+    "progress P (Formula.eventually I \<psi>) j = \<Sqinter> B"
+    unfolding A_def B_def
+    by auto
+  ultimately show ?thesis by auto
+qed
+
+(*lemma "progress P (release_safe_bounded \<phi> I \<psi>) j = 0"
+proof -
+  have progress_eq: "progress P (release_safe_bounded \<phi> I \<psi>) j = min
+    (progress P (Formula.eventually I Formula.TT) j)
+    (min
+      (progress P (always_safe_bounded I \<psi>) j)
+      (min
+        (progress P (Formula.eventually (flip_int_less_lower I) \<phi>) j)
+        (progress P (Formula.eventually (flip_int_less_lower I) (formula.Next all (formula.Until \<psi> (int_remove_lower_bound I) (formula.And \<psi> \<phi>)))) j)
+      )
+    )
+  "
+  unfolding release_safe_bounded_def
+  by (auto simp only: progress.simps)
+
+
+
+  have "\<Sqinter> {i. \<forall>k. k < j \<and> k \<le> min (local.progress P \<psi> j) (local.progress P \<phi> j) \<longrightarrow> memR (int_remove_lower_bound I) (\<tau> \<sigma> k - \<tau> \<sigma> i)} - Suc 0 \<le> local.progress P \<phi> j"
+  proof -
+    define A where "A = {i. \<forall>k. k < j \<and> k \<le> min (local.progress P \<psi> j) (local.progress P \<phi> j) \<longrightarrow> memR (int_remove_lower_bound I) (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
+    have "(local.progress P \<phi> j) \<in> A"
+      unfolding A_def
+      by auto
+    then have "\<Sqinter> A \<le> local.progress P \<phi> j"
+      using cInf_lower
+      by blast
+    then show ?thesis unfolding A_def by auto
+  qed
+
+  then have subformulas: "progress P \<phi> j \<ge> progress P (formula.Next all (formula.Until \<psi> (int_remove_lower_bound I) (formula.And \<psi> \<phi>))) j"
+    by auto
+  
+  have "min
+        (progress P (Formula.eventually (flip_int_less_lower I) \<phi>) j)
+        (progress P (Formula.eventually (flip_int_less_lower I) (formula.Next all (formula.Until \<psi> (int_remove_lower_bound I) (formula.And \<psi> \<phi>)))) j) =
+        (progress P (Formula.eventually (flip_int_less_lower I) (formula.Next all (formula.Until \<psi> (int_remove_lower_bound I) (formula.And \<psi> \<phi>)))) j)
+  "
+    using progress_eventually_subformulas[OF subformulas]
+    by auto
+
+  moreover have "min
+        (progress P (Formula.eventually I Formula.TT) j)
+        (progress P (always_safe_bounded I \<psi>) j) =
+        (progress P (always_safe_bounded I \<psi>) j)
+        "
+  proof -
+    have "(progress P (always_safe_bounded I \<psi>) j) \<le> progress P (Formula.eventually I \<psi>) j"
+      unfolding always_safe_bounded_def
+      by auto
+    moreover have "progress P (Formula.eventually I \<psi>) j \<le> progress P (Formula.eventually I Formula.TT) j"
+    proof -
+      have subformulas: "progress P \<psi> j \<le> progress P Formula.TT j"
+        sorry
+      show ?thesis
+        using progress_eventually_subformulas[OF subformulas]
+        by auto
+    qed
+    ultimately show ?thesis by auto
+  qed
+  ultimately have "progress P (release_safe_bounded \<phi> I \<psi>) j = min
+      (progress P (always_safe_bounded I \<psi>) j)
+      (progress P (Formula.eventually (flip_int_less_lower I) (formula.Next all (formula.Until \<psi> (int_remove_lower_bound I) (formula.And \<psi> \<phi>)))) j)
+    "
+    using progress_eq
+    by linarith
+qed*)
+
+
 lemma progress_and_release_rewrite_bounded:
-  "Monitor.progress \<sigma> P (and_release_safe_bounded \<phi> \<phi>' I \<psi>') j = progress P (formula.And \<phi> (formula.Release \<phi>' I \<psi>')) j"
-  using progress_release_rewrite_bounded
-  unfolding and_release_safe_bounded_def
-  by auto
+  assumes "\<not> mem I 0"
+  shows "Monitor.progress \<sigma> P (and_release_safe_bounded \<phi> \<phi>' I \<psi>') j = progress P (formula.And \<phi> (formula.Release \<phi>' I \<psi>')) j"
+proof -
+  have "progress P (formula.And \<phi> (formula.Release \<phi>' I \<psi>')) j = min (progress P \<phi> j) (min (progress P (Formula.eventually I Formula.TT) j) (progress P (release_safe_bounded \<phi>' I \<psi>') j))"
+    using assms
+    by (auto simp only: progress_release_safe_bounded_evtl[of P I j \<phi>' \<psi>'] progress.simps split: if_splits)
+  then show ?thesis
+    using assms
+    unfolding and_release_safe_bounded_def
+    by auto
+qed
 
 (*lemma progress_historically_safe_bounded [simp]: "progress P (historically_safe_bounded I \<phi>) j = j"
   unfolding historically_safe_bounded_def
@@ -1897,6 +2019,7 @@ lemma pred_mapping_mono_strong: "pred_mapping Q P \<Longrightarrow>
   (\<And>p. p \<in> dom P \<Longrightarrow> Q (the (P p)) \<Longrightarrow> R (the (P p))) \<Longrightarrow> pred_mapping R P"
   by (auto simp: pred_mapping_alt)
 
+
 lemma progress_mono_gen: "j \<le> j' \<Longrightarrow> rel_mapping (\<le>) P P' \<Longrightarrow> progress \<sigma> P \<phi> j \<le> progress \<sigma> P' \<phi> j'"
 proof (induction \<phi> arbitrary: P P')
   case (Pred e ts)
@@ -1912,8 +2035,15 @@ next
     by (auto 0 3 dest: memR_nonzeroD less_\<tau>D spec[of _ j'] intro!: cInf_superset_mono)
 next
   case (Release \<phi> I \<psi>)
-  from Release(1,2)[of P P'] Release.prems show ?case
-    by (auto 0 3 dest: memR_nonzeroD less_\<tau>D spec[of _ j'] intro!: cInf_superset_mono)
+
+  have "(Monitor.progress \<sigma> P (release_safe_bounded \<phi> I \<psi>) j) \<le> (Monitor.progress \<sigma> P' (release_safe_bounded \<phi> I \<psi>) j')"
+    sorry
+
+  then show ?case
+    using Release(1,2)[of P P'] Release.prems
+    apply (auto  dest: memR_nonzeroD less_\<tau>D spec[of _ j'] intro!: cInf_superset_mono)
+    by (metis \<tau>_mono diff_is_0_eq memR_zero)
+ 
 next
   case (MatchF I r)
   from MatchF(1)[of _ P P'] MatchF.prems show ?case
@@ -1942,7 +2072,7 @@ next
 next
   case (Release \<phi> I \<psi>)
   then show ?case
-    by (auto intro!: cInf_lower)
+    sorry
 next
   case (MatchF I r)
   then show ?case
@@ -2234,33 +2364,40 @@ next
     by (atomize_elim, intro Release(2)) (auto simp: pred_mapping_alt dom_def)
   let ?P12 = "max_mapping P1 P2"
 
-  have "i \<le> progress \<sigma> ?P12 (Formula.Release \<phi>1 I \<phi>2) (max j1 j2)"
-    unfolding progress.simps
-  proof (intro cInf_greatest, goal_cases nonempty greatest)
-    case nonempty
-    then show ?case
-      by (auto simp: trans_le_add1[OF \<tau>_mono] intro!: exI[of _ "max j1 j2"])
+  show ?case
+  proof (cases "mem I 0")
+    case True
+    have "i \<le> progress \<sigma> ?P12 (Formula.Release \<phi>1 I \<phi>2) (max j1 j2)"
+      unfolding progress.simps if_P[OF True]
+    proof (intro cInf_greatest, goal_cases nonempty greatest)
+      case nonempty
+      then show ?case
+        by (auto simp: trans_le_add1[OF \<tau>_mono] intro!: exI[of _ "max j1 j2"])
+    next
+      case (greatest x)
+      from P1(2,3) have "i' < j1"
+        by (auto simp: less_eq_Suc_le intro!: progress_le_gen elim!: order.trans pred_mapping_mono_strong)
+      then have "i' < max j1 j2" by simp
+      have "progress \<sigma> P1 \<phi>1 j1 \<le> progress \<sigma> ?P12 \<phi>1 (max j1 j2)"
+        using P1(1) P2(1) by (auto intro!: progress_mono_gen max_mapping_cobounded1)
+      moreover have "progress \<sigma> P2 \<phi>2 j2 \<le> progress \<sigma> ?P12 \<phi>2 (max j1 j2)"
+        using P1(1) P2(1) by (auto intro!: progress_mono_gen max_mapping_cobounded2)
+      ultimately have "i' \<le> min (progress \<sigma> ?P12 \<phi>1 (max j1 j2)) (progress \<sigma> ?P12 \<phi>2 (max j1 j2))"
+        using P1(3) P2(3) by simp
+      with greatest \<open>i' < max j1 j2\<close> have
+        "memR (flip_int_double_upper I) (\<tau> \<sigma> i' - \<tau> \<sigma> x) \<or> memR (I) (\<tau> \<sigma> i' - \<tau> \<sigma> x)"
+        by auto
+      with 1 not_mem_I have "\<tau> \<sigma> i < \<tau> \<sigma> x"
+        by (auto 0 3 elim: contrapos_np)
+      then show ?case by (auto dest!: less_\<tau>D)
+    qed
+    then show ?thesis
+      using P1 P2 \<open>i < i'\<close>
+      by (intro exI[of _ "max_mapping P1 P2"] exI[of _ "max j1 j2"]) (auto simp: range_mapping_relax)
   next
-    case (greatest x)
-    from P1(2,3) have "i' < j1"
-      by (auto simp: less_eq_Suc_le intro!: progress_le_gen elim!: order.trans pred_mapping_mono_strong)
-    then have "i' < max j1 j2" by simp
-    have "progress \<sigma> P1 \<phi>1 j1 \<le> progress \<sigma> ?P12 \<phi>1 (max j1 j2)"
-      using P1(1) P2(1) by (auto intro!: progress_mono_gen max_mapping_cobounded1)
-    moreover have "progress \<sigma> P2 \<phi>2 j2 \<le> progress \<sigma> ?P12 \<phi>2 (max j1 j2)"
-      using P1(1) P2(1) by (auto intro!: progress_mono_gen max_mapping_cobounded2)
-    ultimately have "i' \<le> min (progress \<sigma> ?P12 \<phi>1 (max j1 j2)) (progress \<sigma> ?P12 \<phi>2 (max j1 j2))"
-      using P1(3) P2(3) by simp
-    with greatest \<open>i' < max j1 j2\<close> have
-      "memR (flip_int_double_upper I) (\<tau> \<sigma> i' - \<tau> \<sigma> x) \<or> memR (I) (\<tau> \<sigma> i' - \<tau> \<sigma> x)"
-      by auto
-    with 1 not_mem_I have "\<tau> \<sigma> i < \<tau> \<sigma> x"
-      by (auto 0 3 elim: contrapos_np)
-    then show ?case by (auto dest!: less_\<tau>D)
+    case False
+    then show ?thesis sorry
   qed
-  then show ?case
-    using P1 P2 \<open>i < i'\<close>
-    by (intro exI[of _ "max_mapping P1 P2"] exI[of _ "max j1 j2"]) (auto simp: range_mapping_relax)
 next
   case (MatchP I r)
   then show ?case
@@ -2369,18 +2506,27 @@ next
   have *: "i \<le> j - 1 \<longleftrightarrow> i < j" if "j \<noteq> 0" for i
     using that by auto
   with Release show ?case
-  proof (cases "bounded I")
-    case True
-    then show ?thesis
-    proof (cases "j")
-      case (Suc n)
-      with * Release show ?thesis
-        using \<tau>_mono[THEN trans_le_add1]
-        by (auto 6 0
-            intro!: box_equals[OF arg_cong[where f=Inf]
-              cInf_restrict_nat[symmetric, where x=n] cInf_restrict_nat[symmetric, where x=n]])
-    qed simp
-  qed (auto simp add: bounded_memR)
+  proof (cases "mem I 0")
+    case mem: True
+    show ?thesis
+      using mem Release
+    proof (cases "bounded I")
+      case True
+      then show ?thesis
+        using mem
+      proof (cases "j")
+        case (Suc n)
+        with * Release show ?thesis
+          using \<tau>_mono[THEN trans_le_add1] mem
+          by (auto 6 0
+              intro!: box_equals[OF arg_cong[where f=Inf]
+                cInf_restrict_nat[symmetric, where x=n] cInf_restrict_nat[symmetric, where x=n]])
+      qed simp
+    qed (auto simp add: bounded_memR)
+  next
+    case False
+    then show ?thesis sorry
+  qed
 next
   case (MatchF I r)
   have *: "i \<le> j - 1 \<longleftrightarrow> i < j" if "j \<noteq> 0" for i
@@ -2553,438 +2699,446 @@ next
 next
   case (Release \<phi> I \<psi>)
 
-  from Release.prems have [simp]: "bounded (flip_int_double_upper I)"
-    by (cases "bounded (flip_int_double_upper I)") (auto simp: bounded_memR Inf_UNIV_nat)
-
-  define A where "A = {i. \<forall>k. k < (plen \<pi>) \<and> k \<le> min (progress \<sigma> P \<psi> (plen \<pi>)) (progress \<sigma> P \<phi> (plen \<pi>)) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
-  define B where "B = {i. \<forall>k. k < (plen \<pi>) \<and> k \<le> progress \<sigma> P \<psi> (plen \<pi>) \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
-
-  define A' where "A' = {i. \<forall>k. k < (plen \<pi>) \<and> k \<le> min (progress \<sigma>' P \<psi> (plen \<pi>)) (progress \<sigma>' P \<phi> (plen \<pi>)) \<longrightarrow> memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)}"
-  define B' where "B' = {i. \<forall>k. k < (plen \<pi>) \<and> k \<le> progress \<sigma>' P \<psi> (plen \<pi>) \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma>' k - \<tau> \<sigma>' i)}"
-
-  have \<tau>_prefix_diff_conv: "\<And>k i. k < plen \<pi> \<Longrightarrow> (\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
-  proof -
-    fix k i
-    assume assm: "k < plen \<pi>"
-    {
-      assume "i \<le> k"
-      then have "(\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
-        using assm \<tau>_prefix_conv[OF assms(1,2)]
-        by auto
-    }
-    moreover {
-      assume "i > k"
-      then have
-        "\<tau> \<sigma> k - \<tau> \<sigma> i = 0"
-        "\<tau> \<sigma>' k - \<tau> \<sigma>' i = 0"
-        by auto
-      then have "(\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
-        by auto
-    }
-    ultimately show "(\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" using le_def by blast
-  qed
-
-  have AA'_eq: "A = A'"
-    using \<tau>_prefix_diff_conv
-    unfolding A_def A'_def progress_prefix_conv[OF assms(1,2)]
-    by auto
-  have BB'_eq: "B = B'"
-    using \<tau>_prefix_diff_conv
-    unfolding B_def B'_def progress_prefix_conv[OF assms(1,2)]
-    by auto
-
-  have
-    "(min (progress \<sigma> P \<psi> (plen \<pi>)) (progress \<sigma> P \<phi> (plen \<pi>))) \<in> A"
-    "progress \<sigma> P \<psi> (plen \<pi>) \<in> B"
-    unfolding A_def B_def
-    by auto
-  then have non_empty: 
-    "A \<noteq> {}"
-    "B \<noteq> {}"
-    by auto
-
-  have progress_eq: "progress \<sigma> P (formula.Release \<phi> I \<psi>) (plen \<pi>) = min (Inf A) (Inf B)"
-    using min_Inf[OF non_empty]
-    unfolding A_def B_def
-    by auto
-
-  have "k < progress \<sigma> P \<phi> (plen \<pi>) \<and> k < progress \<sigma> P \<psi> (plen \<pi>)"
-  if memR: "memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)" for k
-  proof (cases "progress \<sigma> P \<phi> (plen \<pi>) \<le> progress \<sigma> P \<psi> (plen \<pi>)")
-    case assm: True
-    show ?thesis
-    proof (cases "Inf A \<le> Inf B")
-      case True
-      then have release_progress_eq: "progress \<sigma> P (formula.Release \<phi> I \<psi>) (plen \<pi>) = Inf A"
-        using progress_eq
-        by auto
-      then obtain j where
-        "\<not> memR I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
-        "j \<le> progress \<sigma> P \<phi> (plen \<pi>)"
-        "j \<le> progress \<sigma> P \<psi> (plen \<pi>)"
-        using Release.prems
-        unfolding A_def
-        by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
-          dest!: le_cInf_iff[THEN iffD1, rotated -1])
-      then show 1: "k < progress \<sigma> P \<phi> (plen \<pi>) \<and> k < progress \<sigma> P \<psi> (plen \<pi>)"
-        using that
-        by (auto 0 3 elim!: order.strict_trans2[rotated] elim: contrapos_np intro!: less_\<tau>D[of \<sigma> k j])
+  show ?case
+  proof (cases "mem I 0")
+    case True
+    have [simp]: "bounded (flip_int_double_upper I)"
+      using True Release.prems
+      by (cases "bounded (flip_int_double_upper I)") (auto simp: bounded_memR Inf_UNIV_nat)
+  
+    define A where "A = {i. \<forall>k. k < (plen \<pi>) \<and> k \<le> min (progress \<sigma> P \<psi> (plen \<pi>)) (progress \<sigma> P \<phi> (plen \<pi>)) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
+    define B where "B = {i. \<forall>k. k < (plen \<pi>) \<and> k \<le> progress \<sigma> P \<psi> (plen \<pi>) \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
+  
+    define A' where "A' = {i. \<forall>k. k < (plen \<pi>) \<and> k \<le> min (progress \<sigma>' P \<psi> (plen \<pi>)) (progress \<sigma>' P \<phi> (plen \<pi>)) \<longrightarrow> memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)}"
+    define B' where "B' = {i. \<forall>k. k < (plen \<pi>) \<and> k \<le> progress \<sigma>' P \<psi> (plen \<pi>) \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma>' k - \<tau> \<sigma>' i)}"
+  
+    have \<tau>_prefix_diff_conv: "\<And>k i. k < plen \<pi> \<Longrightarrow> (\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
+    proof -
+      fix k i
+      assume assm: "k < plen \<pi>"
+      {
+        assume "i \<le> k"
+        then have "(\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
+          using assm \<tau>_prefix_conv[OF assms(1,2)]
+          by auto
+      }
+      moreover {
+        assume "i > k"
+        then have
+          "\<tau> \<sigma> k - \<tau> \<sigma> i = 0"
+          "\<tau> \<sigma>' k - \<tau> \<sigma>' i = 0"
+          by auto
+        then have "(\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
+          by auto
+      }
+      ultimately show "(\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" using le_def by blast
+    qed
+  
+    have AA'_eq: "A = A'"
+      using \<tau>_prefix_diff_conv
+      unfolding A_def A'_def progress_prefix_conv[OF assms(1,2)]
+      by auto
+    have BB'_eq: "B = B'"
+      using \<tau>_prefix_diff_conv
+      unfolding B_def B'_def progress_prefix_conv[OF assms(1,2)]
+      by auto
+  
+    have
+      "(min (progress \<sigma> P \<psi> (plen \<pi>)) (progress \<sigma> P \<phi> (plen \<pi>))) \<in> A"
+      "progress \<sigma> P \<psi> (plen \<pi>) \<in> B"
+      unfolding A_def B_def
+      by auto
+    then have non_empty: 
+      "A \<noteq> {}"
+      "B \<noteq> {}"
+      by auto
+  
+    have progress_eq: "progress \<sigma> P (formula.Release \<phi> I \<psi>) (plen \<pi>) = min (Inf A) (Inf B)"
+      using min_Inf[OF non_empty] True
+      unfolding A_def B_def
+      by auto
+  
+    have "k < progress \<sigma> P \<phi> (plen \<pi>) \<and> k < progress \<sigma> P \<psi> (plen \<pi>)"
+    if memR: "memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)" for k
+    proof (cases "progress \<sigma> P \<phi> (plen \<pi>) \<le> progress \<sigma> P \<psi> (plen \<pi>)")
+      case assm: True
+      show ?thesis
+      proof (cases "Inf A \<le> Inf B")
+        case True
+        then have release_progress_eq: "progress \<sigma> P (formula.Release \<phi> I \<psi>) (plen \<pi>) = Inf A"
+          using progress_eq
+          by auto
+        then obtain j where
+          "\<not> memR I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+          "j \<le> progress \<sigma> P \<phi> (plen \<pi>)"
+          "j \<le> progress \<sigma> P \<psi> (plen \<pi>)"
+          using Release.prems
+          unfolding A_def
+          by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
+            dest!: le_cInf_iff[THEN iffD1, rotated -1])
+        then show 1: "k < progress \<sigma> P \<phi> (plen \<pi>) \<and> k < progress \<sigma> P \<psi> (plen \<pi>)"
+          using that
+          by (auto 0 3 elim!: order.strict_trans2[rotated] elim: contrapos_np intro!: less_\<tau>D[of \<sigma> k j])
+      next
+        define J where "J = {j. \<not> memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> j \<le> progress \<sigma> P \<psi> (plen \<pi>)}"
+        define j where "j = Min J"
+        case False
+        then have release_progress_eq: "progress \<sigma> P (formula.Release \<phi> I \<psi>) (plen \<pi>) = Inf B"
+          using progress_eq
+          by auto
+        then obtain j' where
+          "\<not> memR (flip_int_double_upper I) (\<tau> \<sigma> j' - \<tau> \<sigma> i)"
+          "j' \<le> progress \<sigma> P \<psi> (plen \<pi>)"
+          using Release.prems(1)
+          unfolding B_def
+          by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
+            dest!: le_cInf_iff[THEN iffD1, rotated -1])
+        then have "\<not> memR (I) (\<tau> \<sigma> j' - \<tau> \<sigma> i)" "j' \<le> progress \<sigma> P \<psi> (plen \<pi>)"
+          using memR_flip_int_double_upper
+          by auto
+        then have "j' \<in> J"
+          unfolding J_def
+          by auto
+        then have J_props: "J \<noteq> {}" "finite J"
+          unfolding J_def
+          by auto
+        then have "j \<in> J"
+          unfolding j_def
+          by auto
+        then have j_props: "\<not> memR I (\<tau> \<sigma> j - \<tau> \<sigma> i)" "j \<le> progress \<sigma> P \<psi> (plen \<pi>)"
+          unfolding J_def
+          by auto
+        have less_j_mem: "\<And>l. l<j \<Longrightarrow> memR I (\<tau> \<sigma> l - \<tau> \<sigma> i)"
+        proof -
+          fix l
+          assume l_j: "l < j"
+          {
+            assume "\<not>memR I (\<tau> \<sigma> l - \<tau> \<sigma> i)"
+            then have "l \<in> J"
+              using l_j j_props(2)
+              unfolding J_def
+              by auto
+            then have "False"
+              using l_j J_props
+              unfolding j_def
+              by auto
+          }
+          then show "memR I (\<tau> \<sigma> l - \<tau> \<sigma> i)" by auto
+        qed
+        have j_leq: "j \<le> progress \<sigma> P \<phi> (plen \<pi>)"
+        proof -
+          {
+            assume j_g: "j > progress \<sigma> P \<phi> (plen \<pi>)"
+            have "\<And>k. k < plen \<pi> \<Longrightarrow> k \<le> min (Monitor.progress \<sigma> P \<psi> (plen \<pi>)) (Monitor.progress \<sigma> P \<phi> (plen \<pi>)) \<Longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+            proof -
+              fix k
+              assume "k < plen \<pi>" "k \<le> min (Monitor.progress \<sigma> P \<psi> (plen \<pi>)) (Monitor.progress \<sigma> P \<phi> (plen \<pi>))"
+              then have "k < j" using j_g
+                by auto
+              then show "memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+                using less_j_mem
+                by auto
+            qed
+            then have "i \<in> A"
+              unfolding A_def
+              by auto
+            then have "i \<ge> Inf A"
+              by (simp add: cInf_lower)
+            moreover have "i < Inf A"
+              using Release.prems(1) release_progress_eq False
+              by auto
+            ultimately have "False"
+              by auto
+          }
+          then show ?thesis using le_def by auto
+        qed
+        then show "k < progress \<sigma> P \<phi> (plen \<pi>) \<and> k < progress \<sigma> P \<psi> (plen \<pi>)"
+          using that j_props
+          by (auto 0 3 elim!: order.strict_trans2[rotated] elim: contrapos_np intro!: less_\<tau>D[of \<sigma> k j])
+      qed
     next
-      define J where "J = {j. \<not> memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> j \<le> progress \<sigma> P \<psi> (plen \<pi>)}"
-      define j where "j = Min J"
-      case False
+      case assm: False
+      then have A_eq: "A = {i. \<forall>k. k < (plen \<pi>) \<and> k \<le> (Monitor.progress \<sigma> P \<psi> (plen \<pi>)) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
+        unfolding A_def
+        by auto
+      have "A \<subseteq> B"
+      proof -
+        {
+          fix i
+          assume "i \<in> A"
+          then have i_props: "\<forall>k. k < (plen \<pi>) \<and> k \<le> Monitor.progress \<sigma> P \<psi> (plen \<pi>) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+            unfolding A_eq
+            by auto
+          then have "\<And>k. k < (plen \<pi>) \<and> k \<le> Monitor.progress \<sigma> P \<psi> (plen \<pi>) \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+            using memR_flip_int_double_upper le_def
+            by auto
+          then have "i \<in> B"
+            unfolding B_def
+            by auto
+        }
+        then show ?thesis by blast
+      qed
+      then have "Inf B \<le> Inf A"
+        using Inf_leq[OF non_empty(1), of B]
+        by auto
       then have release_progress_eq: "progress \<sigma> P (formula.Release \<phi> I \<psi>) (plen \<pi>) = Inf B"
         using progress_eq
         by auto
-      then obtain j' where
-        "\<not> memR (flip_int_double_upper I) (\<tau> \<sigma> j' - \<tau> \<sigma> i)"
-        "j' \<le> progress \<sigma> P \<psi> (plen \<pi>)"
-        using Release.prems(1)
+      then have "\<exists>j. \<not> memR (flip_int_double_upper I) (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> j \<le> progress \<sigma> P \<psi> (plen \<pi>)"
+        using Release.prems
         unfolding B_def
-        by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
+        by (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
           dest!: le_cInf_iff[THEN iffD1, rotated -1])
-      then have "\<not> memR (I) (\<tau> \<sigma> j' - \<tau> \<sigma> i)" "j' \<le> progress \<sigma> P \<psi> (plen \<pi>)"
-        using memR_flip_int_double_upper
+      then obtain j where
+        "\<not> memR (flip_int_double_upper I) (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+        "j \<le> progress \<sigma> P \<phi> (plen \<pi>)"
+        "j \<le> progress \<sigma> P \<psi> (plen \<pi>)"
+        using assm
         by auto
-      then have "j' \<in> J"
-        unfolding J_def
-        by auto
-      then have J_props: "J \<noteq> {}" "finite J"
-        unfolding J_def
-        by auto
-      then have "j \<in> J"
-        unfolding j_def
-        by auto
-      then have j_props: "\<not> memR I (\<tau> \<sigma> j - \<tau> \<sigma> i)" "j \<le> progress \<sigma> P \<psi> (plen \<pi>)"
-        unfolding J_def
-        by auto
-      have less_j_mem: "\<And>l. l<j \<Longrightarrow> memR I (\<tau> \<sigma> l - \<tau> \<sigma> i)"
-      proof -
-        fix l
-        assume l_j: "l < j"
-        {
-          assume "\<not>memR I (\<tau> \<sigma> l - \<tau> \<sigma> i)"
-          then have "l \<in> J"
-            using l_j j_props(2)
-            unfolding J_def
-            by auto
-          then have "False"
-            using l_j J_props
-            unfolding j_def
-            by auto
-        }
-        then show "memR I (\<tau> \<sigma> l - \<tau> \<sigma> i)" by auto
-      qed
-      have j_leq: "j \<le> progress \<sigma> P \<phi> (plen \<pi>)"
-      proof -
-        {
-          assume j_g: "j > progress \<sigma> P \<phi> (plen \<pi>)"
-          have "\<And>k. k < plen \<pi> \<Longrightarrow> k \<le> min (Monitor.progress \<sigma> P \<psi> (plen \<pi>)) (Monitor.progress \<sigma> P \<phi> (plen \<pi>)) \<Longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
-          proof -
-            fix k
-            assume "k < plen \<pi>" "k \<le> min (Monitor.progress \<sigma> P \<psi> (plen \<pi>)) (Monitor.progress \<sigma> P \<phi> (plen \<pi>))"
-            then have "k < j" using j_g
-              by auto
-            then show "memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
-              using less_j_mem
-              by auto
-          qed
-          then have "i \<in> A"
-            unfolding A_def
-            by auto
-          then have "i \<ge> Inf A"
-            by (simp add: cInf_lower)
-          moreover have "i < Inf A"
-            using Release.prems(1) release_progress_eq False
-            by auto
-          ultimately have "False"
-            by auto
-        }
-        then show ?thesis using le_def by auto
-      qed
-      then show "k < progress \<sigma> P \<phi> (plen \<pi>) \<and> k < progress \<sigma> P \<psi> (plen \<pi>)"
-        using that j_props
+      then have 1: "k < progress \<sigma> P \<phi> (plen \<pi>)" and 2: "k < progress \<sigma> P \<psi> (plen \<pi>)"
+        if "memR (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)" for k
+        using that
         by (auto 0 3 elim!: order.strict_trans2[rotated] elim: contrapos_np intro!: less_\<tau>D[of \<sigma> k j])
+      then show ?thesis
+        using memR_flip_int_double_upper memR
+        by auto
     qed
-  next
-    case assm: False
-    then have A_eq: "A = {i. \<forall>k. k < (plen \<pi>) \<and> k \<le> (Monitor.progress \<sigma> P \<psi> (plen \<pi>)) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
-      unfolding A_def
-      by auto
-    have "A \<subseteq> B"
-    proof -
-      {
-        fix i
-        assume "i \<in> A"
-        then have i_props: "\<forall>k. k < (plen \<pi>) \<and> k \<le> Monitor.progress \<sigma> P \<psi> (plen \<pi>) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
-          unfolding A_eq
-          by auto
-        then have "\<And>k. k < (plen \<pi>) \<and> k \<le> Monitor.progress \<sigma> P \<psi> (plen \<pi>) \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)"
-          using memR_flip_int_double_upper le_def
-          by auto
-        then have "i \<in> B"
-          unfolding B_def
-          by auto
-      }
-      then show ?thesis by blast
-    qed
-    then have "Inf B \<le> Inf A"
-      using Inf_leq[OF non_empty(1), of B]
-      by auto
-    then have release_progress_eq: "progress \<sigma> P (formula.Release \<phi> I \<psi>) (plen \<pi>) = Inf B"
-      using progress_eq
-      by auto
-    then have "\<exists>j. \<not> memR (flip_int_double_upper I) (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> j \<le> progress \<sigma> P \<psi> (plen \<pi>)"
-      using Release.prems
-      unfolding B_def
-      by (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
-        dest!: le_cInf_iff[THEN iffD1, rotated -1])
-    then obtain j where
-      "\<not> memR (flip_int_double_upper I) (\<tau> \<sigma> j - \<tau> \<sigma> i)"
-      "j \<le> progress \<sigma> P \<phi> (plen \<pi>)"
-      "j \<le> progress \<sigma> P \<psi> (plen \<pi>)"
-      using assm
-      by auto
     then have 1: "k < progress \<sigma> P \<phi> (plen \<pi>)" and 2: "k < progress \<sigma> P \<psi> (plen \<pi>)"
-      if "memR (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)" for k
+      if "memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)" for k
       using that
-      by (auto 0 3 elim!: order.strict_trans2[rotated] elim: contrapos_np intro!: less_\<tau>D[of \<sigma> k j])
-    then show ?thesis
-      using memR_flip_int_double_upper memR
       by auto
-  qed
-  then have 1: "k < progress \<sigma> P \<phi> (plen \<pi>)" and 2: "k < progress \<sigma> P \<psi> (plen \<pi>)"
-    if "memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)" for k
-    using that
-    by auto
-
-  have "k < progress \<sigma>' P \<phi> (plen \<pi>) \<and> k < progress \<sigma>' P \<psi> (plen \<pi>)"
-  if memR: "memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" for k
-  proof (cases "progress \<sigma> P \<phi> (plen \<pi>) \<le> progress \<sigma> P \<psi> (plen \<pi>)")
-    case assm: True
-    show ?thesis
-    proof (cases "Inf A \<le> Inf B")
-      case True
-      then have release_progress_eq: "progress \<sigma>' P (formula.Release \<phi> I \<psi>) (plen \<pi>) = Inf A'"
-        using progress_eq AA'_eq
+  
+    have "k < progress \<sigma>' P \<phi> (plen \<pi>) \<and> k < progress \<sigma>' P \<psi> (plen \<pi>)"
+    if memR: "memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" for k
+    proof (cases "progress \<sigma> P \<phi> (plen \<pi>) \<le> progress \<sigma> P \<psi> (plen \<pi>)")
+      case assm: True
+      show ?thesis
+      proof (cases "Inf A \<le> Inf B")
+        case True
+        then have release_progress_eq: "progress \<sigma>' P (formula.Release \<phi> I \<psi>) (plen \<pi>) = Inf A'"
+          using progress_eq AA'_eq
+          unfolding progress_prefix_conv[OF assms(1,2)]
+          by auto
+        then obtain j where
+          "\<not> memR I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)"
+          "j \<le> progress \<sigma>' P \<phi> (plen \<pi>)"
+          "j \<le> progress \<sigma>' P \<psi> (plen \<pi>)"
+          using Release.prems(1)
+          unfolding A'_def progress_prefix_conv[OF assms(1,2)]
+          by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
+            dest!: le_cInf_iff[THEN iffD1, rotated -1])
+        then show 1: "k < progress \<sigma>' P \<phi> (plen \<pi>) \<and> k < progress \<sigma>' P \<psi> (plen \<pi>)"
+          using that
+          by (auto 0 3 elim!: order.strict_trans2[rotated] elim: contrapos_np intro!: less_\<tau>D[of \<sigma>' k j])
+      next
+        define J where "J = {j. \<not> memR I (\<tau> \<sigma>' j - \<tau> \<sigma>' i) \<and> j \<le> progress \<sigma>' P \<psi> (plen \<pi>)}"
+        define j where "j = Min J"
+        case False
+        then have release_progress_eq: "progress \<sigma>' P (formula.Release \<phi> I \<psi>) (plen \<pi>) = Inf B'"
+          using progress_eq BB'_eq
+          unfolding progress_prefix_conv[OF assms(1,2)]
+          by auto
+        then obtain j' where
+          "\<not> memR (flip_int_double_upper I) (\<tau> \<sigma>' j' - \<tau> \<sigma>' i)"
+          "j' \<le> progress \<sigma>' P \<psi> (plen \<pi>)"
+          using Release.prems(1)
+          unfolding B'_def progress_prefix_conv[OF assms(1,2)]
+          by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
+            dest!: le_cInf_iff[THEN iffD1, rotated -1])
+        then have "\<not> memR (I) (\<tau> \<sigma>' j' - \<tau> \<sigma>' i)" "j' \<le> progress \<sigma>' P \<psi> (plen \<pi>)"
+          using memR_flip_int_double_upper
+          by auto
+        then have "j' \<in> J"
+          unfolding J_def
+          by auto
+        then have J_props: "J \<noteq> {}" "finite J"
+          unfolding J_def
+          by auto
+        then have "j \<in> J"
+          unfolding j_def
+          by auto
+        then have j_props: "\<not> memR I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)" "j \<le> progress \<sigma>' P \<psi> (plen \<pi>)"
+          unfolding J_def
+          by auto
+        have less_j_mem: "\<And>l. l<j \<Longrightarrow> memR I (\<tau> \<sigma>' l - \<tau> \<sigma>' i)"
+        proof -
+          fix l
+          assume l_j: "l < j"
+          {
+            assume "\<not>memR I (\<tau> \<sigma>' l - \<tau> \<sigma>' i)"
+            then have "l \<in> J"
+              using l_j j_props(2)
+              unfolding J_def
+              by auto
+            then have "False"
+              using l_j J_props
+              unfolding j_def
+              by auto
+          }
+          then show "memR I (\<tau> \<sigma>' l - \<tau> \<sigma>' i)" by auto
+        qed
+        have j_leq: "j \<le> progress \<sigma>' P \<phi> (plen \<pi>)"
+        proof -
+          {
+            assume j_g: "j > progress \<sigma>' P \<phi> (plen \<pi>)"
+            have "\<And>k. k < plen \<pi> \<Longrightarrow> k \<le> min (Monitor.progress \<sigma>' P \<psi> (plen \<pi>)) (Monitor.progress \<sigma>' P \<phi> (plen \<pi>)) \<Longrightarrow> memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
+            proof -
+              fix k
+              assume "k < plen \<pi>" "k \<le> min (Monitor.progress \<sigma>' P \<psi> (plen \<pi>)) (Monitor.progress \<sigma>' P \<phi> (plen \<pi>))"
+              then have "k < j" using j_g
+                by auto
+              then show "memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
+                using less_j_mem
+                by auto
+            qed
+            then have "i \<in> A'"
+              unfolding A'_def
+              by auto
+            then have "i \<ge> Inf A'"
+              by (simp add: cInf_lower)
+            moreover have "i < Inf A'"
+              using Release.prems(1) release_progress_eq False
+              unfolding AA'_eq BB'_eq progress_prefix_conv[OF assms(1,2)]
+              by auto
+            ultimately have "False"
+              by auto
+          }
+          then show ?thesis using le_def by auto
+        qed
+        then show "k < progress \<sigma>' P \<phi> (plen \<pi>) \<and> k < progress \<sigma>' P \<psi> (plen \<pi>)"
+          using that j_props
+          by (auto 0 3 elim!: order.strict_trans2[rotated] elim: contrapos_np intro!: less_\<tau>D[of \<sigma>' k j])
+      qed
+    next
+      case assm: False
+      then have A'_eq: "A' = {i. \<forall>k. k < (plen \<pi>) \<and> k \<le> (Monitor.progress \<sigma>' P \<psi> (plen \<pi>)) \<longrightarrow> memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)}"
+        unfolding A'_def progress_prefix_conv[OF assms(1,2)]
+        by auto
+      have "A' \<subseteq> B'"
+      proof -
+        {
+          fix i
+          assume "i \<in> A'"
+          then have i_props: "\<forall>k. k < (plen \<pi>) \<and> k \<le> Monitor.progress \<sigma>' P \<psi> (plen \<pi>) \<longrightarrow> memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
+            unfolding A'_eq
+            by auto
+          then have "\<And>k. k < (plen \<pi>) \<and> k \<le> Monitor.progress \<sigma>' P \<psi> (plen \<pi>) \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
+            using memR_flip_int_double_upper le_def
+            by auto
+          then have "i \<in> B'"
+            unfolding B'_def
+            by auto
+        }
+        then show ?thesis by blast
+      qed
+      then have "Inf B' \<le> Inf A'"
+        using Inf_leq[OF non_empty(1), of B'] BB'_eq AA'_eq
+        by auto
+      then have release_progress_eq: "progress \<sigma>' P (formula.Release \<phi> I \<psi>) (plen \<pi>) = Inf B'"
+        using progress_eq BB'_eq AA'_eq
         unfolding progress_prefix_conv[OF assms(1,2)]
         by auto
+      then have "\<exists>j. \<not> memR (flip_int_double_upper I) (\<tau> \<sigma>' j - \<tau> \<sigma>' i) \<and> j \<le> progress \<sigma>' P \<psi> (plen \<pi>)"
+        using Release.prems
+        unfolding B'_def progress_prefix_conv[OF assms(1,2)]
+        by (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
+          dest!: le_cInf_iff[THEN iffD1, rotated -1])
       then obtain j where
-        "\<not> memR I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)"
+        "\<not> memR (flip_int_double_upper I) (\<tau> \<sigma>' j - \<tau> \<sigma>' i)"
         "j \<le> progress \<sigma>' P \<phi> (plen \<pi>)"
         "j \<le> progress \<sigma>' P \<psi> (plen \<pi>)"
-        using Release.prems(1)
-        unfolding A'_def progress_prefix_conv[OF assms(1,2)]
-        by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
-          dest!: le_cInf_iff[THEN iffD1, rotated -1])
-      then show 1: "k < progress \<sigma>' P \<phi> (plen \<pi>) \<and> k < progress \<sigma>' P \<psi> (plen \<pi>)"
-        using that
-        by (auto 0 3 elim!: order.strict_trans2[rotated] elim: contrapos_np intro!: less_\<tau>D[of \<sigma>' k j])
-    next
-      define J where "J = {j. \<not> memR I (\<tau> \<sigma>' j - \<tau> \<sigma>' i) \<and> j \<le> progress \<sigma>' P \<psi> (plen \<pi>)}"
-      define j where "j = Min J"
-      case False
-      then have release_progress_eq: "progress \<sigma>' P (formula.Release \<phi> I \<psi>) (plen \<pi>) = Inf B'"
-        using progress_eq BB'_eq
+        using assm
         unfolding progress_prefix_conv[OF assms(1,2)]
         by auto
-      then obtain j' where
-        "\<not> memR (flip_int_double_upper I) (\<tau> \<sigma>' j' - \<tau> \<sigma>' i)"
-        "j' \<le> progress \<sigma>' P \<psi> (plen \<pi>)"
-        using Release.prems(1)
-        unfolding B'_def progress_prefix_conv[OF assms(1,2)]
-        by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
-          dest!: le_cInf_iff[THEN iffD1, rotated -1])
-      then have "\<not> memR (I) (\<tau> \<sigma>' j' - \<tau> \<sigma>' i)" "j' \<le> progress \<sigma>' P \<psi> (plen \<pi>)"
-        using memR_flip_int_double_upper
-        by auto
-      then have "j' \<in> J"
-        unfolding J_def
-        by auto
-      then have J_props: "J \<noteq> {}" "finite J"
-        unfolding J_def
-        by auto
-      then have "j \<in> J"
-        unfolding j_def
-        by auto
-      then have j_props: "\<not> memR I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)" "j \<le> progress \<sigma>' P \<psi> (plen \<pi>)"
-        unfolding J_def
-        by auto
-      have less_j_mem: "\<And>l. l<j \<Longrightarrow> memR I (\<tau> \<sigma>' l - \<tau> \<sigma>' i)"
-      proof -
-        fix l
-        assume l_j: "l < j"
-        {
-          assume "\<not>memR I (\<tau> \<sigma>' l - \<tau> \<sigma>' i)"
-          then have "l \<in> J"
-            using l_j j_props(2)
-            unfolding J_def
-            by auto
-          then have "False"
-            using l_j J_props
-            unfolding j_def
-            by auto
-        }
-        then show "memR I (\<tau> \<sigma>' l - \<tau> \<sigma>' i)" by auto
-      qed
-      have j_leq: "j \<le> progress \<sigma>' P \<phi> (plen \<pi>)"
-      proof -
-        {
-          assume j_g: "j > progress \<sigma>' P \<phi> (plen \<pi>)"
-          have "\<And>k. k < plen \<pi> \<Longrightarrow> k \<le> min (Monitor.progress \<sigma>' P \<psi> (plen \<pi>)) (Monitor.progress \<sigma>' P \<phi> (plen \<pi>)) \<Longrightarrow> memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
-          proof -
-            fix k
-            assume "k < plen \<pi>" "k \<le> min (Monitor.progress \<sigma>' P \<psi> (plen \<pi>)) (Monitor.progress \<sigma>' P \<phi> (plen \<pi>))"
-            then have "k < j" using j_g
-              by auto
-            then show "memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
-              using less_j_mem
-              by auto
-          qed
-          then have "i \<in> A'"
-            unfolding A'_def
-            by auto
-          then have "i \<ge> Inf A'"
-            by (simp add: cInf_lower)
-          moreover have "i < Inf A'"
-            using Release.prems(1) release_progress_eq False
-            unfolding AA'_eq BB'_eq progress_prefix_conv[OF assms(1,2)]
-            by auto
-          ultimately have "False"
-            by auto
-        }
-        then show ?thesis using le_def by auto
-      qed
-      then show "k < progress \<sigma>' P \<phi> (plen \<pi>) \<and> k < progress \<sigma>' P \<psi> (plen \<pi>)"
-        using that j_props
+      then have 1: "k < progress \<sigma>' P \<phi> (plen \<pi>)" and 2: "k < progress \<sigma>' P \<psi> (plen \<pi>)"
+        if "memR (flip_int_double_upper I) (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" for k
+        using that
         by (auto 0 3 elim!: order.strict_trans2[rotated] elim: contrapos_np intro!: less_\<tau>D[of \<sigma>' k j])
+      then show ?thesis
+        using memR_flip_int_double_upper memR
+        by auto
     qed
-  next
-    case assm: False
-    then have A'_eq: "A' = {i. \<forall>k. k < (plen \<pi>) \<and> k \<le> (Monitor.progress \<sigma>' P \<psi> (plen \<pi>)) \<longrightarrow> memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)}"
-      unfolding A'_def progress_prefix_conv[OF assms(1,2)]
+    then have 11: "k < progress \<sigma>' P \<phi> (plen \<pi>)" and 21: "k < progress \<sigma>' P \<psi> (plen \<pi>)"
+      if "memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" for k
+      using that
       by auto
-    have "A' \<subseteq> B'"
-    proof -
+  
+    have 3: "k < plen \<pi>" if "memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)" for k
+      using 1[OF that] Release(6) by (auto simp only: less_eq_Suc_le order.trans[OF _ progress_le_gen])
+    have 31: "k < plen \<pi>" if "memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" for k
+      using 11[OF that] Release(6) by (auto simp only: less_eq_Suc_le order.trans[OF _ progress_le_gen])
+  
+    have t_eq1: "\<And>j. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> \<tau> \<sigma> j = \<tau> \<sigma>' j"
+      using \<tau>_prefix_conv[OF assms(1,2) 3] memR_flip_int_double_upper
+      by auto
+  
+    have t_eq2: "\<And>j. memR I (\<tau> \<sigma>' j - \<tau> \<sigma>' i) \<Longrightarrow> \<tau> \<sigma> j = \<tau> \<sigma>' j"
+      using \<tau>_prefix_conv[OF assms(1,2) 31] memR_flip_int_double_upper
+      by auto
+    have sat_subformulas:
+      "\<And>j v. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> Formula.sat \<sigma> V v j \<phi> = Formula.sat \<sigma>' V' v j \<phi>"
+      "\<And>j v. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> Formula.sat \<sigma> V v j \<psi> = Formula.sat \<sigma>' V' v j \<psi>"
+      using Release.IH(1)[OF 1 Release.prems(2-5)] Release.IH(2)[OF 2 Release.prems(2-5)] Release.prems(1) memR_flip_int_double_upper
+      by auto
+  
+    have "\<And>j k. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> k \<le> j \<Longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+      using memR_antimono[of I]
+      using \<tau>_mono diff_le_mono
+      by blast
+    then have "\<And>j k. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> k \<le> j \<Longrightarrow> Formula.sat \<sigma> V v k \<phi> = Formula.sat \<sigma>' V' v k \<phi>"
+      using sat_subformulas(1)
+      by auto
+  
+    then have release_eq: "\<And>j. (mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)) \<longrightarrow> (
+        (Formula.sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. Formula.sat \<sigma> V v k \<phi>)) =
+        (Formula.sat \<sigma>' V' v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. Formula.sat \<sigma>' V' v k \<phi>))
+    )"
+      using sat_subformulas(2)
+      by auto
+    
+    show ?thesis
+    proof (rule iffI)
+      assume assm: "Formula.sat \<sigma> V v i (formula.Release \<phi> I \<psi>)"
       {
-        fix i
-        assume "i \<in> A'"
-        then have i_props: "\<forall>k. k < (plen \<pi>) \<and> k \<le> Monitor.progress \<sigma>' P \<psi> (plen \<pi>) \<longrightarrow> memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
-          unfolding A'_eq
+        fix j
+        assume assms: "j \<ge> i" "mem I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)"
+        then have memR: "memR I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)" by auto
+        have memRi: "memR I (\<tau> \<sigma>' i - \<tau> \<sigma>' i)" by auto
+        have mem: "mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+          using assms(2)[unfolded t_eq2[OF memR,symmetric] t_eq2[OF memRi,symmetric]]
           by auto
-        then have "\<And>k. k < (plen \<pi>) \<and> k \<le> Monitor.progress \<sigma>' P \<psi> (plen \<pi>) \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
-          using memR_flip_int_double_upper le_def
+        have sat: "Formula.sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. Formula.sat \<sigma> V v k \<phi>)"
+          using assm assms(1) mem
           by auto
-        then have "i \<in> B'"
-          unfolding B'_def
+        then have "Formula.sat \<sigma>' V' v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. Formula.sat \<sigma>' V' v k \<phi>)"
+          using mem release_eq[of j]
           by auto
       }
-      then show ?thesis by blast
+      then show "Formula.sat \<sigma>' V' v i (formula.Release \<phi> I \<psi>)"
+        by auto
+    next
+      assume assm: "Formula.sat \<sigma>' V' v i (formula.Release \<phi> I \<psi>)"
+      {
+        fix j
+        assume assms: "j \<ge> i" "mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+        then have memR: "memR I (\<tau> \<sigma> j - \<tau> \<sigma> i)" by auto
+        have memRi: "memR I (\<tau> \<sigma> i - \<tau> \<sigma> i)" by auto
+        have mem: "mem I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)"
+          using assms(2)[unfolded t_eq1[OF memR] t_eq1[OF memRi]]
+          by auto
+        have sat: "Formula.sat \<sigma>' V' v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. Formula.sat \<sigma>' V' v k \<phi>)"
+          using assm assms(1) mem
+          by auto
+        then have "Formula.sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. Formula.sat \<sigma> V v k \<phi>)"
+          using assms(2) release_eq[of j]
+          by auto
+      }
+      then show "Formula.sat \<sigma> V v i (formula.Release \<phi> I \<psi>)"
+        by auto
     qed
-    then have "Inf B' \<le> Inf A'"
-      using Inf_leq[OF non_empty(1), of B'] BB'_eq AA'_eq
-      by auto
-    then have release_progress_eq: "progress \<sigma>' P (formula.Release \<phi> I \<psi>) (plen \<pi>) = Inf B'"
-      using progress_eq BB'_eq AA'_eq
-      unfolding progress_prefix_conv[OF assms(1,2)]
-      by auto
-    then have "\<exists>j. \<not> memR (flip_int_double_upper I) (\<tau> \<sigma>' j - \<tau> \<sigma>' i) \<and> j \<le> progress \<sigma>' P \<psi> (plen \<pi>)"
-      using Release.prems
-      unfolding B'_def progress_prefix_conv[OF assms(1,2)]
-      by (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
-        dest!: le_cInf_iff[THEN iffD1, rotated -1])
-    then obtain j where
-      "\<not> memR (flip_int_double_upper I) (\<tau> \<sigma>' j - \<tau> \<sigma>' i)"
-      "j \<le> progress \<sigma>' P \<phi> (plen \<pi>)"
-      "j \<le> progress \<sigma>' P \<psi> (plen \<pi>)"
-      using assm
-      unfolding progress_prefix_conv[OF assms(1,2)]
-      by auto
-    then have 1: "k < progress \<sigma>' P \<phi> (plen \<pi>)" and 2: "k < progress \<sigma>' P \<psi> (plen \<pi>)"
-      if "memR (flip_int_double_upper I) (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" for k
-      using that
-      by (auto 0 3 elim!: order.strict_trans2[rotated] elim: contrapos_np intro!: less_\<tau>D[of \<sigma>' k j])
-    then show ?thesis
-      using memR_flip_int_double_upper memR
-      by auto
-  qed
-  then have 11: "k < progress \<sigma>' P \<phi> (plen \<pi>)" and 21: "k < progress \<sigma>' P \<psi> (plen \<pi>)"
-    if "memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" for k
-    using that
-    by auto
-
-  have 3: "k < plen \<pi>" if "memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)" for k
-    using 1[OF that] Release(6) by (auto simp only: less_eq_Suc_le order.trans[OF _ progress_le_gen])
-  have 31: "k < plen \<pi>" if "memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" for k
-    using 11[OF that] Release(6) by (auto simp only: less_eq_Suc_le order.trans[OF _ progress_le_gen])
-
-  have t_eq1: "\<And>j. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> \<tau> \<sigma> j = \<tau> \<sigma>' j"
-    using \<tau>_prefix_conv[OF assms(1,2) 3] memR_flip_int_double_upper
-    by auto
-
-  have t_eq2: "\<And>j. memR I (\<tau> \<sigma>' j - \<tau> \<sigma>' i) \<Longrightarrow> \<tau> \<sigma> j = \<tau> \<sigma>' j"
-    using \<tau>_prefix_conv[OF assms(1,2) 31] memR_flip_int_double_upper
-    by auto
-  have sat_subformulas:
-    "\<And>j v. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> Formula.sat \<sigma> V v j \<phi> = Formula.sat \<sigma>' V' v j \<phi>"
-    "\<And>j v. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> Formula.sat \<sigma> V v j \<psi> = Formula.sat \<sigma>' V' v j \<psi>"
-    using Release.IH(1)[OF 1 Release.prems(2-5)] Release.IH(2)[OF 2 Release.prems(2-5)] Release.prems(1) memR_flip_int_double_upper
-    by auto
-
-  have "\<And>j k. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> k \<le> j \<Longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
-    using memR_antimono[of I]
-    using \<tau>_mono diff_le_mono
-    by blast
-  then have "\<And>j k. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> k \<le> j \<Longrightarrow> Formula.sat \<sigma> V v k \<phi> = Formula.sat \<sigma>' V' v k \<phi>"
-    using sat_subformulas(1)
-    by auto
-
-  then have release_eq: "\<And>j. (mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)) \<longrightarrow> (
-      (Formula.sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. Formula.sat \<sigma> V v k \<phi>)) =
-      (Formula.sat \<sigma>' V' v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. Formula.sat \<sigma>' V' v k \<phi>))
-  )"
-    using sat_subformulas(2)
-    by auto
-  
-  show ?case
-  proof (rule iffI)
-    assume assm: "Formula.sat \<sigma> V v i (formula.Release \<phi> I \<psi>)"
-    {
-      fix j
-      assume assms: "j \<ge> i" "mem I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)"
-      then have memR: "memR I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)" by auto
-      have memRi: "memR I (\<tau> \<sigma>' i - \<tau> \<sigma>' i)" by auto
-      have mem: "mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
-        using assms(2)[unfolded t_eq2[OF memR,symmetric] t_eq2[OF memRi,symmetric]]
-        by auto
-      have sat: "Formula.sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. Formula.sat \<sigma> V v k \<phi>)"
-        using assm assms(1) mem
-        by auto
-      then have "Formula.sat \<sigma>' V' v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. Formula.sat \<sigma>' V' v k \<phi>)"
-        using mem release_eq[of j]
-        by auto
-    }
-    then show "Formula.sat \<sigma>' V' v i (formula.Release \<phi> I \<psi>)"
-      by auto
   next
-    assume assm: "Formula.sat \<sigma>' V' v i (formula.Release \<phi> I \<psi>)"
-    {
-      fix j
-      assume assms: "j \<ge> i" "mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
-      then have memR: "memR I (\<tau> \<sigma> j - \<tau> \<sigma> i)" by auto
-      have memRi: "memR I (\<tau> \<sigma> i - \<tau> \<sigma> i)" by auto
-      have mem: "mem I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)"
-        using assms(2)[unfolded t_eq1[OF memR] t_eq1[OF memRi]]
-        by auto
-      have sat: "Formula.sat \<sigma>' V' v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. Formula.sat \<sigma>' V' v k \<phi>)"
-        using assm assms(1) mem
-        by auto
-      then have "Formula.sat \<sigma> V v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. Formula.sat \<sigma> V v k \<phi>)"
-        using assms(2) release_eq[of j]
-        by auto
-    }
-    then show "Formula.sat \<sigma> V v i (formula.Release \<phi> I \<psi>)"
-      by auto
+    case False
+    then show ?thesis sorry
   qed
 next
   case (MatchP I r)
@@ -8643,14 +8797,14 @@ next
       by auto
     then have "length [Monitor.progress \<sigma> P (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) j..<Monitor.progress \<sigma> P' (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) (j + \<delta>)] =
     length zs"
-      by (auto simp only: progress_and_release_rewrite_bounded)
+      by (auto simp only: progress_and_release_rewrite_bounded[OF And_Release(1)])
     moreover have "\<And>i r. (i, r) \<in>set (zip [Monitor.progress \<sigma> P (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) j..<Monitor.progress \<sigma> P' (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) (j + \<delta>)] zs) \<Longrightarrow>
         qtable n (fv (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>'))) (mem_restr R) (\<lambda>va. Formula.sat \<sigma> v (map the va) i (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>'))) r"
     proof -
       fix i r
       assume "(i, r) \<in>set (zip [Monitor.progress \<sigma> P (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) j..<Monitor.progress \<sigma> P' (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) (j + \<delta>)] zs)"
       then have "(i, r) \<in>set (zip [Monitor.progress \<sigma> P (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>') j..<Monitor.progress \<sigma> P' (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>') (j + \<delta>)] zs)"
-        by (auto simp only: progress_and_release_rewrite_bounded[symmetric])
+        by (auto simp only: progress_and_release_rewrite_bounded[OF And_Release(1),symmetric])
       then have qtable: "qtable n (fv (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>')) (mem_restr R) (\<lambda>va. Formula.sat \<sigma> v (map the va) i (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>')) r"
         using IH(2)
         unfolding list_all2_iff
@@ -8661,9 +8815,9 @@ next
         unfolding qtable_def
         by (auto intro!: qtableI[of n "(fv (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')))" r "(mem_restr R)" "(\<lambda>va. Formula.sat \<sigma> v (map the va) i (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')))"])
     qed
-  ultimately show ?thesis
-    unfolding list_all2_iff
-    by auto
+    ultimately show ?thesis
+      unfolding list_all2_iff
+      by blast
   qed
   ultimately show ?case using ztuple_eq by auto
 next

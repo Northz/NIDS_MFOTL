@@ -199,6 +199,7 @@ let _ =
     "-verbose", Arg.Set Misc.verbose, "\tTurn on verbose mode";
     "-check", Arg.Set Misc.checkf, "\tCheck if formula is monitorable (and exit)";
     "-no_rw", Arg.Set Misc.no_rw, "\tNo formula rewrite";
+	"-no_trigger", Arg.Set Misc.no_trigger, "\tTop level trigger is rewritten";
     "-sigout", Arg.Set sigout, "\tShow the output signature (and exit)";
     "-unix", Arg.Set MFOTL.unixts, "\tTimestamps represent Unix time";
     "-mem", Arg.Set memarg, "\t\tShow maximum memory usage on stderr";

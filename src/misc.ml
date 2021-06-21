@@ -87,6 +87,8 @@ let stop_at_out_of_order_ts = ref false
 
 let no_rw = ref false
 
+let no_trigger = ref false
+
 let stop_at_first_viol = ref false
 
 

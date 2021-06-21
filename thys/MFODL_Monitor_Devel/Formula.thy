@@ -768,6 +768,12 @@ definition trigger_safe_unbounded :: "formula \<Rightarrow> \<I> \<Rightarrow> f
 definition trigger_safe_bounded :: "formula \<Rightarrow> \<I> \<Rightarrow> formula \<Rightarrow> formula" where
   "trigger_safe_bounded \<phi> I \<psi> = And (once I TT) (Or (Or (historically_safe_bounded I \<psi>) (once (flip_int_less_lower I) \<phi>)) (once (flip_int_less_lower I) (Prev all (Since \<psi> (int_remove_lower_bound I) (And \<phi> \<psi>)))))"
 
+definition and_trigger_safe_bounded :: "formula \<Rightarrow> formula \<Rightarrow> \<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "and_trigger_safe_bounded \<phi> \<phi>' I \<psi>' = (Or (And \<phi> (Neg (once I TT))) (And \<phi> (trigger_safe_bounded \<phi>' I \<psi>')))"
+
+definition and_trigger_safe_unbounded :: "formula \<Rightarrow> formula \<Rightarrow> \<I> \<Rightarrow> formula \<Rightarrow> formula" where
+  "and_trigger_safe_unbounded \<phi> \<phi>' I \<psi>' = (Or (And \<phi> (Neg (once I TT))) (And \<phi> (trigger_safe_unbounded \<phi>' I \<psi>')))"
+
 definition release_safe_0 :: "formula \<Rightarrow> \<I> \<Rightarrow> formula \<Rightarrow> formula" where
   "release_safe_0 \<phi> I \<psi> = Or (Until \<psi> I (And \<psi> \<phi>)) (always_safe_0 I \<psi>)"
 
@@ -1692,8 +1698,7 @@ function (sequential) convert_multiway :: "formula \<Rightarrow> formula" where
 termination
   using size'_and_release size'_Release size'_Or size'_release_aux
   apply (relation "measure size'")
-  apply (auto simp add: Nat.less_Suc_eq_le dest!: sum_list_mem_leq[of _ _ size'] regex_atms_size')
-  by (auto simp add: release_safe_0_def release_safe_bounded_def always_safe_bounded_def eventually_def once_def TT_def FF_def split: formula.splits)
+  by (auto simp add: Nat.less_Suc_eq_le dest!: sum_list_mem_leq[of _ _ size'] regex_atms_size')
 
 abbreviation "convert_multiway_regex \<equiv> Regex.map_regex convert_multiway"
 
@@ -3477,6 +3482,46 @@ next
     using assms I2_def sat_trigger_rewrite assm
     by auto
 qed
+
+lemma sat_and_trigger_bounded_rewrite:
+  assumes "bounded I" "\<not>mem I 0" (* [a, b] *)
+  shows "Formula.sat \<sigma> V v i (Formula.And \<phi> (Formula.Trigger \<phi>' I \<psi>')) = Formula.sat \<sigma> V v i (and_trigger_safe_bounded \<phi> \<phi>' I \<psi>')"
+proof (cases "\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)")
+  case True
+  then have once: "sat \<sigma> V v i (once I TT)"
+    by auto
+  then have "sat \<sigma> V v i (Trigger \<phi>' I \<psi>') = sat \<sigma> V v i (trigger_safe_bounded \<phi>' I \<psi>')"
+    using sat_trigger_rewrite_bounded[OF assms(2,1), of \<sigma> V v i]
+    by auto
+  moreover have "
+    sat \<sigma> V v i (Or (And \<phi> (Neg (once I TT))) (And \<phi> (trigger_safe_bounded \<phi>' I \<psi>'))) =
+    sat \<sigma> V v i (And \<phi> (trigger_safe_bounded \<phi>' I \<psi>'))"
+    using once
+    by auto
+  ultimately show ?thesis
+    unfolding and_trigger_safe_bounded_def
+    by auto
+qed (auto simp add: and_trigger_safe_bounded_def)
+
+lemma sat_and_trigger_unbounded_rewrite:
+  assumes "\<not>bounded I" "\<not>mem I 0" (* [a, b] *)
+  shows "Formula.sat \<sigma> V v i (Formula.And \<phi> (Formula.Trigger \<phi>' I \<psi>')) = Formula.sat \<sigma> V v i (and_trigger_safe_unbounded \<phi> \<phi>' I \<psi>')"
+proof (cases "\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)")
+  case True
+  then have once: "sat \<sigma> V v i (once I TT)"
+    by auto
+  then have "sat \<sigma> V v i (Trigger \<phi>' I \<psi>') = sat \<sigma> V v i (trigger_safe_unbounded \<phi>' I \<psi>')"
+    using sat_trigger_rewrite_unbounded[OF assms(2,1), of \<sigma> V v i]
+    by auto
+  moreover have "
+    sat \<sigma> V v i (Or (And \<phi> (Neg (once I TT))) (And \<phi> (trigger_safe_unbounded \<phi>' I \<psi>'))) =
+    sat \<sigma> V v i (And \<phi> (trigger_safe_unbounded \<phi>' I \<psi>'))"
+    using once
+    by auto
+  ultimately show ?thesis
+    unfolding and_trigger_safe_unbounded_def
+    by auto
+qed (auto simp add: and_trigger_safe_unbounded_def)
 
 lemma always_rewrite_0:
   fixes I :: \<I>
