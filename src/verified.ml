@@ -7859,7 +7859,7 @@ let rec meval
                let r = (zs @ [let _ = Printf.printf "start mmultijoin\n"; flush stdout in mmulti_join
                        (ceq_event_data, ccompare_event_data, equal_event_data) n
 				   a_pos a_neg xs]) in
-					   let _ = Printf.printf "done mmultijoin\n"; in
+					   let _ = Printf.printf "done mmultijoin\n";flush stdout in
 					   r
 				   )
              [] buf
