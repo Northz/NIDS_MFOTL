@@ -7726,6 +7726,7 @@ let rec meval
     | n, ts, db, MTrigger (args, phi, psi, bufb, nts, auxb) ->
         (let (xs, phia) = meval n ts db phi in
          let (ys, psia) = meval n ts db psi in
+		 let t_start = Unix.gettimeofday () in
          let a =
            mbuf2t_take
              (fun r1 r2 t (zs, aux) ->
@@ -7738,6 +7739,8 @@ let rec meval
                  (zs @ [z], auxa)))
              ([], auxb) (mbuf2_add xs ys bufb) (nts @ ts)
            in
+		 let t_stop = Unix.gettimeofday () in
+		 let _ = Printf.printf "diff: %f\n" (t_stop -. t_start) in
          let (aa, b) = a in
           (let (zs, aux) = aa in
             (fun (buf, ntsa) ->
