@@ -1,6 +1,6 @@
 (*<*)
 theory Monitor_Code
-  imports Monitor_Impl Trigger_Release_Rewrites
+  imports Monitor_Impl
 begin
 (*>*)
 
