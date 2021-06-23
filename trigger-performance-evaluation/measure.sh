@@ -6,7 +6,7 @@ ITERATIONS=10
 
 echo "Running experiments.."
 
-echo "experiment;rewritten real time;rewritten user time;rewritten sys time;native real time;native user time;native sys time" > ./measurements.csv
+echo "experiment;rewritten real time;rewritten user time;rewritten sys time;rewritten loop time;native real time;native user time;native sys time;native loop time;native trigger time" > ./measurements.csv
 
 for experiment in $( seq $START $END ); do
 	echo "Running experiment #$experiment for $ITERATIONS iterations"
