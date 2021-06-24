@@ -1760,7 +1760,8 @@ proof -
       by (simp add: cInf_lower)
     then have "False" using assm by auto
   }
-  then show ?thesis using le_def by fastforce
+  then show ?thesis
+    by (meson min.absorb2 not_le_imp_less)
 qed
 
 lemma progress_eventually_double_upper[simp]: "(progress P (eventually I (eventually (int_remove_lower_bound I) \<phi>)) j) =
@@ -2731,7 +2732,7 @@ next
         then have "(\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
           by auto
       }
-      ultimately show "(\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" using le_def by blast
+      ultimately show "(\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" using not_le_imp_less by blast
     qed
   
     have AA'_eq: "A = A'"
@@ -2850,7 +2851,7 @@ next
             ultimately have "False"
               by auto
           }
-          then show ?thesis using le_def by auto
+          then show ?thesis using not_le_imp_less by auto
         qed
         then show "k < progress \<sigma> P \<phi> (plen \<pi>) \<and> k < progress \<sigma> P \<psi> (plen \<pi>)"
           using that j_props
@@ -2870,7 +2871,7 @@ next
             unfolding A_eq
             by auto
           then have "\<And>k. k < (plen \<pi>) \<and> k \<le> Monitor.progress \<sigma> P \<psi> (plen \<pi>) \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)"
-            using memR_flip_int_double_upper le_def
+            using memR_flip_int_double_upper not_le_imp_less
             by auto
           then have "i \<in> B"
             unfolding B_def
@@ -3003,7 +3004,7 @@ next
             ultimately have "False"
               by auto
           }
-          then show ?thesis using le_def by auto
+          then show ?thesis using not_le_imp_less by auto
         qed
         then show "k < progress \<sigma>' P \<phi> (plen \<pi>) \<and> k < progress \<sigma>' P \<psi> (plen \<pi>)"
           using that j_props
@@ -3023,7 +3024,7 @@ next
             unfolding A'_eq
             by auto
           then have "\<And>k. k < (plen \<pi>) \<and> k \<le> Monitor.progress \<sigma>' P \<psi> (plen \<pi>) \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
-            using memR_flip_int_double_upper le_def
+            using memR_flip_int_double_upper not_le_imp_less
             by auto
           then have "i \<in> B'"
             unfolding B'_def
@@ -4880,8 +4881,9 @@ proof -
   qed
 qed
 
-lemma mprev_next_NilE[elim!]: "mprev_next I xs ts = ([], [], []) \<Longrightarrow> (xs = [] \<Longrightarrow> ts = [] \<Longrightarrow> R) \<Longrightarrow> R"
-  by (induct I xs ts rule: mprev_next.induct) (auto split: prod.splits)
+lemma mprev_next_NilE[elim!]: "mprev_next I xs ts = (ys, [], []) \<Longrightarrow>
+  (xs = [] \<Longrightarrow> ts = [] \<Longrightarrow> ys = [] \<Longrightarrow> R) \<Longrightarrow> R"
+  by (induct I xs ts arbitrary: ys rule: mprev_next.induct) (auto split: prod.splits)
 
 lemma mprev: "mprev_next I xs ts = (ys, xs', ts') \<Longrightarrow>
   list_all2 P [i..<j'] xs \<Longrightarrow> list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [i..<j] ts \<Longrightarrow> i \<le> j' \<Longrightarrow> i \<le> j \<Longrightarrow>
@@ -7157,7 +7159,7 @@ proof -
   moreover have "(\<lambda>(t, _). memR (args_ivl args) (cur - t) \<and> memR (args_ivl args) (cur' - t)) = (\<lambda>(t, _). memR (args_ivl args) (cur' - t))"
     using wf_trigger_before(3)
     unfolding cur'_def
-    by (metis memR_impl_pred memR_zero minus_eq)
+    by (metis memR_impl_pred memR_zero zero_diff)
   ultimately have filter_simp: "(\<lambda>x. (case x of (t, uu_) \<Rightarrow> memR (args_ivl args) (cur - t)) \<and> (case x of (t, uu_) \<Rightarrow> memR (args_ivl args) (cur' - t))) = (\<lambda>(t, _). memR (args_ivl args) (cur' - t))"
     by metis
 
@@ -7269,7 +7271,7 @@ proof -
           by auto
         then have "False" using assms(2) by auto
       }
-      then show ?thesis using le_def by blast
+      then show ?thesis using not_le_imp_less by blast
     qed
     ultimately have "i \<in> {offset..<length auxlist'' + offset}"
       by auto
@@ -7401,8 +7403,8 @@ proof -
       moreover {
         assume x_mem: "x \<in> r"
         have "(i, \<tau> \<sigma> i, l, r)\<in>set (zip [0..<length auxlist'] auxlist')"
-          using i_props(1) lr_props
-          by (metis add_diff_inverse_nat fst_conv i_mem in_set_zip length_upt minus_eq not_less_zero nth_upt snd_conv)
+          using lr_props i_mem in_set_conv_nth
+          by fastforce
         then have "qtable (args_n args) (fv \<beta>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<beta>) r"
           using auxlist_props
           by auto
@@ -8380,7 +8382,7 @@ next
             using auxlist_len auxlist_props
             by auto
           show ?thesis
-            using mem(1)[unfolded t_eq] i_props(1)[unfolded auxlist_len] le_def
+            using mem(1)[unfolded t_eq] i_props(1)[unfolded auxlist_len] not_le_imp_less
             unfolding args_ivl
             by fastforce
         qed
@@ -9272,9 +9274,9 @@ next
       apply (auto simp: hd_append hd_rev last_map wf_ts_def lookahead_ts_def)
       using list_all2_hdD(1) list_all2_hdD(2) apply fastforce
       using list_all2_lastD  apply fastforce
-        apply (metis (mono_tags) list_all2_hdD(1) list_all2_hdD(2) min.absorb2 nat_le_Suc_less)
-       apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 nat_le_Suc_less)
-      apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 nat_le_Suc_less)
+        apply (metis (mono_tags) list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
+       apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
+      apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
       done
     define zs'' where "zs'' = fst (eval_until I nt auxlist')"
     define auxlist'' where "auxlist'' = snd (eval_until I nt auxlist')"
@@ -10075,9 +10077,9 @@ next
       apply (auto simp: hd_append hd_rev last_map wf_ts_regex_def lookahead_ts_def)
       using list_all2_hdD(1) list_all2_hdD(2) apply fastforce
       using list_all2_lastD apply fastforce
-        apply (metis (mono_tags) list_all2_hdD(1) list_all2_hdD(2) min.absorb2 nat_le_Suc_less)
-       apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 nat_le_Suc_less)
-      apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 nat_le_Suc_less)
+        apply (metis (mono_tags) list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
+       apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
+      apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
       done
     have "i \<le> progress \<sigma> P' (Formula.MatchF I r) (j + \<delta>) \<Longrightarrow>
       wf_matchF_aux \<sigma> V n R I r aux' i 0 \<Longrightarrow>

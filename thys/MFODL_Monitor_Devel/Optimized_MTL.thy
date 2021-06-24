@@ -3766,7 +3766,7 @@ proof -
       assume "t \<ge> t'"
       then have "False" using memL memL_mono by auto
     }
-    then have "t < t'" using le_def by blast
+    then have "t < t'" using not_le_imp_less by blast
   }
   then show "\<forall>t \<in> fst ` (set (linearize data_in)). \<forall>t' \<in> fst ` (set (linearize data_prev)). t < t'" by auto
 qed
@@ -3976,7 +3976,7 @@ proof -
         using auxlist_index_time_mono[OF assms(1) assm assms(2)] assms(3)
         by auto
     }
-    then show "i < j" using le_def by blast
+    then show "i < j" using not_le_imp_less by blast
   qed
 
 lemma data_in_auxlist_nonempty:
@@ -4015,7 +4015,8 @@ next
 
     assume "\<not> is_empty (data_in)"
     then have "set (linearize data_in) \<noteq> {}" using is_empty_alt by auto
-    then obtain db where db_props: "db \<in> set (linearize data_in)" by (meson nonemptyE)
+    then obtain db where db_props: "db \<in> set (linearize data_in)"
+      by (meson equals0I)
     then have db_mem: "db \<in> set (map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _, _). mem (args_ivl args) (mt - t)) auxlist))"
       using data_props(2)
       unfolding auxlist_data_in_def
@@ -4182,7 +4183,7 @@ proof -
               by auto
             then have "False" using j_memL by blast
           }
-          then have j_ge_i: "i < j" using le_def by blast
+          then have j_ge_i: "i < j" using not_le_imp_less by blast
           then have "j \<in> {i<..<(length auxlist)}" using j_props(2)
             by simp
           moreover have "join_cond (args_pos args) ((fst o snd) (auxlist!j)) (proj_tuple maskL tuple)"
@@ -4403,7 +4404,7 @@ proof -
                 by auto
               then have "False" using i_props(2) by auto
             }
-            then have "i < n + length suffix" using le_def by blast
+            then have "i < n + length suffix" using not_le_imp_less by blast
             then have "i < length (auxlist_data_in args mt auxlist)"
               using suffix_length
               by auto
@@ -4453,7 +4454,7 @@ proof -
             )
           )"
             using trigger_res_1
-            by (meson atLeastLessThan_iff le_def)
+            by (meson atLeastLessThan_iff not_le_imp_less)
           moreover have "maskL = join_mask (args_n args) (args_L args)"
             using assms(1)
             by auto
@@ -4788,7 +4789,7 @@ proof -
             unfolding aux_def
             by auto
         }
-        ultimately have "tuple \<in> snd (result_mmtaux args aux)" using le_def by blast
+        ultimately have "tuple \<in> snd (result_mmtaux args aux)" using not_le_imp_less by blast
       }
       ultimately have "tuple \<in> snd (result_mmtaux args aux)" by blast
     }
@@ -5292,13 +5293,15 @@ proof -
     by auto
   {
     assume assm: "idx < (idx_oldest + j + 1)"
-    then have "(linearize data_in)!j = (drop (idx - idx_oldest) (linearize data_in))!(j - (idx - idx_oldest))"
+    then have j_th: "(linearize data_in)!j = (drop (idx - idx_oldest) (linearize data_in))!(j - (idx - idx_oldest))"
       using idx_props(2) j_props(1) assms(4)
       unfolding tuple_since_tp_def
       by (metis One_nat_def Suc_leI add.right_neutral add_Suc_right add_diff_cancel_left' add_diff_cancel_right' diff_Suc_Suc diff_le_mono le_add_diff_inverse less_imp_le_nat nth_drop)
     then have "(linearize data_in)!j \<in> set (drop (idx - idx_oldest) (linearize data_in))"
-      using j_props(1) assm 
-      by (metis (no_types, lifting) One_nat_def Suc_leI add.commute add.right_neutral add_Suc_right atLeastLessThan_iff diff_le_self diff_less_mono le_def length_drop less_diff_conv less_le_trans nth_mem)
+      using j_props(1) assm
+      apply (cases "idx_oldest < idx")
+       apply (auto)
+      by (smt (verit) Suc_pred j_th add_diff_inverse_nat add_le_cancel_left add_less_cancel_left le_add1 le_less_trans le_simps(2) length_drop nat_diff_split_asm nth_mem zero_less_diff zero_order(3))
     moreover have "(\<forall>(t, y)\<in>set (drop (idx - idx_oldest) (linearize data_in)). as \<in> y)"
       using idx_props(2)
       unfolding tuple_since_tp_def
@@ -6650,7 +6653,7 @@ proof -
             using tuple_since_hist'_eq Nil idx_mid'_eq tuple_init_props
             unfolding init_tuple_def
             apply (auto simp add: option.case_eq_if)
-            by (metis Some_to_the option.simps(3))
+            by (metis option.sel option.simps(3))
           then have idx_props: "(linearize data_in) \<noteq> []" "idx < idx_mid"
               "(\<forall>(t, r) \<in> set (drop (idx-idx_oldest) (linearize data_in)). 
                 as \<in> r
@@ -6808,7 +6811,7 @@ proof -
             using in_nonempty
                   drop_last[of "linearize data_in"]
             unfolding in_but_last_def
-            by (simp add: Suc_leI atd_lem)
+            by (metis append_butlast_last_id butlast_conv_take)
 
           {
             assume assm_all: "\<forall>(t, r) \<in> set in_but_last. as \<in> r"
@@ -6861,7 +6864,7 @@ proof -
               then have "False" using j_props(2) by auto
             }
             then have j_suc_leq: "j + 1 \<le> length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in))"
-              using le_def
+              using not_le_imp_less
               by blast
             {
               fix t y
@@ -7048,7 +7051,7 @@ proof -
                   using assm
                   by auto
               }
-              then have l_leq: "l \<le> n" using le_def by blast
+              then have l_leq: "l \<le> n" using not_le_imp_less by blast
               then have "\<forall>(t, l, r)\<in>set (drop (n-l) (drop l (auxlist_data_in args mt auxlist))). as \<in> r"
                 using suffix_props(1) n_l
                 unfolding suffix_def
@@ -7116,7 +7119,7 @@ proof -
                     by auto
                   then have "False" using assm by blast
                 }
-                then have "i > n" using le_def by blast
+                then have "i > n" using not_le_imp_less by blast
                 then have "(t, l, r) \<in> set suffix"
                   using i_props
                   unfolding suffix_def
@@ -7149,7 +7152,7 @@ proof -
           
           have sorted_auxlist: "sorted (map fst auxlist)" using assms(1) by auto
           then have sorted_in: "sorted (map fst (auxlist_data_in args mt auxlist))"
-            unfolding suffix_def auxlist_data_in_def
+            unfolding auxlist_data_in_def
             by (metis (no_types, lifting) sorted_filter)
 
           define l where "l = length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (auxlist_data_in args mt auxlist))"
@@ -7409,7 +7412,7 @@ proof -
 
             have "(lin_data_in''_mv xs) = []"
               using mv_ln_eq True
-              by (metis add_cancel_left_left list_exhaust_size_eq0)
+              by (metis Ex_list_of_length append_Nil append_eq_append_conv length_append)
             then have data_in''_eq: "(lin_data_in''_mv (xs @ [x])) = [(\<lambda>(t, l, y). (t, y)) x]"
               using data_in''_eq
               by auto
@@ -7541,7 +7544,7 @@ proof -
                   by linarith
                 then have "drop (idx - idx_oldest_mv (xs @ [x])) (lin_data_in''_mv (xs @ [x])) = [(\<lambda>(t, l, y). (t, y)) x]"
                   using data_in''_last drop_last[of "lin_data_in''_mv (xs @ [x])"] data_in_nonempty
-                  by (metis (no_types, lifting) One_nat_def Suc_le_eq length_greater_0_conv pl_pl_mm')
+                  by (simp add: data_in''_eq)
                 moreover have "as \<in> (relR x)"
                   using True
                   by auto
@@ -8405,7 +8408,7 @@ proof -
         by (auto split: option.splits)
       then have "idx - idx_oldest' < length (linearize data_in'')"
         using data_in''_len'
-        by (metis add.commute add_diff_cancel_left' diff_is_0_eq diff_less_mono le_def length_0_conv less_imp_le_nat)
+        by (metis add.commute add_diff_cancel_left' diff_is_0_eq diff_less_mono not_le_imp_less length_0_conv less_imp_le_nat)
       then have "last (linearize data_in'') \<in> set (drop (idx - idx_oldest') (linearize data_in''))"
         using idx_props(1)
         by (metis drop_eq_Nil last_drop last_in_set leD)
@@ -9064,7 +9067,7 @@ proof -
             moreover have "linearize data_in'' ! (idx - idx_oldest' - 1) = linearize data_in' ! (idx - idx_oldest' - 1)"
               using before_len idx_props
               unfolding data_in''_def append_queue_rep
-              by (metis (no_types, lifting) diff_is_0_eq idx_append le_def length_greater_0_conv less_diff_conv2 less_imp_diff_less less_or_eq_imp_le tuple_since tuple_since_tp_def)
+              by (metis (no_types, lifting) diff_is_0_eq idx_append not_le_imp_less length_greater_0_conv less_diff_conv2 less_imp_diff_less less_or_eq_imp_le tuple_since tuple_since_tp_def)
 
             ultimately have "tuple_since_tp args as (linearize data_in'') idx_oldest' idx_mid'' idx"
               using non_empty idx_props
@@ -9256,17 +9259,19 @@ proof -
             then have len_eq: "length (auxlist_data_in args nt auxlist') = length (linearize data_in')"
               using length_map
               by metis
-            then have "n \<le> length (auxlist_data_in args nt auxlist')"
+            then have n_le: "n < length (auxlist_data_in args nt auxlist')"
               using n_props(1)
               by auto
             moreover have "(auxlist_data_in args nt auxlist'') = (auxlist_data_in args nt auxlist') @ [(nt, l, r)]"
               using auxlist_in_eq
               by auto
-            ultimately have "drop n (auxlist_data_in args nt auxlist') @ [(nt, l, r)] = drop n (auxlist_data_in args nt auxlist'')"
+            ultimately have drop_eq: "drop n (auxlist_data_in args nt auxlist'') = drop n (auxlist_data_in args nt auxlist') @ [(nt, l, r)]"
               by auto
-            then have "let suffix = drop n (auxlist_data_in args nt auxlist'') in (\<forall>(t, l, y)\<in>set suffix. tuple \<in> y) \<and> join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL tuple)"
-              using n_props(2) len_eq assm
-              by (metis (no_types, lifting) Int_iff UnE atLeastLessThan_iff case_prod_beta' drop_eq_Nil hd_append2 in_set_simps(2) le_def n_props(1) prod.sel(2) set_append)
+
+            have "let suffix = drop n (auxlist_data_in args nt auxlist'') in (\<forall>(t, l, y)\<in>set suffix. tuple \<in> y) \<and> join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL tuple)"
+              using n_props(2) n_le len_eq assm
+              unfolding drop_eq Let_def
+              by auto
             moreover have "n\<in>{0..<length (linearize data_in'')}"
               using n_props(1)
               unfolding data_in''_def append_queue_rep
@@ -9338,12 +9343,17 @@ proof -
           by auto
         {
           assume n_l: "n\<in>{0..<length (linearize data_in')}"
-          then have "set (drop n (auxlist_data_in args nt auxlist')) \<subseteq> set (drop n (auxlist_data_in args nt auxlist''))"
+          then have "length (drop n auxlist') > 0"
+            using data_in'_len
+            by auto
+          
+          moreover have "set (drop n (auxlist_data_in args nt auxlist')) \<subseteq> set (drop n (auxlist_data_in args nt auxlist''))"
             using auxlist_in_eq Let_def
             by (auto simp add: data_in'_len)
-          then have "let suffix = drop n (auxlist_data_in args nt auxlist') in (\<forall>(t, l, y)\<in>set suffix. tuple \<in> y) \<and> join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL tuple)"
-            using n_props(2) auxlist_in_eq n_l
-            by (smt atLeastLessThan_iff data_in'_len drop_append drop_eq_Nil hd_append2 le_def subsetD)
+          ultimately have "let suffix = drop n (auxlist_data_in args nt auxlist') in (\<forall>(t, l, y)\<in>set suffix. tuple \<in> y) \<and> join_cond (args_pos args) (relL (hd suffix)) (proj_tuple maskL tuple)"
+            using n_props(2) n_l
+            unfolding auxlist_in_eq Let_def
+            by auto
           
           moreover have "linearize data_in' \<noteq> []"
             using n_l

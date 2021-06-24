@@ -3569,8 +3569,14 @@ proof (rule iffI)
     from assms(2) have "B \<noteq> {}" using B_def bounded_memR by auto
     then have "b \<in> B" using b_def by (simp add: Inf_nat_def1)
     then have b_props: "\<not>memR I b" using B_def by auto
-    have "\<forall>x. \<exists>j\<ge>i. x \<le> \<tau> \<sigma> j" using Suc_le_lessD ex_le_\<tau> by blast
-    then have exists_db: "\<forall>x. \<exists>j\<ge>i. x \<le> \<tau> \<sigma> j - \<tau> \<sigma> i" using nat_move_sub_le by blast
+   
+    have exists_db: "\<And>x. \<exists>j\<ge>i. x \<le> \<tau> \<sigma> j - \<tau> \<sigma> i"
+    proof -
+      fix x
+      show "\<exists>j\<ge>i. x \<le> \<tau> \<sigma> j - \<tau> \<sigma> i"
+        using ex_le_\<tau>[of i "x + \<tau> \<sigma> i" \<sigma>]
+        by auto
+    qed
     then have "C \<noteq> {}" using C_def by auto
     then have "c \<in> C" using c_def by (simp add: Inf_nat_def1)
     then have c_props: "c\<ge>i" "b \<le> \<tau> \<sigma> c - \<tau> \<sigma> i" using C_def by auto
@@ -4279,7 +4285,7 @@ next
       "convert_multiway (And \<phi> t) = Ands l"
       "set l = set (get_and_list (convert_multiway \<phi>)) \<union> {convert_multiway t}"
       using t_not_safe_assign t_not_constraint get_and_list
-      by (metis Un_insert_right convert_multiway.simps(8) empty_set list.simps(15) set_append sup_bot.right_neutral)
+      by simp
   
     have t_sat: "sat \<sigma> V v i (convert_multiway t) = sat \<sigma> V v i t"
       using And_Trigger(6-7)
@@ -4469,145 +4475,6 @@ next
   then show ?case
     using map_formula_fvi[OF assms(1)] assms
     sorry
-    
-next
-  case ("7_2" v va vb)
-  then show ?case sorry
-next
-  case ("7_3" vb va)
-  then show ?case sorry
-next
-  case ("7_4" vb vc va)
-  then show ?case sorry
-next
-  case ("7_5" vb vc va)
-  then show ?case sorry
-next
-  case ("7_6" vb va)
-  then show ?case sorry
-next
-  case ("7_7" vb vc va)
-  then show ?case sorry
-next
-  case ("7_8" vb vc va)
-  then show ?case sorry
-next
-  case ("7_9" vb vc va)
-  then show ?case sorry
-next
-  case ("7_10" vb va)
-  then show ?case sorry
-next
-  case ("7_11" vb va)
-  then show ?case sorry
-next
-  case ("7_12" v vb)
-  then show ?case sorry
-next
-  case ("7_13" v vb vc)
-  then show ?case sorry
-next
-  case ("7_14" v vb vc)
-then show ?case sorry
-next
-  case ("7_15" v vb)
-  then show ?case sorry
-next
-  case ("7_16" v vb vc)
-  then show ?case sorry
-next
-  case ("7_17" v vb vc)
-  then show ?case sorry
-next
-  case ("7_18" v vb vc)
-  then show ?case sorry
-next
-  case ("7_19" v vb)
-  then show ?case sorry
-next
-  case ("7_20" v vb)
-  then show ?case sorry
-next
-  case ("7_21" v va)
-  then show ?case sorry
-next
-  case ("7_22" v va)
-  then show ?case sorry
-next
-  case ("7_23" v)
-  then show ?case sorry
-next
-  case ("7_24" v va)
-  then show ?case sorry
-next
-  case ("7_25" v va)
-  then show ?case sorry
-next
-  case ("7_26" v)
-  then show ?case sorry
-next
-  case ("7_27" v)
-  then show ?case sorry
-next
-  case ("7_28" v va vb vc vd)
-  then show ?case sorry
-next
-  case ("7_29" v va)
-  then show ?case sorry
-next
-  case ("7_30" v va)
-  then show ?case sorry
-next
-  case ("7_31" v va vb)
-  then show ?case sorry
-next
-  case ("7_32" v va vb)
-  then show ?case sorry
-next
-  case ("7_33" v va vb)
-  then show ?case sorry
-next
-  case ("7_34" v va vb)
-  then show ?case sorry
-next
-  case ("7_35" v va)
-  then show ?case sorry
-next
-  case ("7_36" v va)
-  then show ?case sorry
-next
-  case (8 \<phi> \<psi>)
-  then show ?case sorry
-next
-  case (9 \<phi> \<psi>)
-  then show ?case sorry
-next
-  case (10 l)
-  then show ?case sorry
-next
-  case (11 \<phi>)
-  then show ?case sorry
-next
-  case (12 y \<omega> b f \<phi>)
-  then show ?case sorry
-next
-  case (13 I \<phi>)
-  then show ?case sorry
-next
-  case (14 I \<phi>)
-  then show ?case sorry
-next
-  case (15 \<phi> I \<psi>)
-  then show ?case sorry
-next
-  case (16 \<phi> I \<psi>)
-  then show ?case sorry
-next
-  case (17 \<phi> I \<psi>)
-  then show ?case sorry
-next
-  case (18 \<phi> I \<psi>)
-  then show ?case sorry
 
 qed (auto simp add: map_formula_fvi[OF assms(1)] assms(2-3))*)
  
