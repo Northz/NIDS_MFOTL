@@ -2662,6 +2662,13 @@ next
     qed
   qed
 next
+  case (9 P l)
+  from 9(2-) have "\<forall>\<phi>\<in>set l. i < progress \<sigma> P \<phi> (plen \<pi>)"
+    by (cases l) simp_all
+  with 9 show ?case
+    unfolding sat_Ands
+    by fastforce
+next
   case (12 P I \<phi>)
   with \<tau>_prefix_conv[OF assms(1,2)] show ?case
     by (cases i) (auto split: if_splits)
