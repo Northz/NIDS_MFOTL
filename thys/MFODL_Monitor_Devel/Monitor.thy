@@ -1621,7 +1621,8 @@ function (sequential) progress :: "(Formula.name \<rightharpoonup> nat) \<Righta
     \<comment> \<open>for an actual implementation use Inf {i. \<forall>k. k < j \<and> k \<le> min (progress P \<phi> j) (progress P \<psi> j) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)},
     for the rewrite rules the following is necessary as the rewrite rule of always leads to a
     funny term\<close>
-    if mem I 0 then
+    \<comment> \<open>the not bounded condition here just allows the rewrite formula to be applied in the else case\<close>
+    if mem I 0 \<or> \<not>bounded I then
       Inf ({i. \<forall>k. k < j \<and> k \<le> min (progress P \<psi> j) (progress P \<phi> j) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)} \<union>
           {i. \<forall>k. k < j \<and> k \<le> progress P \<psi> j \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)})
     else
@@ -2040,7 +2041,7 @@ proof -
 qed
 
 lemma progress_and_release_rewrite_bounded:
-  assumes "\<not> mem I 0"
+  assumes "\<not> mem I 0 \<and> bounded I"
   shows "Monitor.progress \<sigma> P (and_release_safe_bounded \<phi> \<phi>' I \<psi>') j = progress P (formula.And \<phi> (formula.Release \<phi>' I \<psi>')) j"
 proof -
   have "progress P (formula.And \<phi> (formula.Release \<phi>' I \<psi>')) j = min (progress P \<phi> j) (min (progress P (Formula.eventually I Formula.TT) j) (progress P (release_safe_bounded \<phi>' I \<psi>') j))"
@@ -2094,39 +2095,32 @@ lemma pred_mapping_mono_strong: "pred_mapping Q P \<Longrightarrow>
   (\<And>p. p \<in> dom P \<Longrightarrow> Q (the (P p)) \<Longrightarrow> R (the (P p))) \<Longrightarrow> pred_mapping R P"
   by (auto simp: pred_mapping_alt)
 
-thm progress.induct
-thm progress.induct[of "\<lambda>P \<phi> j. \<forall>\<sigma> P' j'. j \<le> j' \<longrightarrow> rel_mapping (\<le>) P P' \<longrightarrow> progress \<sigma> P \<phi> j \<le> progress \<sigma> P' \<phi> j'"]
-
-
 lemma progress_mono_gen: "j \<le> j' \<Longrightarrow> rel_mapping (\<le>) P P' \<Longrightarrow> progress \<sigma> P \<phi> j \<le> progress \<sigma> P' \<phi> j'"
-proof (induction \<phi> arbitrary: P P')
-  case (Pred e ts)
+proof (induction P \<phi> j arbitrary: P P' rule: progress.induct)
+case (1 P e ts j)
   then show ?case
     by (force simp: rel_mapping_alt dom_def split: option.splits)
 next
-  case (Ands l)
-  then show ?case
-    by (auto simp: image_iff intro!: Min.coboundedI[THEN order_trans])
-next
-  case (Until \<phi> I \<psi>)
-  from Until(1,2)[of P P'] Until.prems show ?case
+  case (15 P \<phi> I \<psi> j)
+   from 15(1,2)[of P P'] 15(3-) show ?case
     by (auto 0 3 dest: memR_nonzeroD less_\<tau>D spec[of _ j'] intro!: cInf_superset_mono)
 next
-  case (Release \<phi> I \<psi>)
-
-  have "(Monitor.progress \<sigma> P (release_safe_bounded \<phi> I \<psi>) j) \<le> (Monitor.progress \<sigma> P' (release_safe_bounded \<phi> I \<psi>) j')"
-    sorry
-
+  case (17 P \<phi> I \<psi> j)
   then show ?case
-    using Release(1,2)[of P P'] Release.prems
-    apply (auto  dest: memR_nonzeroD less_\<tau>D spec[of _ j'] intro!: cInf_superset_mono)
-    by (metis \<tau>_mono diff_is_0_eq memR_zero)
- 
+  proof (cases "mem I 0 \<or> \<not> bounded I")
+    case True
+     from 17(1,2)[of P P'] 17(4-) show ?thesis
+       by (auto 0 3 dest: memR_nonzeroD less_\<tau>D spec[of _ j'] intro!: cInf_superset_mono)
+  next
+    case False
+    then show ?thesis using 17 by auto
+  qed
 next
-  case (MatchF I r)
-  from MatchF(1)[of _ P P'] MatchF.prems show ?case
-    by (auto 0 3 simp: Min_le_iff progress_regex_def dest: memR_nonzeroD less_\<tau>D spec[of _ j']
+  case (19 P I r j)
+  from 19(1)[of _ P P'] 19(2-) show ?case
+    apply (auto 0 3 simp: Min_le_iff progress_regex_def dest: memR_nonzeroD less_\<tau>D spec[of _ j']
       elim!: order_trans less_le_trans intro!: cInf_superset_mono)
+    by (metis ex_in_conv le_trans less_le_trans)
 qed (force simp: Min_le_iff progress_regex_def split: option.splits)+
 
 lemma rel_mapping_reflp: "reflp Q \<Longrightarrow> rel_mapping Q P P"
@@ -2135,24 +2129,31 @@ lemma rel_mapping_reflp: "reflp Q \<Longrightarrow> rel_mapping Q P P"
 lemmas progress_mono = progress_mono_gen[OF _ rel_mapping_reflp[unfolded reflp_def], simplified]
 
 lemma progress_le_gen: "pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> progress \<sigma> P \<phi> j \<le> j"
-proof (induction \<phi> arbitrary: P)
-  case (Pred e ts)
+proof (induction P \<phi> j rule: progress.induct)
+  case (1 P e ts j)
   then show ?case
-    by (auto simp: pred_mapping_alt dom_def split: option.splits)
+     by (auto simp: pred_mapping_alt dom_def split: option.splits)
 next
-  case (Ands l)
+  case (9 P l j)
   then show ?case
-    by (auto simp: image_iff intro!: Min.coboundedI[where a="progress \<sigma> P (hd l) j", THEN order_trans])
+     by (auto simp: image_iff intro!: Min.coboundedI[where a="progress \<sigma> P (hd l) j", THEN order_trans])
 next
-  case (Until \<phi> I \<psi>)
+  case (15 P \<phi> I \<psi> j)
   then show ?case
     by (auto intro!: cInf_lower)
 next
-  case (Release \<phi> I \<psi>)
+  case (17 P \<phi> I \<psi> j)
   then show ?case
-    sorry
+  proof (cases "mem I 0 \<or> \<not> bounded I")
+    case True
+    then show ?thesis
+      using 17 by (auto intro!: cInf_lower)
+  next
+    case False
+    then show ?thesis using 17 by auto
+  qed
 next
-  case (MatchF I r)
+  case (19 P I r j)
   then show ?case
     by (auto intro!: cInf_lower)
 qed (force simp: Min_le_iff progress_regex_def split: option.splits)+
@@ -2443,7 +2444,7 @@ next
   let ?P12 = "max_mapping P1 P2"
 
   show ?case
-  proof (cases "mem I 0")
+  proof (cases "mem I 0 \<or> \<not> bounded I")
     case True
     have "i \<le> progress \<sigma> ?P12 (Formula.Release \<phi>1 I \<phi>2) (max j1 j2)"
       unfolding progress.simps if_P[OF True]
@@ -2562,17 +2563,17 @@ lemma progress_time_conv:
   assumes "\<forall>i<j. \<tau> \<sigma> i = \<tau> \<sigma>' i"
   shows "progress \<sigma> P \<phi> j = progress \<sigma>' P \<phi> j"
   using assms
-proof (induction \<phi> arbitrary: P)
-  case (Until \<phi>1 I \<phi>2)
+proof (induction P \<phi> j arbitrary: P rule: progress.induct)
+  case (15 P \<phi> I \<psi> j)
   have *: "i \<le> j - 1 \<longleftrightarrow> i < j" if "j \<noteq> 0" for i
     using that by auto
-  with Until show ?case
+  with 15 show ?case
   proof (cases "bounded I")
     case True
     then show ?thesis
     proof (cases "j")
       case (Suc n)
-      with * Until show ?thesis
+      with * 15 show ?thesis
         using \<tau>_mono[THEN trans_le_add1]
         by (auto 6 0
             intro!: box_equals[OF arg_cong[where f=Inf]
@@ -2580,21 +2581,21 @@ proof (induction \<phi> arbitrary: P)
     qed simp
   qed (simp add: bounded_memR)
 next
-  case (Release \<phi>1 I \<phi>2)
+  case (17 P \<phi> I \<psi> j)
   have *: "i \<le> j - 1 \<longleftrightarrow> i < j" if "j \<noteq> 0" for i
     using that by auto
-  with Release show ?case
-  proof (cases "mem I 0")
+  with 17 show ?case
+  proof (cases "mem I 0 \<or> \<not> bounded I")
     case mem: True
     show ?thesis
-      using mem Release
+      using mem 17
     proof (cases "bounded I")
       case True
       then show ?thesis
         using mem
       proof (cases "j")
         case (Suc n)
-        with * Release show ?thesis
+        with * 17 show ?thesis
           using \<tau>_mono[THEN trans_le_add1] mem
           by (auto 6 0
               intro!: box_equals[OF arg_cong[where f=Inf]
@@ -2603,13 +2604,13 @@ next
     qed (auto simp add: bounded_memR)
   next
     case False
-    then show ?thesis sorry
+    then show ?thesis using 17 by auto
   qed
 next
-  case (MatchF I r)
+  case (19 P I r j)
   have *: "i \<le> j - 1 \<longleftrightarrow> i < j" if "j \<noteq> 0" for i
     using that by auto
-  with MatchF show ?case using \<tau>_mono[THEN trans_le_add1]
+  with 19 show ?case using \<tau>_mono[THEN trans_le_add1]
     by (cases "bounded I"; cases j)
       ((auto 6 0 simp: progress_le_gen progress_regex_def intro!: box_equals[OF arg_cong[where f=Inf]
             cInf_restrict_nat[symmetric, where x="j-1"] cInf_restrict_nat[symmetric, where x="j-1"]]) [])+
@@ -2634,15 +2635,16 @@ proof (induct rule: rtranclp_induct)
     by (auto elim!: rtrancl_into_rtrancl[to_pred, rotated])
 qed auto
 
+
 lemma sat_prefix_conv_gen:
   assumes "prefix_of \<pi> \<sigma>" and "prefix_of \<pi> \<sigma>'"
   shows "i < progress \<sigma> P \<phi> (plen \<pi>) \<Longrightarrow> dom V = dom V' \<Longrightarrow> dom P = dom V \<Longrightarrow>
     pred_mapping (\<lambda>x. x \<le> plen \<pi>) P \<Longrightarrow>
     (\<And>p i \<phi>. p \<in> dom V \<Longrightarrow> i < the (P p) \<Longrightarrow> the (V p) i = the (V' p) i) \<Longrightarrow>
     Formula.sat \<sigma> V v i \<phi> \<longleftrightarrow> Formula.sat \<sigma>' V' v i \<phi>"
-proof (induction \<phi> arbitrary: P V V' v i)
-  case (Pred e ts)
-  from Pred.prems(1,4) have "i < plen \<pi>"
+proof (induction P \<phi> "(plen \<pi>)" arbitrary: V V' v i rule: progress.induct)
+case (1 P e ts)
+  from 1(1,4) have "i < plen \<pi>"
     by (blast intro!: order.strict_trans2 progress_le_gen)
   show ?case proof (cases "V e")
     case None
@@ -2652,14 +2654,14 @@ proof (induction \<phi> arbitrary: P V V' v i)
     case (Some a)
     obtain a' where "V' e = Some a'" using Some \<open>dom V = dom V'\<close> by auto
     then have "i < the (P e)"
-      using Pred.prems(1-3) by (auto split: option.splits)
+      using 1(1-3) by (auto split: option.splits)
     then have "the (V e) i = the (V' e) i"
-      using Some by (intro Pred.prems(5)) (simp_all add: domI)
+      using Some by (intro 1(5)) (simp_all add: domI)
     with Some \<open>V' e = Some a'\<close> show ?thesis by simp
   qed
 next
-  case (Let p \<phi> \<psi>)
-  let ?V = "\<lambda>V \<sigma>. (V(p \<mapsto> \<lambda>i. {v. length v = Formula.nfv \<phi> \<and> Formula.sat \<sigma> V v i \<phi>}))"
+  case (2 P p \<phi> \<psi>)
+  (*let ?V = "\<lambda>V \<sigma>. (V(p \<mapsto> \<lambda>i. {v. length v = Formula.nfv \<phi> \<and> Formula.sat \<sigma> V v i \<phi>}))"
   show ?case unfolding sat.simps proof (rule Let.IH(2))
     from Let.prems show "i < progress \<sigma> (P(p \<mapsto> progress \<sigma> P \<phi> (plen \<pi>))) \<psi> (plen \<pi>)"
       by simp
@@ -2679,47 +2681,30 @@ next
       case False
       with 1 2 show ?thesis by (auto intro!: Let.prems(5))
     qed
-  qed
+  qed*)
 next
-  case (Eq t1 t2)
-  show ?case by simp
-next
-  case (Neg \<phi>)
-  then show ?case by simp
-next
-  case (Or \<phi>1 \<phi>2)
-  then show ?case by auto
-next
-  case (Ands l)
-  from Ands.prems have "\<forall>\<phi>\<in>set l. i < progress \<sigma> P \<phi> (plen \<pi>)"
-    by (cases l) simp_all
-  with Ands show ?case unfolding sat_Ands by blast
-next
-  case (Exists \<phi>)
-  then show ?case by simp
-next
-  case (Prev I \<phi>)
+  case (12 P I \<phi>)
   with \<tau>_prefix_conv[OF assms(1,2)] show ?case
     by (cases i) (auto split: if_splits)
 next
-  case (Next I \<phi>)
+  case (13 P I \<phi>)
   then have "Suc i < plen \<pi>"
     by (auto intro: order.strict_trans2[OF _ progress_le_gen[of _ P \<sigma> \<phi>]])
-  with Next.prems \<tau>_prefix_conv[OF assms(1,2)] show ?case
+  with 13 \<tau>_prefix_conv[OF assms(1,2)] show ?case
     unfolding sat.simps
-    by (intro conj_cong Next) auto
+    by (intro conj_cong 13) auto
 next
-  case (Since \<phi>1 I \<phi>2)
-  then have "i < plen \<pi>"
+  case (14 P \<phi> I \<psi>)
+   then have "i < plen \<pi>"
     by (auto elim!: order.strict_trans2[OF _ progress_le_gen])
-  with Since.prems \<tau>_prefix_conv[OF assms(1,2)] show ?case
+  with 14 \<tau>_prefix_conv[OF assms(1,2)] show ?case
     unfolding sat.simps
-    by (intro conj_cong ex_cong ball_cong Since) auto
+    by (intro conj_cong ex_cong ball_cong 14) auto
 next
-  case (Until \<phi>1 I \<phi>2)
-  from Until.prems have [simp]: "bounded I"
+  case (15 P \<phi>1 I \<phi>2)
+  from 15 have [simp]: "bounded I"
     by (cases "bounded I") (auto simp: bounded_memR Inf_UNIV_nat)
-  from Until.prems obtain j where "\<not> memR I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+  from 15 obtain j where "\<not> memR I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
     "j \<le> progress \<sigma> P \<phi>1 (plen \<pi>)" "j \<le> progress \<sigma> P \<phi>2 (plen \<pi>)"
     by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
       dest!: le_cInf_iff[THEN iffD1, rotated -1])
@@ -2728,9 +2713,9 @@ next
     using that
     by (auto 0 3 elim!: order.strict_trans2[rotated] elim: contrapos_np intro!: less_\<tau>D[of \<sigma> k j])
   have 3: "k < plen \<pi>" if "memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)" for k
-    using 1[OF that] Until(6) by (auto simp only: less_eq_Suc_le order.trans[OF _ progress_le_gen])
+    using 1[OF that] 15(6) by (auto simp only: less_eq_Suc_le order.trans[OF _ progress_le_gen])
 
-  from Until.prems have "i < progress \<sigma>' P (Formula.Until \<phi>1 I \<phi>2) (plen \<pi>)"
+  from 15 have "i < progress \<sigma>' P (Formula.Until \<phi>1 I \<phi>2) (plen \<pi>)"
     unfolding progress_prefix_conv[OF assms(1,2)] by simp
   then obtain j where "\<not> memR I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)"
     "j \<le> progress \<sigma>' P \<phi>1 (plen \<pi>)" "j \<le> progress \<sigma>' P \<phi>2 (plen \<pi>)"
@@ -2742,21 +2727,21 @@ next
     using that
     by (auto 0 3 elim!: order.strict_trans2[rotated] elim: contrapos_np intro!: less_\<tau>D[of \<sigma>' k j])
   have 31: "k < plen \<pi>" if "memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" for k
-    using 11[OF that] Until(6) by (auto simp only: less_eq_Suc_le order.trans[OF _ progress_le_gen])
+    using 11[OF that] 15(6) by (auto simp only: less_eq_Suc_le order.trans[OF _ progress_le_gen])
   thm order.trans[OF _ progress_le_gen]
 
   show ?case unfolding sat.simps
   proof ((intro ex_cong iffI; elim conjE), goal_cases LR RL)
     case (LR j)
-    with Until.IH(1)[OF 1] Until.IH(2)[OF 2] \<tau>_prefix_conv[OF assms(1,2) 3] Until.prems show ?case
+    with 15(1)[OF 1] 15(2)[OF 2] \<tau>_prefix_conv[OF assms(1,2) 3] 15(3-) show ?case
       by (auto 0 4 simp: le_diff_conv add.commute memR_antimono dest: less_imp_le order.trans[OF \<tau>_mono, rotated])
   next
     case (RL j)
-    with Until.IH(1)[OF 11] Until.IH(2)[OF 21] \<tau>_prefix_conv[OF assms(1,2) 31] Until.prems show ?case
+    with 15(1)[OF 11] 15(2)[OF 21] \<tau>_prefix_conv[OF assms(1,2) 31] 15(3-) show ?case
       by (auto 0 4 simp: le_diff_conv add.commute memR_antimono dest: less_imp_le order.trans[OF \<tau>_mono, rotated])
   qed
 next
-  case (Trigger \<phi> I \<psi>)
+  case (16 P \<phi> I \<psi>)
   then have "i < plen \<pi>"
     by (auto elim!: order.strict_trans2[OF _ progress_le_gen])
   then have "\<forall>j\<le>i. j < plen \<pi>"
@@ -2768,20 +2753,42 @@ next
   have sat_subformulas:
     "\<forall>j\<le>i. Formula.sat \<sigma> V v j \<phi> = Formula.sat \<sigma>' V' v j \<phi>"    
     "\<forall>j\<le>i. Formula.sat \<sigma> V v j \<psi> = Formula.sat \<sigma>' V' v j \<psi>"
-    using Trigger(1-2)[OF _ Trigger(4,5,6,7)] Trigger(3)
+    using 16(1-2)[OF _ 16(4,5,6,7)] 16(3)
     by auto
 
   show ?case
     using sat_subformulas t_eq
     by auto
 next
-  case (Release \<phi> I \<psi>)
+  case (17 P \<phi> I \<psi>)
+
+ have \<tau>_prefix_diff_conv: "\<And>k i. k < plen \<pi> \<Longrightarrow> (\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
+  proof -
+    fix k i
+    assume assm: "k < plen \<pi>"
+    {
+      assume "i \<le> k"
+      then have "(\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
+        using assm \<tau>_prefix_conv[OF assms(1,2)]
+        by auto
+    }
+    moreover {
+      assume "i > k"
+      then have
+        "\<tau> \<sigma> k - \<tau> \<sigma> i = 0"
+        "\<tau> \<sigma>' k - \<tau> \<sigma>' i = 0"
+        by auto
+      then have "(\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
+        by auto
+    }
+    ultimately show "(\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" using not_le_imp_less by blast
+  qed
 
   show ?case
-  proof (cases "mem I 0")
+  proof (cases "mem I 0 \<or> \<not> bounded I")
     case True
     have [simp]: "bounded (flip_int_double_upper I)"
-      using True Release.prems
+      using True 17
       by (cases "bounded (flip_int_double_upper I)") (auto simp: bounded_memR Inf_UNIV_nat)
   
     define A where "A = {i. \<forall>k. k < (plen \<pi>) \<and> k \<le> min (progress \<sigma> P \<psi> (plen \<pi>)) (progress \<sigma> P \<phi> (plen \<pi>)) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
@@ -2789,28 +2796,6 @@ next
   
     define A' where "A' = {i. \<forall>k. k < (plen \<pi>) \<and> k \<le> min (progress \<sigma>' P \<psi> (plen \<pi>)) (progress \<sigma>' P \<phi> (plen \<pi>)) \<longrightarrow> memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)}"
     define B' where "B' = {i. \<forall>k. k < (plen \<pi>) \<and> k \<le> progress \<sigma>' P \<psi> (plen \<pi>) \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma>' k - \<tau> \<sigma>' i)}"
-  
-    have \<tau>_prefix_diff_conv: "\<And>k i. k < plen \<pi> \<Longrightarrow> (\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
-    proof -
-      fix k i
-      assume assm: "k < plen \<pi>"
-      {
-        assume "i \<le> k"
-        then have "(\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
-          using assm \<tau>_prefix_conv[OF assms(1,2)]
-          by auto
-      }
-      moreover {
-        assume "i > k"
-        then have
-          "\<tau> \<sigma> k - \<tau> \<sigma> i = 0"
-          "\<tau> \<sigma>' k - \<tau> \<sigma>' i = 0"
-          by auto
-        then have "(\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
-          by auto
-      }
-      ultimately show "(\<tau> \<sigma> k - \<tau> \<sigma> i) = (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" using not_le_imp_less by blast
-    qed
   
     have AA'_eq: "A = A'"
       using \<tau>_prefix_diff_conv
@@ -2850,7 +2835,7 @@ next
           "\<not> memR I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
           "j \<le> progress \<sigma> P \<phi> (plen \<pi>)"
           "j \<le> progress \<sigma> P \<psi> (plen \<pi>)"
-          using Release.prems
+          using 17
           unfolding A_def
           by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
             dest!: le_cInf_iff[THEN iffD1, rotated -1])
@@ -2867,7 +2852,7 @@ next
         then obtain j' where
           "\<not> memR (flip_int_double_upper I) (\<tau> \<sigma> j' - \<tau> \<sigma> i)"
           "j' \<le> progress \<sigma> P \<psi> (plen \<pi>)"
-          using Release.prems(1)
+          using 17(5)
           unfolding B_def
           by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
             dest!: le_cInf_iff[THEN iffD1, rotated -1])
@@ -2923,7 +2908,7 @@ next
             then have "i \<ge> Inf A"
               by (simp add: cInf_lower)
             moreover have "i < Inf A"
-              using Release.prems(1) release_progress_eq False
+              using 17(5) release_progress_eq False
               by auto
             ultimately have "False"
               by auto
@@ -2963,7 +2948,7 @@ next
         using progress_eq
         by auto
       then have "\<exists>j. \<not> memR (flip_int_double_upper I) (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> j \<le> progress \<sigma> P \<psi> (plen \<pi>)"
-        using Release.prems
+        using 17
         unfolding B_def
         by (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
           dest!: le_cInf_iff[THEN iffD1, rotated -1])
@@ -3001,7 +2986,7 @@ next
           "\<not> memR I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)"
           "j \<le> progress \<sigma>' P \<phi> (plen \<pi>)"
           "j \<le> progress \<sigma>' P \<psi> (plen \<pi>)"
-          using Release.prems(1)
+          using 17(5)
           unfolding A'_def progress_prefix_conv[OF assms(1,2)]
           by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
             dest!: le_cInf_iff[THEN iffD1, rotated -1])
@@ -3019,7 +3004,7 @@ next
         then obtain j' where
           "\<not> memR (flip_int_double_upper I) (\<tau> \<sigma>' j' - \<tau> \<sigma>' i)"
           "j' \<le> progress \<sigma>' P \<psi> (plen \<pi>)"
-          using Release.prems(1)
+          using 17(5)
           unfolding B'_def progress_prefix_conv[OF assms(1,2)]
           by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
             dest!: le_cInf_iff[THEN iffD1, rotated -1])
@@ -3075,7 +3060,7 @@ next
             then have "i \<ge> Inf A'"
               by (simp add: cInf_lower)
             moreover have "i < Inf A'"
-              using Release.prems(1) release_progress_eq False
+              using 17(5) release_progress_eq False
               unfolding AA'_eq BB'_eq progress_prefix_conv[OF assms(1,2)]
               by auto
             ultimately have "False"
@@ -3117,7 +3102,7 @@ next
         unfolding progress_prefix_conv[OF assms(1,2)]
         by auto
       then have "\<exists>j. \<not> memR (flip_int_double_upper I) (\<tau> \<sigma>' j - \<tau> \<sigma>' i) \<and> j \<le> progress \<sigma>' P \<psi> (plen \<pi>)"
-        using Release.prems
+        using 17(5)
         unfolding B'_def progress_prefix_conv[OF assms(1,2)]
         by (auto 0 4 simp add: less_eq_Suc_le not_le intro: Suc_leI dest: spec[of _ "i"]
           dest!: le_cInf_iff[THEN iffD1, rotated -1])
@@ -3142,9 +3127,9 @@ next
       by auto
   
     have 3: "k < plen \<pi>" if "memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)" for k
-      using 1[OF that] Release(6) by (auto simp only: less_eq_Suc_le order.trans[OF _ progress_le_gen])
+      using 1[OF that] 17(8) by (auto simp only: less_eq_Suc_le order.trans[OF _ progress_le_gen])
     have 31: "k < plen \<pi>" if "memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" for k
-      using 11[OF that] Release(6) by (auto simp only: less_eq_Suc_le order.trans[OF _ progress_le_gen])
+      using 11[OF that] 17(8) by (auto simp only: less_eq_Suc_le order.trans[OF _ progress_le_gen])
   
     have t_eq1: "\<And>j. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> \<tau> \<sigma> j = \<tau> \<sigma>' j"
       using \<tau>_prefix_conv[OF assms(1,2) 3] memR_flip_int_double_upper
@@ -3153,10 +3138,11 @@ next
     have t_eq2: "\<And>j. memR I (\<tau> \<sigma>' j - \<tau> \<sigma>' i) \<Longrightarrow> \<tau> \<sigma> j = \<tau> \<sigma>' j"
       using \<tau>_prefix_conv[OF assms(1,2) 31] memR_flip_int_double_upper
       by auto
+    
     have sat_subformulas:
       "\<And>j v. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> Formula.sat \<sigma> V v j \<phi> = Formula.sat \<sigma>' V' v j \<phi>"
       "\<And>j v. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> Formula.sat \<sigma> V v j \<psi> = Formula.sat \<sigma>' V' v j \<psi>"
-      using Release.IH(1)[OF 1 Release.prems(2-5)] Release.IH(2)[OF 2 Release.prems(2-5)] Release.prems(1) memR_flip_int_double_upper
+      using 17(2)[OF True 1 17(6-9)] 17(1)[OF True 2 17(6-9)] 17(5) memR_flip_int_double_upper
       by auto
   
     have "\<And>j k. memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> k \<le> j \<Longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
@@ -3216,33 +3202,173 @@ next
     qed
   next
     case False
-    then show ?thesis sorry
+    then have i_le: "i < Monitor.progress \<sigma> P (release_safe_bounded \<phi> I \<psi>) (plen \<pi>)"
+      using 17(5)
+      by auto
+
+    have rewrite_conds: "bounded I" "\<not> mem I 0"
+      using False
+      by auto
+    
+    have sat_safe_bounded_eq: "\<And>v.
+        Formula.sat \<sigma> V v i (release_safe_bounded \<phi> I \<psi>) = Formula.sat \<sigma>' V' v i (release_safe_bounded \<phi> I \<psi>)"
+      using 17(4)[OF False i_le 17(6-9)] 17(5)
+      by auto
+
+    show ?thesis
+    proof (cases "\<exists>j\<in>{i..<plen \<pi>}. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)")
+      case True
+      then have "\<exists>j\<in>{i..<plen \<pi>}. mem I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)"
+        using \<tau>_prefix_diff_conv
+        by auto
+      then have
+        "Formula.sat \<sigma> V v i (Formula.eventually I Formula.TT)"
+        "Formula.sat \<sigma>' V' v i (Formula.eventually I Formula.TT)"
+        using True
+        by auto
+      then have r:
+        "Formula.sat \<sigma> V v i (formula.Release \<phi> I \<psi>) = Formula.sat \<sigma> V v i (release_safe_bounded \<phi> I \<psi>)"
+        "Formula.sat \<sigma>' V' v i (formula.Release \<phi> I \<psi>) = Formula.sat \<sigma>' V' v i (release_safe_bounded \<phi> I \<psi>)"
+        using sat_release_rewrite[OF rewrite_conds, of _ _ v i \<phi> \<psi>]
+        by auto
+      
+      show ?thesis
+        using sat_safe_bounded_eq[of v]
+        unfolding r
+        by blast
+    next
+      case int_props: False
+      then have int_props:
+        "\<forall>j\<in>{i..<plen \<pi>}. \<not>mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+        "\<forall>j\<in>{i..<plen \<pi>}. \<not>mem I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)"
+        using \<tau>_prefix_diff_conv
+        by auto
+
+      have "i < progress \<sigma> P (release_safe_bounded \<phi> I \<psi>) (plen \<pi>)"
+        using False 17(5)
+        by auto
+      then have i_le: "i < progress \<sigma> P (Formula.eventually I Formula.TT) (plen \<pi>)"
+        unfolding release_safe_bounded_def
+        by auto
+      moreover have
+        "progress \<sigma> P (Formula.eventually I Formula.TT) (plen \<pi>) =
+        progress \<sigma>' P (Formula.eventually I Formula.TT) (plen \<pi>)"
+        by (meson assms(1) assms(2) progress_prefix_conv)
+      ultimately have i_le': "i < progress \<sigma>' P (Formula.eventually I Formula.TT) (plen \<pi>)"
+        by auto
+
+      have "\<And>j. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<Longrightarrow> j < plen \<pi>"
+      proof -
+        fix j
+        assume mem: "mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+        {
+          assume assm: "j \<ge> plen \<pi>"
+          have "{i. \<forall>k. k < plen \<pi> \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)} = {i. \<forall>k. k < plen \<pi> \<and> k \<le> plen \<pi> \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
+            by auto
+          have "\<And>k. k < plen \<pi> \<Longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+          proof -
+            fix k
+            assume "k < plen \<pi>"
+            then have "k < j"
+              using assm
+              by auto
+            then have "\<tau> \<sigma> k \<le> \<tau> \<sigma> j"
+              by auto
+            then show "memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)"
+              using mem
+              by auto
+          qed
+          then have "i \<in> {i. \<forall>k. k < plen \<pi> \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
+            by auto
+          then have "i \<ge> progress \<sigma> P (Formula.eventually I Formula.TT) (plen \<pi>)"
+            unfolding progress_eventually progress_TT
+            by (auto simp add: cInf_lower)
+          then have "False"
+            using i_le
+            by auto
+        }
+        then show "j < plen \<pi>"
+          using not_le
+          by blast
+      qed
+      then have "\<forall>j\<ge>plen \<pi>. \<not>mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+        using leD
+        by blast
+      then have not_mem_\<sigma>: "\<forall>j\<ge>i. \<not> mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+        using int_props
+        by auto
+
+      have "\<And>j. mem I (\<tau> \<sigma>' j - \<tau> \<sigma>' i) \<Longrightarrow> j < plen \<pi>"
+      proof -
+        fix j
+        assume mem: "mem I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)"
+        {
+          assume assm: "j \<ge> plen \<pi>"
+          have "{i. \<forall>k. k < plen \<pi> \<longrightarrow> memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)} = {i. \<forall>k. k < plen \<pi> \<and> k \<le> plen \<pi> \<longrightarrow> memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)}"
+            by auto
+          have "\<And>k. k < plen \<pi> \<Longrightarrow> memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
+          proof -
+            fix k
+            assume "k < plen \<pi>"
+            then have "k < j"
+              using assm
+              by auto
+            then have "\<tau> \<sigma>' k \<le> \<tau> \<sigma>' j"
+              by auto
+            then show "memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)"
+              using mem
+              by auto
+          qed
+          then have "i \<in> {i. \<forall>k. k < plen \<pi> \<longrightarrow> memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)}"
+            by auto
+          then have "i \<ge> progress \<sigma>' P (Formula.eventually I Formula.TT) (plen \<pi>)"
+            unfolding progress_eventually progress_TT
+            by (auto simp add: cInf_lower)
+          then have "False"
+            using i_le'
+            by auto
+        }
+        then show "j < plen \<pi>"
+          using not_le
+          by blast
+      qed
+      then have "\<forall>j\<ge>plen \<pi>. \<not>mem I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)"
+        using leD
+        by blast
+      then have not_mem_\<sigma>': "\<forall>j\<ge>i. \<not> mem I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)"
+        using int_props
+        by auto
+
+      show ?thesis
+        using not_mem_\<sigma> not_mem_\<sigma>'
+        by auto
+    qed
   qed
 next
-  case (MatchP I r)
+  case (18 P I r)
   then have "i < plen \<pi>"
     by (force simp: pred_mapping_alt elim!: order.strict_trans2[OF _ progress_le_gen])
-  with MatchP.prems \<tau>_prefix_conv[OF assms(1,2)] show ?case
+  with 18 \<tau>_prefix_conv[OF assms(1,2)] show ?case
     unfolding sat.simps
-    by (intro ex_cong conj_cong match_cong_strong MatchP) (auto simp: progress_regex_def split: if_splits)
+    by (intro ex_cong conj_cong match_cong_strong 18) (auto simp: progress_regex_def split: if_splits)
 next
-  case (MatchF I r)
-  from MatchF.prems have [simp]: "bounded I"
+  case (19 P I r)
+  from 19 have [simp]: "bounded I"
     by (cases "bounded I") (auto simp: bounded_memR Inf_UNIV_nat)
   show ?case
   proof (cases "regex.atms r = {}")
     case True
-    from MatchF.prems(1) obtain j where "\<not> memR I (\<tau> \<sigma> j - \<tau> \<sigma> i)" "j \<le> plen \<pi>"
+    from 19 obtain j where "\<not> memR I (\<tau> \<sigma> j - \<tau> \<sigma> i)" "j \<le> plen \<pi>"
       by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le dest!: le_cInf_iff[THEN iffD1, rotated -1])
     then have 1: "k < plen \<pi>" if "memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)" for k
       by (meson \<tau>_mono diff_le_mono memR_antimono not_le_imp_less that)
-    from MatchF.prems have "i < progress \<sigma>' P (Formula.MatchF I r) (plen \<pi>)"
+    from 19 have "i < progress \<sigma>' P (Formula.MatchF I r) (plen \<pi>)"
       unfolding progress_prefix_conv[OF assms(1,2)] by blast
     then obtain j where "\<not> memR I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)" "j \<le> plen \<pi>"
       by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le dest!: le_cInf_iff[THEN iffD1, rotated -1])
     then have 2: "k < plen \<pi>" if "memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" for k
       by (meson \<tau>_mono diff_le_mono memR_antimono not_le_imp_less that)
-    from MatchF.prems(1,4) True show ?thesis
+    from 19 True show ?thesis
       unfolding sat.simps conj_commute[of "memL _ _"]
     proof (intro ex_cong conj_cong match_cong_strong, goal_cases memL memR sat)
       case (memL j)
@@ -3259,7 +3385,7 @@ next
     qed auto
   next
     case False
-    from MatchF.prems(1) False obtain j where "\<not> memR I (\<tau> \<sigma> j - \<tau> \<sigma> i)" "(\<forall>x\<in>regex.atms r. j \<le> progress \<sigma> P x (plen \<pi>))"
+    from 19 False obtain j where "\<not> memR I (\<tau> \<sigma> j - \<tau> \<sigma> i)" "(\<forall>x\<in>regex.atms r. j \<le> progress \<sigma> P x (plen \<pi>))"
       by atomize_elim (auto 0 6 simp add: less_eq_Suc_le not_le progress_regex_def
         dest!: le_cInf_iff[THEN iffD1, rotated -1])
     then have 1: "\<phi> \<in> regex.atms r \<Longrightarrow> k < progress \<sigma> P \<phi> (plen \<pi>)" if "memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)" for k \<phi>
@@ -3267,9 +3393,9 @@ next
       by (auto 0 3 elim!: contrapos_np[of _ "_ < _"] simp: diff_le_mono)
     then have 2: "k < plen \<pi>" if "memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)" "regex.atms r \<noteq> {}" for k
       using that
-      by (fastforce intro: order.strict_trans2[OF _ progress_le_gen[OF MatchF(5), of \<sigma>], of k])
+      by (fastforce intro: order.strict_trans2[OF _ progress_le_gen[OF 19(5), of \<sigma>], of k])
 
-    from MatchF.prems have "i < progress \<sigma>' P (Formula.MatchF I r) (plen \<pi>)"
+    from 19 have "i < progress \<sigma>' P (Formula.MatchF I r) (plen \<pi>)"
       unfolding progress_prefix_conv[OF assms(1,2)] by blast
     with False obtain j where "\<not> memR I (\<tau> \<sigma>' j - \<tau> \<sigma>' i)" "(\<forall>x\<in>regex.atms r. j \<le> progress \<sigma>' P x (plen \<pi>))"
       by atomize_elim (auto 0 6 simp add: less_eq_Suc_le not_le progress_regex_def
@@ -3278,9 +3404,11 @@ next
       using that using progress_prefix_conv[OF assms(1,2)]
       by (auto 0 3 elim!: contrapos_np[of _ "_ < _"] simp: diff_le_mono)
     have 21: "k < plen \<pi>" if "memR I (\<tau> \<sigma>' k - \<tau> \<sigma>' i)" for k
-      using 11[OF that(1)] False by (fastforce intro: order.strict_trans2[OF _ progress_le_gen[OF MatchF(5), of \<sigma>], of k])
+      using 11[OF that(1)] False by (fastforce intro: order.strict_trans2[OF _ progress_le_gen[OF 19(5), of \<sigma>], of k])
+ 
+    
     show ?thesis unfolding sat.simps conj_commute[of "memL _ _"]
-    proof ((intro ex_cong conj_cong match_cong_strong MatchF(1)[OF _ _ MatchF(3-6)]; assumption?), goal_cases memR memL progress)
+    proof ((intro ex_cong conj_cong match_cong_strong 19(1)[OF False _ _ 19(3-6)]; assumption?), goal_cases memR memL progress)
       case (memR j)
       with False show ?case
         by (intro iffI)
@@ -3299,7 +3427,7 @@ next
           (subst (1 2) \<tau>_prefix_conv[OF assms(1,2) 21]; auto simp: diff_le_mono memR_antimono elim!: contrapos_np[of _ False])
     qed
   qed
-qed auto
+qed (auto)
 
 lemma sat_prefix_conv:
   assumes "prefix_of \<pi> \<sigma>" and "prefix_of \<pi> \<sigma>'"
