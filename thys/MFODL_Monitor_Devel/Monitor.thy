@@ -1916,73 +1916,6 @@ proof -
   ultimately show ?thesis by auto
 qed
 
-(*lemma "progress P (release_safe_bounded \<phi> I \<psi>) j = 0"
-proof -
-  have progress_eq: "progress P (release_safe_bounded \<phi> I \<psi>) j = min
-    (progress P (Formula.eventually I Formula.TT) j)
-    (min
-      (progress P (always_safe_bounded I \<psi>) j)
-      (min
-        (progress P (Formula.eventually (flip_int_less_lower I) \<phi>) j)
-        (progress P (Formula.eventually (flip_int_less_lower I) (formula.Next all (formula.Until \<psi> (int_remove_lower_bound I) (formula.And \<psi> \<phi>)))) j)
-      )
-    )
-  "
-  unfolding release_safe_bounded_def
-  by (auto simp only: progress.simps)
-
-
-
-  have "\<Sqinter> {i. \<forall>k. k < j \<and> k \<le> min (local.progress P \<psi> j) (local.progress P \<phi> j) \<longrightarrow> memR (int_remove_lower_bound I) (\<tau> \<sigma> k - \<tau> \<sigma> i)} - Suc 0 \<le> local.progress P \<phi> j"
-  proof -
-    define A where "A = {i. \<forall>k. k < j \<and> k \<le> min (local.progress P \<psi> j) (local.progress P \<phi> j) \<longrightarrow> memR (int_remove_lower_bound I) (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
-    have "(local.progress P \<phi> j) \<in> A"
-      unfolding A_def
-      by auto
-    then have "\<Sqinter> A \<le> local.progress P \<phi> j"
-      using cInf_lower
-      by blast
-    then show ?thesis unfolding A_def by auto
-  qed
-
-  then have subformulas: "progress P \<phi> j \<ge> progress P (formula.Next all (formula.Until \<psi> (int_remove_lower_bound I) (formula.And \<psi> \<phi>))) j"
-    by auto
-  
-  have "min
-        (progress P (Formula.eventually (flip_int_less_lower I) \<phi>) j)
-        (progress P (Formula.eventually (flip_int_less_lower I) (formula.Next all (formula.Until \<psi> (int_remove_lower_bound I) (formula.And \<psi> \<phi>)))) j) =
-        (progress P (Formula.eventually (flip_int_less_lower I) (formula.Next all (formula.Until \<psi> (int_remove_lower_bound I) (formula.And \<psi> \<phi>)))) j)
-  "
-    using progress_eventually_subformulas[OF subformulas]
-    by auto
-
-  moreover have "min
-        (progress P (Formula.eventually I Formula.TT) j)
-        (progress P (always_safe_bounded I \<psi>) j) =
-        (progress P (always_safe_bounded I \<psi>) j)
-        "
-  proof -
-    have "(progress P (always_safe_bounded I \<psi>) j) \<le> progress P (Formula.eventually I \<psi>) j"
-      unfolding always_safe_bounded_def
-      by auto
-    moreover have "progress P (Formula.eventually I \<psi>) j \<le> progress P (Formula.eventually I Formula.TT) j"
-    proof -
-      have subformulas: "progress P \<psi> j \<le> progress P Formula.TT j"
-        sorry
-      show ?thesis
-        using progress_eventually_subformulas[OF subformulas]
-        by auto
-    qed
-    ultimately show ?thesis by auto
-  qed
-  ultimately have "progress P (release_safe_bounded \<phi> I \<psi>) j = min
-      (progress P (always_safe_bounded I \<psi>) j)
-      (progress P (Formula.eventually (flip_int_less_lower I) (formula.Next all (formula.Until \<psi> (int_remove_lower_bound I) (formula.And \<psi> \<phi>)))) j)
-    "
-    using progress_eq
-    by linarith
-qed*)
-
 lemma progress_trigger_0_lower_bound: "progress P (trigger_safe_0 \<phi> I \<psi>) j \<le> progress P (formula.Trigger \<phi> I \<psi>) j"
   by (auto simp add: trigger_safe_0_def)
 
@@ -2241,21 +2174,56 @@ lemma rel_mapping_max_mapping_fun_upd: "dom P2 \<subseteq> dom P1 \<Longrightarr
   rel_mapping (\<le>) P2 (max_mapping P1 P2(p \<mapsto> y))"
   by (auto simp: rel_mapping_alt max_mapping_def split: option.splits)
 
+(* as soon as release is implemented natively, this function can be removed.
+   it is only used for it's induction rule
+*)
+
+function (sequential) dummy :: "Formula.formula \<Rightarrow> bool" where
+  "dummy (Formula.Pred e ts) = True"
+| "dummy (Formula.Let p \<phi> \<psi>) = (dummy \<phi> \<and> dummy \<psi>)"
+| "dummy (Formula.Eq t1 t2) = True"
+| "dummy (Formula.Less t1 t2) = True"
+| "dummy (Formula.LessEq t1 t2) = True"
+| "dummy (Formula.Neg \<phi>) = dummy \<phi>"
+| "dummy (Formula.Or \<phi> \<psi>) = (dummy \<phi> \<and> dummy \<psi>)"
+| "dummy (Formula.And \<phi> \<psi>) = (dummy \<phi> \<and> dummy \<psi>)"
+| "dummy (Formula.Ands l) = fold (\<and>) (map (\<lambda>\<phi>. dummy \<phi>) l) True"
+| "dummy (Formula.Exists \<phi>) = dummy \<phi>"
+| "dummy (Formula.Agg y \<omega> b f \<phi>) = dummy \<phi>"
+| "dummy (Formula.Prev I \<phi>) = dummy \<phi>"
+| "dummy (Formula.Next I \<phi>) = dummy \<phi>"
+| "dummy (Formula.Since \<phi> I \<psi>) = (dummy \<phi> \<and> dummy \<psi>)"
+| "dummy (Formula.Until \<phi> I \<psi>) = (dummy \<phi> \<and> dummy \<psi>)"
+| "dummy (Formula.Trigger \<phi> I \<psi>) = (dummy \<phi> \<and> dummy \<psi>)"
+| "dummy (Formula.Release \<phi> I \<psi>) = (
+    if mem I 0 \<or> \<not>bounded I then
+      (dummy \<phi>) \<and> (dummy \<psi>)
+    else
+      (dummy (release_safe_bounded \<phi> I \<psi>))
+    )"
+| "dummy (Formula.MatchP I r) = Regex.pred_regex dummy r"
+| "dummy (Formula.MatchF I r) =Regex.pred_regex dummy r"
+  by pat_completeness auto
+termination
+  using size'_and_release size'_Release size'_Or size'_release_aux
+  by (relation "measure size'")
+  (auto simp add: Nat.less_Suc_eq_le eventually_def Formula.TT_def Formula.FF_def dest!: sum_list_mem_leq[of _ _ size'] regex_atms_size')
+
 lemma progress_ge_gen: "Formula.future_bounded \<phi> \<Longrightarrow>
    \<exists>P j. dom P = S \<and> range_mapping i j P \<and> i \<le> progress \<sigma> P \<phi> j"
-proof (induction \<phi> arbitrary: i S)
-  case (Pred e ts)
-  then show ?case
+proof (induction \<phi> arbitrary: i S rule: dummy.induct)
+  case (1 e ts)
+then show ?case
     by (intro exI[of _ "\<lambda>e. if e \<in> S then Some i else None"])
       (auto split: option.splits if_splits simp: rel_mapping_alt pred_mapping_alt dom_def)
 next
-  case (Let p \<phi> \<psi>)
-  from Let.prems obtain P2 j2 where P2: "dom P2 = insert p S" "range_mapping i j2 P2"
+  case (2 p \<phi> \<psi>)
+  from 2 obtain P2 j2 where P2: "dom P2 = insert p S" "range_mapping i j2 P2"
     "i \<le> progress \<sigma> P2 \<psi> j2"
-    by (atomize_elim, intro Let(2)) (force simp: pred_mapping_alt rel_mapping_alt dom_def)+
-  from Let.prems obtain P1 j1 where P1: "dom P1 = S" "range_mapping (the (P2 p)) j1 P1"
+    by (atomize_elim, intro 2(2)) (force simp: pred_mapping_alt rel_mapping_alt dom_def)+
+  from 2 obtain P1 j1 where P1: "dom P1 = S" "range_mapping (the (P2 p)) j1 P1"
     "the (P2 p) \<le> progress \<sigma> P1 \<phi> j1"
-    by (atomize_elim, intro Let(1)) auto
+    by (atomize_elim, intro 2(1)) auto
   let ?P12 = "max_mapping P1 P2"
   from P1 P2 have le1: "progress \<sigma> P1 \<phi> j1 \<le> progress \<sigma> (?P12(p := P1 p)) \<phi> (max j1 j2)"
     by (intro progress_mono_gen) (auto simp: rel_mapping_alt max_mapping_def)
@@ -2278,39 +2246,39 @@ next
     finally show "i \<le> ..." .
   qed
 next
-  case (Eq _ _)
+  case (3 t1 t2)
   then show ?case
     by (intro exI[of _ "\<lambda>e. if e \<in> S then Some i else None"]) (auto split: if_splits simp: pred_mapping_alt)
 next
-  case (Less _ _)
+  case (4 t1 t2)
   then show ?case
     by (intro exI[of _ "\<lambda>e. if e \<in> S then Some i else None"]) (auto split: if_splits simp: pred_mapping_alt)
 next
-  case (LessEq _ _)
+  case (5 t1 t2)
   then show ?case
     by (intro exI[of _ "\<lambda>e. if e \<in> S then Some i else None"]) (auto split: if_splits simp: pred_mapping_alt)
 next
-  case (Or \<phi>1 \<phi>2)
-  from Or(3) obtain P1 j1 where P1: "dom P1 = S" "range_mapping i j1 P1"  "i \<le> progress \<sigma> P1 \<phi>1 j1"
-    using Or(1)[of S i] by auto
+  case (7 \<phi>1 \<phi>2)
+  from 7(3) obtain P1 j1 where P1: "dom P1 = S" "range_mapping i j1 P1"  "i \<le> progress \<sigma> P1 \<phi>1 j1"
+    using 7(1)[of S i] by auto
   moreover
-  from Or(3) obtain P2 j2 where P2: "dom P2 = S" "range_mapping i j2 P2" "i \<le> progress \<sigma> P2 \<phi>2 j2"
-    using Or(2)[of S i] by auto
+  from 7(3) obtain P2 j2 where P2: "dom P2 = S" "range_mapping i j2 P2" "i \<le> progress \<sigma> P2 \<phi>2 j2"
+    using 7(2)[of S i] by auto
   ultimately have "i \<le> progress \<sigma> (max_mapping P1 P2) (Formula.Or \<phi>1 \<phi>2) (max j1 j2)"
     by (auto 0 3 elim!: order.trans[OF _ progress_mono_gen] intro: max_mapping_cobounded1 max_mapping_cobounded2)
   with P1 P2 show ?case by (intro exI[of _ "max_mapping P1 P2"] exI[of _ "max j1 j2"]) auto
 next
-  case (And \<phi>1 \<phi>2)
-  from And(3) obtain P1 j1 where P1: "dom P1 = S" "range_mapping i j1 P1"  "i \<le> progress \<sigma> P1 \<phi>1 j1"
-    using And(1)[of S i] by auto
+  case (8 \<phi>1 \<phi>2)
+  from 8(3) obtain P1 j1 where P1: "dom P1 = S" "range_mapping i j1 P1"  "i \<le> progress \<sigma> P1 \<phi>1 j1"
+    using 8(1)[of S i] by auto
   moreover
-  from And(3) obtain P2 j2 where P2: "dom P2 = S" "range_mapping i j2 P2" "i \<le> progress \<sigma> P2 \<phi>2 j2"
-    using And(2)[of S i] by auto
+  from 8(3) obtain P2 j2 where P2: "dom P2 = S" "range_mapping i j2 P2" "i \<le> progress \<sigma> P2 \<phi>2 j2"
+    using 8(2)[of S i] by auto
   ultimately have "i \<le> progress \<sigma> (max_mapping P1 P2) (Formula.And \<phi>1 \<phi>2) (max j1 j2)"
     by (auto 0 3 elim!: order.trans[OF _ progress_mono_gen] intro: max_mapping_cobounded1 max_mapping_cobounded2)
   with P1 P2 show ?case by (intro exI[of _ "max_mapping P1 P2"] exI[of _ "max j1 j2"]) auto
 next
-  case (Ands l)
+  case (9 l)
   show ?case proof (cases "l = []")
     case True
     then show ?thesis
@@ -2319,12 +2287,12 @@ next
   next
     case False
     then obtain \<phi> where "\<phi> \<in> set l" by (cases l) auto
-    from Ands.prems have "\<forall>\<phi>\<in>set l. Formula.future_bounded \<phi>"
+    from 9(2) have "\<forall>\<phi>\<in>set l. Formula.future_bounded \<phi>"
       by (simp add: list.pred_set)
     { fix \<phi>
       assume "\<phi> \<in> set l"
-      with Ands.prems obtain P j where "dom P = S" "range_mapping i j P" "i \<le> progress \<sigma> P \<phi> j"
-        by (atomize_elim, intro Ands(1)[of \<phi> S i]) (auto simp: list.pred_set)
+      with 9(2) obtain P j where "dom P = S" "range_mapping i j P" "i \<le> progress \<sigma> P \<phi> j"
+        by (atomize_elim, intro 9(1)[of \<phi> S i]) (auto simp: list.pred_set)
       then have "\<exists>Pj. dom (fst Pj) = S \<and> range_mapping i (snd Pj) (fst Pj) \<and> i \<le> progress \<sigma> (fst Pj) \<phi> (snd Pj)"
         (is "\<exists>Pj. ?P Pj")
         by (intro exI[of _ "(P, j)"]) auto
@@ -2332,7 +2300,7 @@ next
     then have "\<forall>\<phi>\<in>set l. \<exists>Pj. dom (fst Pj) = S \<and> range_mapping i (snd Pj) (fst Pj) \<and> i \<le> progress \<sigma> (fst Pj) \<phi> (snd Pj)"
       (is "\<forall>\<phi>\<in>set l. \<exists>Pj. ?P Pj \<phi>")
       by blast
-    with Ands(1) Ands.prems False have "\<exists>Pjf. \<forall>\<phi>\<in>set l. ?P (Pjf \<phi>) \<phi>"
+    with 9(1) 9(2) False have "\<exists>Pjf. \<forall>\<phi>\<in>set l. ?P (Pjf \<phi>) \<phi>"
       by (auto simp: Ball_def intro: choice)
     then obtain Pjf where Pjf: "\<forall>\<phi>\<in>set l. ?P (Pjf \<phi>) \<phi>" ..
     define Pf where "Pf = fst o Pjf"
@@ -2348,45 +2316,42 @@ next
         (auto simp: False *[OF \<open>\<phi> \<in> set l\<close>] \<open>\<phi> \<in> set l\<close>)
   qed
 next
-  case (Exists \<phi>)
-  then show ?case by simp
-next
-  case (Prev I \<phi>)
+  case (12 I \<phi>)
   then obtain P j where "dom P = S" "range_mapping i j P" "i \<le> progress \<sigma> P \<phi> j"
-    by (atomize_elim, intro Prev(1)) (auto simp: pred_mapping_alt dom_def)
-  with Prev(2) have
+    by (atomize_elim, intro 12(1)) (auto simp: pred_mapping_alt dom_def)
+  with 12(2) have
     "dom P = S \<and> range_mapping i (max i j) P \<and> i \<le> progress \<sigma> P (formula.Prev I \<phi>) (max i j)"
     by (auto simp: le_Suc_eq max_def pred_mapping_alt split: if_splits
         elim: order.trans[OF _ progress_mono])
   then show ?case by blast
 next
-  case (Next I \<phi>)
+  case (13 I \<phi>)
   then obtain P j where "dom P = S" "range_mapping (Suc i) j P" "Suc i \<le> progress \<sigma> P \<phi> j"
-    by (atomize_elim, intro Next(1)) (auto simp: pred_mapping_alt dom_def)
+    by (atomize_elim, intro 13(1)) (auto simp: pred_mapping_alt dom_def)
   then show ?case
     by (intro exI[of _ P] exI[of _ j]) (auto 0 3 simp: pred_mapping_alt dom_def)
 next
-  case (Since \<phi>1 I \<phi>2)
-  from Since(3) obtain P1 j1 where P1: "dom P1 = S" "range_mapping i j1 P1"  "i \<le> progress \<sigma> P1 \<phi>1 j1"
-    using Since(1)[of S i] by auto
+  case (14 \<phi>1 I \<phi>2)
+  from 14(3) obtain P1 j1 where P1: "dom P1 = S" "range_mapping i j1 P1"  "i \<le> progress \<sigma> P1 \<phi>1 j1"
+    using 14(1)[of S i] by auto
   moreover
-  from Since(3) obtain P2 j2 where P2: "dom P2 = S" "range_mapping i j2 P2" "i \<le> progress \<sigma> P2 \<phi>2 j2"
-    using Since(2)[of S i] by auto
+  from 14(3) obtain P2 j2 where P2: "dom P2 = S" "range_mapping i j2 P2" "i \<le> progress \<sigma> P2 \<phi>2 j2"
+    using 14(2)[of S i] by auto
   ultimately have "i \<le> progress \<sigma> (max_mapping P1 P2) (Formula.Since \<phi>1 I \<phi>2) (max j1 j2)"
     by (auto elim!: order.trans[OF _ progress_mono_gen] simp: max_mapping_cobounded1 max_mapping_cobounded2)
   with P1 P2 show ?case by (intro exI[of _ "max_mapping P1 P2"] exI[of _ "max j1 j2"])
       (auto elim!: pred_mapping_le intro: max_mapping_cobounded1)
 next
-  case (Until \<phi>1 I \<phi>2)
-  from Until.prems obtain m where "\<not> memR I m"
+  case (15 \<phi>1 I \<phi>2)
+  from 15(3) obtain m where "\<not> memR I m"
     by (auto simp: bounded_memR)
   then obtain i' where "i < i'" and 1: "\<not> memR I (\<tau> \<sigma> i' - \<tau> \<sigma> i)"
     using ex_le_\<tau>[where x="\<tau> \<sigma> i + m" and s=\<sigma> and i="Suc i"]
     by atomize_elim (auto simp add: less_eq_Suc_le memR_antimono)
-  from Until.prems obtain P1 j1 where P1: "dom P1 = S" "range_mapping (Suc i') j1 P1" "Suc i' \<le> progress \<sigma> P1 \<phi>1 j1"
-    by (atomize_elim, intro Until(1)) (auto simp: pred_mapping_alt dom_def)
-  from Until.prems obtain P2 j2 where P2: "dom P2 = S" "range_mapping (Suc i') j2 P2" "Suc i' \<le> progress \<sigma> P2 \<phi>2 j2"
-    by (atomize_elim, intro Until(2)) (auto simp: pred_mapping_alt dom_def)
+  from 15(3) obtain P1 j1 where P1: "dom P1 = S" "range_mapping (Suc i') j1 P1" "Suc i' \<le> progress \<sigma> P1 \<phi>1 j1"
+    by (atomize_elim, intro 15(1)) (auto simp: pred_mapping_alt dom_def)
+  from 15(3) obtain P2 j2 where P2: "dom P2 = S" "range_mapping (Suc i') j2 P2" "Suc i' \<le> progress \<sigma> P2 \<phi>2 j2"
+    by (atomize_elim, intro 15(2)) (auto simp: pred_mapping_alt dom_def)
   let ?P12 = "max_mapping P1 P2"
   have "i \<le> progress \<sigma> ?P12 (Formula.Until \<phi>1 I \<phi>2) (max j1 j2)"
     unfolding progress.simps
@@ -2414,19 +2379,23 @@ next
   with P1 P2 \<open>i < i'\<close> show ?case
     by (intro exI[of _ "max_mapping P1 P2"] exI[of _ "max j1 j2"]) (auto simp: range_mapping_relax)
 next
-  case (Trigger \<phi>1 I \<phi>2)
-  from Trigger(3) obtain P1 j1 where P1: "dom P1 = S" "range_mapping i j1 P1"  "i \<le> progress \<sigma> P1 \<phi>1 j1"
-    using Trigger(1)[of S i] by auto
+  case (16 \<phi>1 I \<phi>2)
+  have size':
+    "size' \<phi>1 \<le> size' \<phi>1 + size' \<phi>2"
+    "size' \<phi>2 \<le> size' \<phi>1 + size' \<phi>2"
+    by auto
+  from 16(3) obtain P1 j1 where P1: "dom P1 = S" "range_mapping i j1 P1"  "i \<le> progress \<sigma> P1 \<phi>1 j1"
+    using 16(1)[of S i] by auto
   moreover
-  from Trigger(3) obtain P2 j2 where P2: "dom P2 = S" "range_mapping i j2 P2" "i \<le> progress \<sigma> P2 \<phi>2 j2"
-    using Trigger(2)[of S i] by auto
+  from 16(3) obtain P2 j2 where P2: "dom P2 = S" "range_mapping i j2 P2" "i \<le> progress \<sigma> P2 \<phi>2 j2"
+    using 16(2)[of S i] by auto
   ultimately have "i \<le> progress \<sigma> (max_mapping P1 P2) (Formula.Since \<phi>1 I \<phi>2) (max j1 j2)"
     by (auto elim!: order.trans[OF _ progress_mono_gen] simp: max_mapping_cobounded1 max_mapping_cobounded2)
   with P1 P2 show ?case by (intro exI[of _ "max_mapping P1 P2"] exI[of _ "max j1 j2"])
       (auto elim!: pred_mapping_le intro: max_mapping_cobounded1)
 next
-  case (Release \<phi>1 I \<phi>2)
-  from Release.prems have "bounded (flip_int_double_upper I)"
+  case (17 \<phi>1 I \<phi>2)
+  from 17(4) have "bounded (flip_int_double_upper I)"
     by (transfer') auto
   then obtain m where "\<not> memR (flip_int_double_upper I) m"
     by (auto simp: bounded_memR)
@@ -2437,15 +2406,16 @@ next
   then have not_mem_I: "\<not> memR I (\<tau> \<sigma> i' - \<tau> \<sigma> i)"
     using memR_flip_int_double_upper
     by auto
-  from Release.prems obtain P1 j1 where P1: "dom P1 = S" "range_mapping (Suc i') j1 P1" "Suc i' \<le> progress \<sigma> P1 \<phi>1 j1"
-    by (atomize_elim, intro Release(1)) (auto simp: pred_mapping_alt dom_def)
-  from Release.prems obtain P2 j2 where P2: "dom P2 = S" "range_mapping (Suc i') j2 P2" "Suc i' \<le> progress \<sigma> P2 \<phi>2 j2"
-    by (atomize_elim, intro Release(2)) (auto simp: pred_mapping_alt dom_def)
-  let ?P12 = "max_mapping P1 P2"
 
   show ?case
   proof (cases "mem I 0 \<or> \<not> bounded I")
     case True
+    from 17(4) True obtain P1 j1 where P1: "dom P1 = S" "range_mapping (Suc i') j1 P1" "Suc i' \<le> progress \<sigma> P1 \<phi>1 j1"
+      by (atomize_elim, intro 17(1)) (auto simp: pred_mapping_alt dom_def)
+    from 17(4) True obtain P2 j2 where P2: "dom P2 = S" "range_mapping (Suc i') j2 P2" "Suc i' \<le> progress \<sigma> P2 \<phi>2 j2"
+      by (atomize_elim, intro 17(2)) (auto simp: pred_mapping_alt dom_def)
+    let ?P12 = "max_mapping P1 P2"
+
     have "i \<le> progress \<sigma> ?P12 (Formula.Release \<phi>1 I \<phi>2) (max j1 j2)"
       unfolding progress.simps if_P[OF True]
     proof (intro cInf_greatest, goal_cases nonempty greatest)
@@ -2475,14 +2445,21 @@ next
       by (intro exI[of _ "max_mapping P1 P2"] exI[of _ "max j1 j2"]) (auto simp: range_mapping_relax)
   next
     case False
-    then show ?thesis using Release sorry
+   
+    have future_bounded: "Formula.future_bounded (release_safe_bounded \<phi>1 I \<phi>2)"
+      using 17(4)
+      apply (auto simp add: release_safe_bounded_def)
+      using False flip_int_less_lower_props memR_zero
+      by blast
+      
+    show ?thesis using 17(3)[OF False future_bounded] False by auto
   qed
 next
-  case (MatchP I r)
+  case (18 I r)
   then show ?case
   proof (cases "regex.atms r = {}")
     case True
-    with MatchP.prems show ?thesis
+    with 18(2) show ?thesis
       unfolding progress.simps
       by (intro exI[of _ "\<lambda>e. if e \<in> S then Some i else None"] exI[of _ i])
         (auto split: if_splits simp: pred_mapping_alt regex.pred_set)
@@ -2491,7 +2468,7 @@ next
     define pick where "pick = (\<lambda>\<phi>. SOME Pj. dom (fst Pj) = S \<and> range_mapping i (snd Pj) (fst Pj) \<and>
        i \<le> progress \<sigma> (fst Pj) \<phi> (snd Pj))"
     let ?pickP = "fst o pick" let ?pickj = "snd o pick"
-    from MatchP have pick: "\<phi> \<in> regex.atms r \<Longrightarrow> dom (?pickP \<phi>) = S \<and>
+    from 18 have pick: "\<phi> \<in> regex.atms r \<Longrightarrow> dom (?pickP \<phi>) = S \<and>
       range_mapping i (?pickj \<phi>) (?pickP \<phi>) \<and> i \<le> progress \<sigma> (?pickP \<phi>) \<phi> (?pickj \<phi>)" for \<phi>
       unfolding pick_def o_def future_bounded.simps regex.pred_set
       by (intro someI_ex[where P = "\<lambda>Pj. dom (fst Pj) = S \<and> range_mapping i (snd Pj) (fst Pj) \<and>
@@ -2503,8 +2480,8 @@ next
           order_trans[OF pick[THEN conjunct2, THEN conjunct2] progress_mono_gen])
   qed
 next
-  case (MatchF I r)
-  from MatchF.prems obtain m where "\<not> memR I m"
+  case (19 I r)
+  from 19(2) obtain m where "\<not> memR I m"
     by (auto simp: bounded_memR)
   then obtain i' where "i < i'" and i': "\<not> memR I (\<tau> \<sigma> i' - \<tau> \<sigma> i)"
     using ex_le_\<tau>[where x="\<tau> \<sigma> i + m" and s=\<sigma> and i="Suc i"]
@@ -2514,7 +2491,7 @@ next
   show ?case
   proof (cases "regex.atms r = {}")
     case True
-    with MatchF.prems ix show ?thesis
+    with 19(2) ix show ?thesis
       unfolding progress.simps
       by (intro exI[of _ "\<lambda>e. if e \<in> S then Some (Suc i') else None"] exI[of _ "Suc i'"])
         (auto split: if_splits simp: pred_mapping_alt regex.pred_set add.commute less_Suc_eq
@@ -2525,7 +2502,7 @@ next
     define pick where "pick = (\<lambda>\<phi>. SOME Pj. dom (fst Pj) = S \<and> range_mapping (Suc i') (snd Pj) (fst Pj) \<and>
       Suc i' \<le> progress \<sigma> (fst Pj) \<phi> (snd Pj))"
     define pickP where "pickP = fst o pick" define pickj where "pickj = snd o pick"
-    from MatchF have pick: "\<phi> \<in> regex.atms r \<Longrightarrow> dom (pickP \<phi>) = S \<and>
+    from 19 have pick: "\<phi> \<in> regex.atms r \<Longrightarrow> dom (pickP \<phi>) = S \<and>
     range_mapping (Suc i') (pickj \<phi>) (pickP \<phi>) \<and> Suc i' \<le> progress \<sigma> (pickP \<phi>) \<phi> (pickj \<phi>)" for \<phi>
       unfolding pick_def o_def future_bounded.simps regex.pred_set pickj_def pickP_def
       by (intro someI_ex[where P = "\<lambda>Pj. dom (fst Pj) = S \<and> range_mapping (Suc i') (snd Pj) (fst Pj) \<and>
@@ -2537,7 +2514,7 @@ next
     moreover
     note i' ix
     moreover
-    from MatchF.prems have "Regex.pred_regex Formula.future_bounded r"
+    from 19(2) have "Regex.pred_regex Formula.future_bounded r"
       by auto
     ultimately show ?thesis using \<tau>_mono[of _ ?j \<sigma>] less_\<tau>D[of \<sigma> i] pick False
       by (intro exI[of _ "?j"]  exI[of _ "?P"])
@@ -2547,7 +2524,8 @@ next
           simp: ac_simps Suc_le_eq trans_le_add2 Max_mapping_coboundedI progress_regex_def
           dest: spec[of _ "i'"] spec[of _ ?j])
   qed
-qed (auto split: option.splits)
+qed (auto)
+
 
 lemma progress_ge: "Formula.future_bounded \<phi> \<Longrightarrow> \<exists>j. i \<le> progress \<sigma> Map.empty \<phi> j"
   using progress_ge_gen[of \<phi> "{}" i \<sigma>]

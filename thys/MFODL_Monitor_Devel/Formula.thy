@@ -4769,14 +4769,6 @@ next
   qed
 qed (auto)
 
-definition new_string :: "string set \<Rightarrow> string" where
-  "new_string s = undefined"
-
-lemma new_string_sound: "finite X \<Longrightarrow> new_string X \<notin> X"
-  sorry
-
-thm rewrite_trigger_fvi rewrite_trigger_sat rewrite_trigger_safe_formula
-
 (*<*)
 end
 (*>*)
