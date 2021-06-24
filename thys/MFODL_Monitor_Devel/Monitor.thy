@@ -1988,6 +1988,17 @@ lemma progress_trigger_0_lower_bound: "progress P (trigger_safe_0 \<phi> I \<psi
 lemma progress_trigger_unbounded_lower_bound: "progress P (trigger_safe_unbounded \<phi> I \<psi>) j \<le> progress P (formula.Trigger \<phi> I \<psi>) j"
   by (auto simp add: trigger_safe_unbounded_def)
 
+lemma progress_and_trigger_unbounded_lower_bound: "progress P (and_trigger_safe_unbounded \<alpha> \<phi> I \<psi>) j \<le> progress P (formula.And \<alpha> (formula.Trigger \<phi> I \<psi>)) j"
+proof -
+  have
+    "progress P (trigger_safe_unbounded \<phi> I \<psi>) j \<le> progress P \<phi> j"
+    "progress P (trigger_safe_unbounded \<phi> I \<psi>) j \<le> progress P \<psi> j"
+    using progress_trigger_unbounded_lower_bound
+    by auto
+  then show ?thesis
+    by (auto simp add: and_trigger_safe_unbounded_def)
+qed
+
 lemma progress_trigger_bounded_lower_bound: "progress P (trigger_safe_bounded \<phi> I \<psi>) j \<le> progress P (formula.Trigger \<phi> I \<psi>) j"
 proof -
   define A where "A = {i. \<forall>k. k < j \<and> k \<le> progress P \<psi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
@@ -2015,6 +2026,17 @@ proof -
     using leq_\<phi> leq_\<psi>
     unfolding A_def
     by blast+
+qed
+
+lemma progress_and_trigger_bounded_lower_bound: "progress P (and_trigger_safe_bounded \<alpha> \<phi> I \<psi>) j \<le> progress P (formula.And \<alpha> (formula.Trigger \<phi> I \<psi>)) j"
+proof -
+  have
+    "progress P (trigger_safe_bounded \<phi> I \<psi>) j \<le> progress P \<phi> j"
+    "progress P (trigger_safe_bounded \<phi> I \<psi>) j \<le> progress P \<psi> j"
+    using progress_trigger_bounded_lower_bound
+    by auto
+  then show ?thesis
+    by (auto simp add: and_trigger_safe_bounded_def)
 qed
 
 lemma progress_and_release_rewrite_bounded:
