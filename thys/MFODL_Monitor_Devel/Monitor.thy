@@ -2096,7 +2096,7 @@ lemma pred_mapping_mono_strong: "pred_mapping Q P \<Longrightarrow>
   by (auto simp: pred_mapping_alt)
 
 lemma progress_mono_gen: "j \<le> j' \<Longrightarrow> rel_mapping (\<le>) P P' \<Longrightarrow> progress \<sigma> P \<phi> j \<le> progress \<sigma> P' \<phi> j'"
-proof (induction P \<phi> j arbitrary: P P' rule: progress.induct)
+proof (induction P \<phi> j arbitrary: P P' rule: progress.induct[of _ \<sigma>])
 case (1 P e ts j)
   then show ?case
     by (force simp: rel_mapping_alt dom_def split: option.splits)
@@ -2129,7 +2129,7 @@ lemma rel_mapping_reflp: "reflp Q \<Longrightarrow> rel_mapping Q P P"
 lemmas progress_mono = progress_mono_gen[OF _ rel_mapping_reflp[unfolded reflp_def], simplified]
 
 lemma progress_le_gen: "pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> progress \<sigma> P \<phi> j \<le> j"
-proof (induction P \<phi> j rule: progress.induct)
+proof (induction P \<phi> j rule: progress.induct[of _ \<sigma>])
   case (1 P e ts j)
   then show ?case
      by (auto simp: pred_mapping_alt dom_def split: option.splits)
@@ -2475,7 +2475,7 @@ next
       by (intro exI[of _ "max_mapping P1 P2"] exI[of _ "max j1 j2"]) (auto simp: range_mapping_relax)
   next
     case False
-    then show ?thesis sorry
+    then show ?thesis using Release sorry
   qed
 next
   case (MatchP I r)
@@ -2563,7 +2563,7 @@ lemma progress_time_conv:
   assumes "\<forall>i<j. \<tau> \<sigma> i = \<tau> \<sigma>' i"
   shows "progress \<sigma> P \<phi> j = progress \<sigma>' P \<phi> j"
   using assms
-proof (induction P \<phi> j arbitrary: P rule: progress.induct)
+proof (induction P \<phi> j arbitrary: P rule: progress.induct[of _ \<sigma>])
   case (15 P \<phi> I \<psi> j)
   have *: "i \<le> j - 1 \<longleftrightarrow> i < j" if "j \<noteq> 0" for i
     using that by auto
@@ -2636,13 +2636,14 @@ proof (induct rule: rtranclp_induct)
 qed auto
 
 
+
 lemma sat_prefix_conv_gen:
   assumes "prefix_of \<pi> \<sigma>" and "prefix_of \<pi> \<sigma>'"
   shows "i < progress \<sigma> P \<phi> (plen \<pi>) \<Longrightarrow> dom V = dom V' \<Longrightarrow> dom P = dom V \<Longrightarrow>
     pred_mapping (\<lambda>x. x \<le> plen \<pi>) P \<Longrightarrow>
     (\<And>p i \<phi>. p \<in> dom V \<Longrightarrow> i < the (P p) \<Longrightarrow> the (V p) i = the (V' p) i) \<Longrightarrow>
     Formula.sat \<sigma> V v i \<phi> \<longleftrightarrow> Formula.sat \<sigma>' V' v i \<phi>"
-proof (induction P \<phi> "(plen \<pi>)" arbitrary: V V' v i rule: progress.induct)
+proof (induction P \<phi> "(plen \<pi>)" arbitrary: V V' v i rule: progress.induct[of _ \<sigma>])
 case (1 P e ts)
   from 1(1,4) have "i < plen \<pi>"
     by (blast intro!: order.strict_trans2 progress_le_gen)
@@ -2661,27 +2662,27 @@ case (1 P e ts)
   qed
 next
   case (2 P p \<phi> \<psi>)
-  (*let ?V = "\<lambda>V \<sigma>. (V(p \<mapsto> \<lambda>i. {v. length v = Formula.nfv \<phi> \<and> Formula.sat \<sigma> V v i \<phi>}))"
-  show ?case unfolding sat.simps proof (rule Let.IH(2))
-    from Let.prems show "i < progress \<sigma> (P(p \<mapsto> progress \<sigma> P \<phi> (plen \<pi>))) \<psi> (plen \<pi>)"
+  let ?V = "\<lambda>V \<sigma>. (V(p \<mapsto> \<lambda>i. {v. length v = Formula.nfv \<phi> \<and> Formula.sat \<sigma> V v i \<phi>}))"
+  show ?case unfolding sat.simps proof (rule 2(2))
+    from 2 show "i < progress \<sigma> (P(p \<mapsto> progress \<sigma> P \<phi> (plen \<pi>))) \<psi> (plen \<pi>)"
       by simp
-    from Let.prems show "dom (?V V \<sigma>) = dom (?V V' \<sigma>')"
+    from 2 show "dom (?V V \<sigma>) = dom (?V V' \<sigma>')"
       by simp
-    from Let.prems show "dom (P(p \<mapsto> progress \<sigma> P \<phi> (plen \<pi>))) = dom (?V V \<sigma>)"
+    from 2 show "dom (P(p \<mapsto> progress \<sigma> P \<phi> (plen \<pi>))) = dom (?V V \<sigma>)"
       by simp
-    from Let.prems show "pred_mapping (\<lambda>x. x \<le> plen \<pi>) (P(p \<mapsto> progress \<sigma> P \<phi> (plen \<pi>)))"
+    from 2 show "pred_mapping (\<lambda>x. x \<le> plen \<pi>) (P(p \<mapsto> progress \<sigma> P \<phi> (plen \<pi>)))"
       by (auto intro!: pred_mapping_map_upd elim!: progress_le_gen)
   next
     fix p' i \<phi>'
-    assume 1: "p' \<in> dom (?V V \<sigma>)" and 2: "i < the ((P(p \<mapsto> progress \<sigma> P \<phi> (plen \<pi>))) p')"
+    assume 1: "p' \<in> dom (?V V \<sigma>)" and 21: "i < the ((P(p \<mapsto> progress \<sigma> P \<phi> (plen \<pi>))) p')"
     show "the (?V V \<sigma> p') i = the (?V V' \<sigma>' p') i" proof (cases "p' = p")
       case True
-      with Let 2 show ?thesis by auto
+      with 2 21 show ?thesis by auto
     next
       case False
-      with 1 2 show ?thesis by (auto intro!: Let.prems(5))
+      with 1 21 show ?thesis by (auto intro!: 2(7))
     qed
-  qed*)
+  qed
 next
   case (12 P I \<phi>)
   with \<tau>_prefix_conv[OF assms(1,2)] show ?case
