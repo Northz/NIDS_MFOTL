@@ -1974,7 +1974,7 @@ proof -
 qed
 
 lemma progress_and_release_rewrite_bounded:
-  assumes "\<not> mem I 0 \<and> bounded I"
+  assumes "\<not> mem I 0" "bounded I"
   shows "Monitor.progress \<sigma> P (and_release_safe_bounded \<phi> \<phi>' I \<psi>') j = progress P (formula.And \<phi> (formula.Release \<phi>' I \<psi>')) j"
 proof -
   have "progress P (formula.And \<phi> (formula.Release \<phi>' I \<psi>')) j = min (progress P \<phi> j) (min (progress P (Formula.eventually I Formula.TT) j) (progress P (release_safe_bounded \<phi>' I \<psi>') j))"
@@ -8988,16 +8988,17 @@ next
       using IH(2)
       unfolding list_all2_iff
       by auto
+    
     then have "length [Monitor.progress \<sigma> P (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) j..<Monitor.progress \<sigma> P' (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) (j + \<delta>)] =
     length zs"
-      by (auto simp only: progress_and_release_rewrite_bounded[OF And_Release(1)])
+      by (auto simp only: progress_and_release_rewrite_bounded[OF And_Release(1-2)])
     moreover have "\<And>i r. (i, r) \<in>set (zip [Monitor.progress \<sigma> P (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) j..<Monitor.progress \<sigma> P' (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) (j + \<delta>)] zs) \<Longrightarrow>
         qtable n (fv (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>'))) (mem_restr R) (\<lambda>va. Formula.sat \<sigma> v (map the va) i (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>'))) r"
     proof -
       fix i r
       assume "(i, r) \<in>set (zip [Monitor.progress \<sigma> P (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) j..<Monitor.progress \<sigma> P' (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) (j + \<delta>)] zs)"
       then have "(i, r) \<in>set (zip [Monitor.progress \<sigma> P (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>') j..<Monitor.progress \<sigma> P' (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>') (j + \<delta>)] zs)"
-        by (auto simp only: progress_and_release_rewrite_bounded[OF And_Release(1),symmetric])
+        by (auto simp only: progress_and_release_rewrite_bounded[OF And_Release(1-2),symmetric])
       then have qtable: "qtable n (fv (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>')) (mem_restr R) (\<lambda>va. Formula.sat \<sigma> v (map the va) i (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>')) r"
         using IH(2)
         unfolding list_all2_iff
