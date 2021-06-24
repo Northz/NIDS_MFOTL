@@ -1654,6 +1654,13 @@ lemma progress_once [simp]: "progress P (once I \<phi>) j = min j (progress P \<
   unfolding once_def
   by auto
 
+lemma progress_eventually[simp]: "progress P (eventually I \<phi>) j = Inf {i. \<forall>k. k < j \<and> k \<le> progress P \<phi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
+  unfolding eventually_def
+  by (auto intro: arg_cong[where f = Inf])
+
+lemma progress_eventually_once[simp]: "progress P (eventually I (once J \<phi>)) j = progress P (eventually I \<phi>) j"
+  by (auto intro: arg_cong[where f = Inf])
+
 lemma progress_historically_safe_0 [simp]: "progress P (historically_safe_0 I \<phi>) j = min j (
   if bounded I then
     (progress P \<phi> j) - 1 \<comment> \<open>? in in the past.\<close>
@@ -1662,6 +1669,24 @@ lemma progress_historically_safe_0 [simp]: "progress P (historically_safe_0 I \<
   )"
   unfolding historically_safe_0_def
   by auto
+
+lemma progress_historically_safe_bounded [simp]: "progress P (historically_safe_bounded I \<phi>) j = min j (Inf {i. \<forall>k. k < j \<and> k \<le> progress P \<phi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)})"
+proof -
+  define A where "A =  {i. \<forall>k. k < j \<and> k \<le> progress P \<phi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
+  have "progress P \<phi> j \<in> A"
+    unfolding A_def
+    by auto
+  then have "\<Sqinter> A \<le> progress P \<phi> j"
+    by (simp add: cInf_lower)
+  then  have " min (min j (local.progress P \<phi> j)) (\<Sqinter> A) =
+    min j (\<Sqinter> A)"
+    by auto
+  moreover have "memR (int_remove_lower_bound I) = memR I"
+    by (transfer) (auto)
+  ultimately show ?thesis
+    unfolding historically_safe_bounded_def A_def
+    by auto
+qed
 
 lemma progress_historically_safe_unbounded [simp]: "progress P (historically_safe_unbounded I \<phi>) j = min j (progress P \<phi> j)"
   unfolding historically_safe_unbounded_def
@@ -1702,13 +1727,6 @@ proof -
     unfolding always_safe_0_def
     by auto
 qed
-
-lemma progress_eventually[simp]: "progress P (eventually I \<phi>) j = Inf {i. \<forall>k. k < j \<and> k \<le> progress P \<phi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
-  unfolding eventually_def
-  by (auto intro: arg_cong[where f = Inf])
-
-lemma progress_eventually_once[simp]: "progress P (eventually I (once J \<phi>)) j = progress P (eventually I \<phi>) j"
-  by (auto intro: arg_cong[where f = Inf])
 
 lemma progress_nonempty: "{i. \<forall>k. k < j \<and> k \<le> n \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)} \<noteq> {}"
   by (auto intro!: exI[of _ n])
@@ -1964,6 +1982,40 @@ proof -
     by linarith
 qed*)
 
+lemma progress_trigger_0_lower_bound: "progress P (trigger_safe_0 \<phi> I \<psi>) j \<le> progress P (formula.Trigger \<phi> I \<psi>) j"
+  by (auto simp add: trigger_safe_0_def)
+
+lemma progress_trigger_unbounded_lower_bound: "progress P (trigger_safe_unbounded \<phi> I \<psi>) j \<le> progress P (formula.Trigger \<phi> I \<psi>) j"
+  by (auto simp add: trigger_safe_unbounded_def)
+
+lemma progress_trigger_bounded_lower_bound: "progress P (trigger_safe_bounded \<phi> I \<psi>) j \<le> progress P (formula.Trigger \<phi> I \<psi>) j"
+proof -
+  define A where "A = {i. \<forall>k. k < j \<and> k \<le> progress P \<psi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
+
+  have leq_\<phi>: "0 < j \<Longrightarrow> min (min (min j (\<Sqinter> A))
+            (min j (local.progress P \<phi> j)))
+       (min (Suc (min (local.progress P \<phi> j) (local.progress P \<psi> j))) j)
+      \<le> local.progress P \<phi> j"
+    by auto
+  have leq_\<psi>: "0 < j \<Longrightarrow> min (min (min j (\<Sqinter> A))
+            (min j (local.progress P \<phi> j)))
+       (min (Suc (min (local.progress P \<phi> j) (local.progress P \<psi> j))) j)
+      \<le> local.progress P \<psi> j"
+  proof -
+    have "progress P \<psi> j \<in> A"
+      unfolding A_def
+      by auto
+    then have "Inf A \<le> progress P \<psi> j"
+      by (simp add: cInf_lower)
+    then show ?thesis by auto
+  qed
+
+  show ?thesis 
+    apply (auto simp add: trigger_safe_bounded_def)
+    using leq_\<phi> leq_\<psi>
+    unfolding A_def
+    by blast+
+qed
 
 lemma progress_and_release_rewrite_bounded:
   assumes "\<not> mem I 0"
@@ -2019,6 +2071,9 @@ lemma pred_mapping_mono: "pred_mapping Q P \<Longrightarrow> Q \<le> R \<Longrig
 lemma pred_mapping_mono_strong: "pred_mapping Q P \<Longrightarrow>
   (\<And>p. p \<in> dom P \<Longrightarrow> Q (the (P p)) \<Longrightarrow> R (the (P p))) \<Longrightarrow> pred_mapping R P"
   by (auto simp: pred_mapping_alt)
+
+thm progress.induct
+thm progress.induct[of "\<lambda>P \<phi> j. \<forall>\<sigma> P' j'. j \<le> j' \<longrightarrow> rel_mapping (\<le>) P P' \<longrightarrow> progress \<sigma> P \<phi> j \<le> progress \<sigma> P' \<phi> j'"]
 
 
 lemma progress_mono_gen: "j \<le> j' \<Longrightarrow> rel_mapping (\<le>) P P' \<Longrightarrow> progress \<sigma> P \<phi> j \<le> progress \<sigma> P' \<phi> j'"
