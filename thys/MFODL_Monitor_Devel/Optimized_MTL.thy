@@ -4814,6 +4814,198 @@ lemma valid_result_mmtaux: "valid_mmtaux args cur aux auxlist \<Longrightarrow> 
 lemma drop_list_shift: "n \<ge> m \<Longrightarrow> drop n xs = drop (n - m) (drop m xs)"
   by simp
 
+(* analogous to join_mmsaux *)
+fun proj_tuple_in_join_optim :: "bool \<Rightarrow> 'a table \<Rightarrow> bool list \<Rightarrow> 'a table \<Rightarrow> bool list \<Rightarrow> 'a table" where
+  "proj_tuple_in_join_optim pos r maskR l maskL = (
+    if maskL = maskR then (
+      if pos then r \<inter> l else r - l 
+    )
+    else if (\<forall>b \<in> set maskL. \<not>b) then (
+      let nones = replicate (length maskL) None in (
+      \<comment> \<open>if there are no free variables then we either take all or nothing\<close>
+        if pos \<longleftrightarrow> nones \<in> l then
+          r
+         else
+          {}
+        )
+      )
+    else
+      {as \<in> r. proj_tuple_in_join pos maskL as l}
+    )"
+
+lemma proj_tuple_in_join_optim_equiv:
+  assumes "table n V_L l"
+  assumes "table n V_R r"
+  shows "proj_tuple_in_join_optim pos r (join_mask n V_R) l (join_mask n V_L) =
+         {as \<in> r. proj_tuple_in_join pos (join_mask n V_L) as l}"
+proof -
+  define maskL where "maskL = (join_mask n V_L)"
+  define maskR where "maskR = (join_mask n V_R)"
+  have maskL_len: "length (maskL) = n"
+    unfolding maskL_def join_mask_def
+    by auto
+
+  show ?thesis
+  proof (cases "maskL = maskR")
+    case True
+    then have "\<And>as. as \<in> r \<Longrightarrow> proj_tuple maskL as = as"
+      using wf_tuple_proj_idle assms(2)
+      unfolding table_def maskR_def
+      by auto
+    then have "{as \<in> r. proj_tuple_in_join pos (join_mask n V_L) as l} =
+               {as \<in> r. join_cond pos l as}"
+      unfolding proj_tuple_in_join_def maskL_def
+      by auto
+    then show ?thesis
+      using True
+      unfolding maskL_def maskR_def
+      by auto
+next
+  case not_eq: False
+  then show ?thesis
+  proof (cases "(\<forall>b \<in> set maskL. \<not>b)")
+    case no_fvs: True
+    then have "\<forall>i<n. i \<notin> V_L"
+      unfolding maskL_def join_mask_def
+      by auto
+    then have "\<forall>x\<in>l. x = replicate n None"
+      using assms(1)
+      unfolding table_def wf_tuple_def
+      by (simp add: New_max.simple_list_index_equality)
+    then have l_eq: "l = {} \<or> l = unit_table n"
+      using assms(1)
+      unfolding unit_table_def
+      by auto
+    then show ?thesis
+    proof (cases "pos \<longleftrightarrow> (replicate (length maskL) None) \<in> l")
+      case True
+      {
+        assume assm: "\<not>pos"
+        then have "replicate n None \<notin> l"
+          using True maskL_len
+          by auto
+        then have "l = {}"
+          using l_eq
+          unfolding unit_table_def
+          by auto
+        then have "{as \<in> r. proj_tuple_in_join pos maskL as l} = r"
+          using no_fvs assm
+          unfolding proj_tuple_in_join_def
+          by auto
+      }
+      moreover {
+        assume assm: "pos"
+        then have l_eq: "l = unit_table n"
+          using True maskL_len l_eq
+          by auto
+        
+        have as_props: "\<And>as. as \<in> r \<Longrightarrow> length as = n"
+          using assms(2)
+          unfolding table_def wf_tuple_def
+          by auto
+        have "\<And>as. as \<in> r \<Longrightarrow> proj_tuple maskL as = replicate n None"
+        proof -
+          fix as
+          assume "as \<in> r"
+          then have "length as = n"
+            using as_props
+            by auto
+          then have len_eq: "length maskL = length as"
+            using maskL_len
+            by auto
+          show "proj_tuple maskL as = replicate n None"
+            using no_fvs proj_tuple_replicate[OF _ len_eq] maskL_len
+            by auto
+        qed
+        then have "\<And>as. as \<in> r \<Longrightarrow> proj_tuple maskL as \<in> l"
+          unfolding l_eq unit_table_def
+          by auto
+        then have "{as \<in> r. proj_tuple_in_join pos maskL as l} = r"
+          using assm
+          unfolding proj_tuple_in_join_def
+          by auto
+      }
+      ultimately have "{as \<in> r. proj_tuple_in_join pos maskL as l} = r"
+        by blast
+
+      moreover have "proj_tuple_in_join_optim pos r (join_mask n V_R) l (join_mask n V_L) = r"
+        using not_eq no_fvs True
+        unfolding maskL_def maskR_def proj_tuple_in_join_optim.simps Let_def
+        by auto
+
+      ultimately show ?thesis
+        unfolding maskL_def
+        by auto
+    next
+      case False
+      {
+        assume assm: "pos"
+        then have "replicate n None \<notin> l"
+          using False maskL_len
+          by auto
+        then have "l = {}"
+          using l_eq
+          unfolding unit_table_def
+          by auto
+        then have "{as \<in> r. proj_tuple_in_join pos maskL as l} = {}"
+          using no_fvs assm
+          unfolding proj_tuple_in_join_def
+          by auto
+      }
+      moreover {
+        assume assm: "\<not>pos"
+        then have l_eq: "l = unit_table n"
+          using False maskL_len l_eq
+          by auto
+        
+        have as_props: "\<And>as. as \<in> r \<Longrightarrow> length as = n"
+          using assms(2)
+          unfolding table_def wf_tuple_def
+          by auto
+        have "\<And>as. as \<in> r \<Longrightarrow> proj_tuple maskL as = replicate n None"
+        proof -
+          fix as
+          assume "as \<in> r"
+          then have "length as = n"
+            using as_props
+            by auto
+          then have len_eq: "length maskL = length as"
+            using maskL_len
+            by auto
+          show "proj_tuple maskL as = replicate n None"
+            using no_fvs proj_tuple_replicate[OF _ len_eq] maskL_len
+            by auto
+        qed
+        then have "\<And>as. as \<in> r \<Longrightarrow> proj_tuple maskL as \<in> l"
+          unfolding l_eq unit_table_def
+          by auto
+        then have "{as \<in> r. proj_tuple_in_join pos maskL as l} = {}"
+          using assm
+          unfolding proj_tuple_in_join_def
+          by auto
+      }
+      ultimately have "{as \<in> r. proj_tuple_in_join pos maskL as l} = {}"
+        by blast
+
+      moreover have "proj_tuple_in_join_optim pos r (join_mask n V_R) l (join_mask n V_L) = {}"
+        using not_eq no_fvs False
+        unfolding maskL_def maskR_def proj_tuple_in_join_optim.simps Let_def
+        by auto
+      
+      ultimately show ?thesis
+        unfolding maskL_def
+        by auto
+    qed
+  next
+    case False
+    then show ?thesis
+      using not_eq
+      unfolding maskL_def maskR_def
+      by auto
+  qed
+qed
+qed
+
 fun update_mmtaux' :: "args \<Rightarrow> ts \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> (ts \<times> 'a table \<times> 'a table) queue \<Rightarrow> (ts \<times> 'a table) queue \<Rightarrow> (('a tuple, ts) mapping) \<Rightarrow> (('a tuple, nat) mapping) \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> (nat \<times> nat \<times> (ts \<times> 'a table \<times> 'a table) queue \<times> (ts \<times> 'a table) queue \<times> (('a tuple, ts) mapping) \<times> (('a tuple, nat) mapping) \<times> 'a table \<times> 'a table)" where
   "update_mmtaux' args nt idx_mid idx_oldest maskL maskR data_prev data_in tuple_in_once tuple_since_hist hist_sat since_sat = (
     \<comment> \<open>in a first step, we update tuple_in_once by removing all tuples where currently a ts
@@ -4855,7 +5047,7 @@ fun update_mmtaux' :: "args \<Rightarrow> ts \<Rightarrow> nat \<Rightarrow> nat
         upd_set tuple_since_hist (\<lambda>_. idx_move) (r - Mapping.keys tuple_since_hist), \<comment> \<open>then add entries for the ones that are present in the current db\<close>
         hist_sat,
         idx_move+1, \<comment> \<open>increase index by one every db\<close>
-        since_sat \<union> {as \<in> r. proj_tuple_in_join (args_pos args) maskL as l} \<comment> \<open>TODO: optimize proj_tuple_in_join to join_filter_cond if maskL = masR, see mmsaux_join\<close>
+        since_sat \<union> proj_tuple_in_join_optim (args_pos args) r (join_mask (args_n args) (args_R args)) l (join_mask (args_n args) (args_L args))
       ) 
     ) move (tuple_since_hist, hist_sat, idx_mid, since_sat); \<comment> \<open>use original idx_mid, not idx_mid' where the length of move already is included\<close>
     tuple_since_hist'' = (if (idx_mid' = idx_oldest') then Mapping.empty else tuple_since_hist'); \<comment> \<open>if data_in'' is empty, empty the mapping\<close>
@@ -5486,12 +5678,12 @@ proof -
         upd_set tuple_since_hist (\<lambda>_. idx_move) (r - Mapping.keys tuple_since_hist),
         hist_sat,
         idx_move+1, 
-        since_sat \<union> {as \<in> r. proj_tuple_in_join (args_pos args) maskL as l}
+        since_sat \<union> proj_tuple_in_join_optim (args_pos args) r (join_mask (args_n args) (args_R args)) l (join_mask (args_n args) (args_L args))
       ) 
     )"
 
   obtain tuple_since_hist' x hist_sat' since_sat' where fold_tuple_res: "(tuple_since_hist', hist_sat', x, since_sat') = fold fold_op_f move (tuple_since_hist, hist_sat, idx_mid, since_sat)"
-    using assms(3) 
+    using assms(3)
     unfolding fold_op_f_def move_def shift_res_def
     by (auto simp only: update_mmtaux'.simps Let_def fst_def snd_def o_def split: prod.splits)
   then have tuple_since_hist''_def: "tuple_since_hist'' = (if (idx_mid' = idx_oldest') then Mapping.empty else tuple_since_hist')"
@@ -6528,6 +6720,17 @@ proof -
       using data_sorted[OF assms(1)]
        apply (auto simp add: sorted_filter)
       by fastforce
+    moreover have "\<forall>(t, l, r) \<in> set move. table (args_n args) (args_L args) l \<and> table (args_n args) (args_R args) r"
+    proof -
+      have
+        "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_L args) as)"
+        "(\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_R args) as)"
+        using assms(1)
+        by auto
+      then show ?thesis
+        unfolding move_filter table_def relL_def relR_def
+        by auto
+    qed
     ultimately have "
     \<comment> \<open>historically\<close>
     (case Mapping.lookup (tuple_since_hist_mv move init_tuple) as of
@@ -7248,6 +7451,9 @@ proof -
       moreover have xs_ts: "\<forall>t\<in>fst ` set (linearize data_in). \<forall>t'\<in>fst ` set xs. t < t'"
         using snoc(4)
         by auto
+      moreover have "\<forall>(t, l, r) \<in> set xs. table (args_n args) (args_L args) l \<and> table (args_n args) (args_R args) r"
+        using snoc(5)
+        by auto
       ultimately have IH: "case Mapping.lookup (tuple_since_hist_mv xs init_tuple) as of
           None   \<Rightarrow> \<forall>idx. \<not> tuple_since_tp args as (lin_data_in''_mv xs) (idx_oldest_mv xs) (idx_mid_mv xs) idx
         | Some idx \<Rightarrow> tuple_since_tp args as (lin_data_in''_mv xs) (idx_oldest_mv xs) (idx_mid_mv xs) idx"
@@ -7275,10 +7481,24 @@ proof -
         unfolding fold_op_f_def relR_def hist_sat'_def
         by (auto simp add: Let_def case_prod_beta')
 
+      have x_table:
+        "table (args_n args) (args_L args) (relL x)"
+        "table (args_n args) (args_R args) (relR x)"
+        using snoc(5)
+        unfolding relL_def relR_def
+        by (auto)
+
+      have maskL_eq: "maskL = join_mask (args_n args) (args_L args)"
+        using assms(1)
+        by auto
+
       define since_sat' where "since_sat' = (snd o snd o snd) tuple"
-      have fold_IH_since_sat: "(snd o snd o snd) (fold_op_f x tuple) = (since_sat' \<inter> (relR x)) \<union> {as \<in> (relR x). proj_tuple_in_join (args_pos args) maskL as (relL x)}"
+      have fold_IH_since_sat: "(snd o snd o snd) (fold_op_f x tuple) = (since_sat' \<inter> (relR x)) \<union> proj_tuple_in_join_optim (args_pos args) (relR x) (join_mask (args_n args) (args_R args)) (relL x) (join_mask (args_n args) (args_L args))"
         unfolding fold_op_f_def relR_def relL_def since_sat'_def
         by (auto simp add: Let_def case_prod_beta')
+      then have fold_IH_since_sat: "(snd o snd o snd) (fold_op_f x tuple) = (since_sat' \<inter> (relR x)) \<union> {as \<in> (relR x). proj_tuple_in_join (args_pos args) maskL as (relL x)}"
+        using proj_tuple_in_join_optim_equiv[OF x_table, of "args_pos args"] maskL_eq
+        by blast
 
       {
         assume non_empty: "lin_data_in''_mv (xs @ [x]) \<noteq> []"

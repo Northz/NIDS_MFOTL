@@ -33,7 +33,7 @@ let monitor dbschema logfile f =
     if d.ts >= ts then
       begin
         (* let _ = Printf.printf "Last: %b TS: %f TP: %d !Log.TP: %d d.TP: %d\n" !Log.last d.ts tp !Log.tp d.tp in *)
-		let t_start = Unix.gettimeofday () in
+		(*let t_start = Unix.gettimeofday () in*)
         if !Misc.verbose then
           Printf.printf "At time point %d:\n%!" d.tp;
         let tpts = add d.tp d.ts tpts in
@@ -45,8 +45,8 @@ let monitor dbschema logfile f =
               show_results closed d.tp qtp qts rel
           ) vs;
         let tpts = List.fold_left (fun map (qtp,_) -> remove qtp map) tpts vs in
- 		let t_stop = Unix.gettimeofday () in
- 		let _ = Printf.printf "loop: %f\n" (t_stop -. t_start) in
+ 		(*let t_stop = Unix.gettimeofday () in
+ 		let _ = Printf.printf "loop: %f\n" (t_stop -. t_start) in*)
         loop new_state tpts d.tp d.ts
       end
     else
