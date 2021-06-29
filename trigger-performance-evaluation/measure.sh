@@ -1,17 +1,22 @@
 #!/bin/bash
 
-START=$1
-END=$2
 ITERATIONS=10
 
 echo "Running experiments.."
 
-echo "experiment;rewritten real time;rewritten user time;rewritten sys time;rewritten meval time;native real time;native user time;native sys time;native trigger time;native meval time" > ./measurements.csv
+echo "experiment;asymptotic;rewritten real time;rewritten user time;rewritten sys time;rewritten meval time;native real time;native user time;native sys time;native trigger time;native meval time" > ./measurements.csv
 
-for experiment in $( seq $START $END ); do
-	echo "Running experiment #$experiment for $ITERATIONS iterations"
+for dir in ./experiments/*/
+do
+    dir=${dir%*/}            # remove the trailing "/"
+    experiment="${dir##*/}"  # print everything after the final "/"
+	
+	echo "Running experiment $experiment for $ITERATIONS iterations"
+	continue;
 	for iteration in $( seq 1 $ITERATIONS ); do
-		./measure-single.sh $experiment >> ./measurements.csv
+		./measure-single.sh $experiment baseline >> ./measurements.csv
+		./measure-single.sh $experiment 2n		 >> ./measurements.csv
+		./measure-single.sh $experiment 2l		 >> ./measurements.csv
 	done
 done
 

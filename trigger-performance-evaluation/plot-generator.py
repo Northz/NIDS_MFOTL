@@ -11,6 +11,8 @@ parser.add_argument('--measurements',
 parser.add_argument('--output',
                     help='The output path and filename', required=True)
 parser.add_argument('--title', help='The plot title')
+parser.add_argument(
+    '--yscale', help='The scale of the y-axis. Default: linear')
 
 
 args = parser.parse_args()
@@ -18,6 +20,7 @@ args = parser.parse_args()
 measurements = args.measurements
 output = args.output
 title = args.title
+yscale = args.yscale
 
 df = pd.read_csv(measurements, sep=";", quotechar='"', skipinitialspace=True)
 
@@ -63,7 +66,7 @@ rects_rewritten_meval = ax.bar(x - width/2, rewritten_meval_means, width,
 #                       label='native', yerr=native_stds, ecolor='black', capsize=2, color='#e67e22')
 rects_native_meval = ax.bar(x + width/2, native_meval_means, width,
                             label='native meval', yerr=native_meval_stds, ecolor='black', capsize=2)  # , color='#d35400'
-rects_native_mmtaux = ax.bar(x + width/2, native_mmtaux_means, width,
+rects_native_mmtaux = ax.bar(x + width/2, native_mmtaux_means, 0.75*width,
                              label='mmtaux', yerr=native_mmtaux_stds, ecolor='black', capsize=2)  # , color='#2ecc71'
 
 # Add some text for labels, title and custom x-axis tick labels, etc.
@@ -72,6 +75,9 @@ ax.set_title(title)
 ax.set_xticks(x)
 ax.set_xticklabels(labels)
 ax.legend()
+
+if yscale == "log":
+    plt.yscale('log')
 
 # ax.bar_label(rects1, padding=3)
 # ax.bar_label(rects2, padding=3)
