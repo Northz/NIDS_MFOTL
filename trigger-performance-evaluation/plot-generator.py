@@ -10,24 +10,23 @@ parser.add_argument('--measurements',
                     help='The measurement csv', required=True)
 parser.add_argument('--output',
                     help='The output path and filename', required=True)
-parser.add_argument('--title', help='The plot title')
-parser.add_argument(
-    '--yscale', help='The scale of the y-axis. Default: linear')
+#parser.add_argument( '--yscale', help='The scale of the y-axis. Default: linear')
 
 
 args = parser.parse_args()
 
 measurements = args.measurements
 output = args.output
-title = args.title
-yscale = args.yscale
+#yscale = args.yscale
 
 df = pd.read_csv(measurements, sep=";", quotechar='"', skipinitialspace=True)
 
 # df.drop(['rewritten real time', 'native real time',
 #         'rewritten sys time', 'native sys time'], axis=1)
 
-df = df.sort_values(by=['experiment']).groupby('experiment').agg({
+experiments = pd.unique(df.sort_values(by=['experiment']).experiment)
+
+df = df.sort_values(by=['experiment']).groupby(['experiment']).agg({
     'rewritten real time': ['mean', 'std'],
     'rewritten meval time': ['mean', 'std'],
     'native real time': ['mean', 'std'],
@@ -35,7 +34,9 @@ df = df.sort_values(by=['experiment']).groupby('experiment').agg({
     'native trigger time': ['mean', 'std']
 })
 
-labels = ["experiment " + str(i) for i in df.index.to_numpy()]
+
+labels = [i for i, e in enumerate(experiments)]
+
 #rewritten_means = df['rewritten real time']['mean'].to_numpy()
 rewritten_meval_means = df['rewritten meval time']['mean'].to_numpy()
 #native_means = df['native real time']['mean'].to_numpy()
@@ -48,7 +49,7 @@ rewritten_meval_stds = df['rewritten meval time']['std'].to_numpy()
 native_meval_stds = df['native meval time']['std'].to_numpy()
 native_mmtaux_stds = df['native trigger time']['std'].to_numpy()
 
-plt.rcParams["figure.figsize"] = (len(labels)+3, 5)
+#plt.rcParams["figure.figsize"] = (len(labels)+3, 5)
 
 # the label locations
 x = np.arange(len(labels))
@@ -71,17 +72,19 @@ rects_native_mmtaux = ax.bar(x + width/2, native_mmtaux_means, 0.75*width,
 
 # Add some text for labels, title and custom x-axis tick labels, etc.
 ax.set_ylabel('Running time of meval in seconds')
-ax.set_title(title)
 ax.set_xticks(x)
 ax.set_xticklabels(labels)
 ax.legend()
 
-if yscale == "log":
-    plt.yscale('log')
+plt.yscale('log')
+# if "a-bounded" in experiment_name:
+#     plt.yscale('log')
+# else:
+#     plt.yscale('linear')
 
 # ax.bar_label(rects1, padding=3)
 # ax.bar_label(rects2, padding=3)
 
 fig.tight_layout()
 
-plt.savefig(output, dpi=300)
+plt.savefig(os.path.join(output, f'plot.png'), dpi=300)

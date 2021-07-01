@@ -109,152 +109,143 @@ def append_to_log(log, t, preds, assignments, additional_assignments=[]):
 i = 0
 t = 0
 
-# independent of the pattern, the first length-b entries can be filled with random values for I = [a, b]
-if not(interval[1] == "*"):
-    while i < length - (int(interval[1])):
+# repeat chunks in the size of the interval
+while i < length:
+    if interval[1] == "*":
+        upper_bound = length
+    else:
+        upper_bound = min(i + int(interval[1]), length)
 
-        # additional assignments, just s.t. the log isn't perfectly uniform
+    if pattern == "historically":
+
+        # one assignment for all entries. at least rhs
         assignments = generate_assignments()
 
-        if random.uniform(0, 1) < 0.5:
-            t = t+1
+        # print("The historically assignments are")
+        # print(assignments)
 
-        append_to_log(log, t, predicates, assignments)
+        while i < upper_bound - (int(interval[0])):
 
-        i = i+1
+            # additional assignments, just s.t. the log isn't perfectly uniform
+            additional_assignments = generate_assignments()
 
-# the remainder of the log follows a pattern
+            if random.uniform(0, 1) < 0.5:
+                t = t+1
 
-if pattern == "historically":
+            append_to_log(log, t, rhs_predicates,
+                          assignments, additional_assignments)
 
-    # one assignment for all entries. at least rhs
-    assignments = generate_assignments()
+            i = i+1
 
-    # print("The historically assignments are")
-    # print(assignments)
+        # last a entries are random for interval I = [a, b]
+        while i < upper_bound:
 
-    while i < length - (int(interval[0])):
+            assignments = generate_assignments()
 
-        # additional assignments, just s.t. the log isn't perfectly uniform
-        additional_assignments = generate_assignments()
+            if random.uniform(0, 1) < 0.5:
+                t = t+1
 
-        if random.uniform(0, 1) < 0.5:
-            t = t+1
+            append_to_log(log, t, predicates, assignments)
 
-        append_to_log(log, t, rhs_predicates,
-                      assignments, additional_assignments)
+            i = i+1
 
-        i = i+1
-
-    # last a entries are random for interval I = [a, b]
-    while i < length:
+    elif pattern == "since":
+        # print("place rhs of since at " + str(loc))
 
         assignments = generate_assignments()
+        assignment_per_loc = {}
+        for assignment in assignments:
+            # choose a log index where phi / the lhs occurs. must be within the interval!
+            loc = random.randint(i, upper_bound - (int(interval[0])))
 
-        if random.uniform(0, 1) < 0.5:
-            t = t+1
+            # the location might already be in the dictionary
+            if loc in assignment_per_loc:
+                # then append
+                assignment_per_loc[loc].append(assignment)
+            else:
+                # otherwise just set it
+                assignment_per_loc[loc] = [assignment]
 
-        append_to_log(log, t, predicates, assignments)
+        a = []
 
-        i = i+1
+        # from there on only generate rhs with the at least same assignments until the end of the interval is reached
+        while i < upper_bound - (int(interval[0])):
 
-elif pattern == "since":
-    # print("place rhs of since at " + str(loc))
+            # collect all assignments that have to appear after i
+            for loc in assignment_per_loc:
+                if loc == i:
+                    a = a + assignment_per_loc[loc]
 
-    assignments = generate_assignments()
-    assignment_per_loc = {}
-    for assignment in assignments:
-        # choose a log index where phi / the lhs occurs. must be within the interval!
-        loc = random.randint(i, length - (int(interval[0])))
+            # additional assignments, just s.t. the log isn't perfectly uniform
+            additional_assignments = generate_assignments()
 
-        # the location might already be in the dictionary
-        if loc in assignment_per_loc:
-            # then append
-            assignment_per_loc[loc].append(assignment)
-        else:
-            # otherwise just set it
-            assignment_per_loc[loc] = [assignment]
+            if random.uniform(0, 1) < 0.5:
+                t = t+1
 
-    a = []
+            append_to_log(log, t, rhs_predicates, a, additional_assignments)
+            i = i+1
 
-    # from there on only generate rhs with the at least same assignments until the end of the interval is reached
-    while i < length - (int(interval[0])):
+        # [0, a-1] can again be filled with random assignments
+        while i < upper_bound:
+            assignments = generate_assignments()
 
-        # collect all assignments that have to appear after i
-        for loc in assignment_per_loc:
-            if loc == i:
-                a = a + assignment_per_loc[loc]
+            if random.uniform(0, 1) < 0.5:
+                t = t+1
 
-        # additional assignments, just s.t. the log isn't perfectly uniform
-        additional_assignments = generate_assignments()
+            append_to_log(log, t, predicates, assignments)
+            i = i+1
 
-        if random.uniform(0, 1) < 0.5:
-            t = t+1
+        pass
+    elif pattern == "once":
 
-        append_to_log(log, t, rhs_predicates, a, additional_assignments)
-        i = i+1
+        if interval[0] == "0":
+            print("For pattern 'once', the lower bound of the intervall cannot be 0!")
+            exit(0)
 
-    # [0, a-1] can again be filled with random assignments
-    while i < length:
+        # first few entries are completely random
+        while i < upper_bound - (int(interval[0])):
+
+            assignments = generate_assignments()
+
+            if random.uniform(0, 1) < 0.5:
+                t = t+1
+
+            append_to_log(log, t, predicates, assignments)
+
+            i = i+1
+
+        # last a entries are (almost) random as well
+        log_end = []
+        while i < upper_bound:
+
+            assignments = generate_assignments()
+
+            if random.uniform(0, 1) < 0.5:
+                t = t+1
+
+            append_to_log(log_end, t, predicates, assignments)
+
+            i = i+1
+        # but the last a entries contain one occurence of the lhs
         assignments = generate_assignments()
+        assignment_per_idx = {}
+        for assignment in assignments:
+            # choose a log index where phi / the lhs occurs. must be within the interval!
+            idx = random.randint(0, len(log_end) - 1)
 
-        if random.uniform(0, 1) < 0.5:
-            t = t+1
+            # the location might already be in the dictionary
+            if idx in assignment_per_idx:
+                # then append
+                assignment_per_idx[idx].append(assignment)
+            else:
+                # otherwise just set it
+                assignment_per_idx[idx] = [assignment]
 
-        append_to_log(log, t, predicates, assignments)
-        i = i+1
+        for idx in assignment_per_idx:
+            t_once = re.findall(r'@\d+\s', log_end[idx])[0][1:-1]
+            log_end[idx] = "@" + str(t_once) + " " + " ".join(
+                list(set([insert_variables(p, a) for p in lhs_predicates for a in assignment_per_idx[idx]])))
 
-    pass
-elif pattern == "once":
-
-    if interval[0] == "0":
-        print("For pattern 'once', the lower bound of the intervall cannot be 0!")
-        exit(0)
-
-    # first few entries are completely random
-    while i < length - (int(interval[0])):
-
-        assignments = generate_assignments()
-
-        if random.uniform(0, 1) < 0.5:
-            t = t+1
-
-        append_to_log(log, t, predicates, assignments)
-
-        i = i+1
-
-    # last a entries are (almost) random as well
-    log_end = []
-    while i < length:
-
-        assignments = generate_assignments()
-
-        if random.uniform(0, 1) < 0.5:
-            t = t+1
-
-        append_to_log(log_end, t, predicates, assignments)
-
-        i = i+1
-    # but the last a entries contain one occurence of the lhs
-    assignments = generate_assignments()
-    assignment_per_idx = {}
-    for assignment in assignments:
-        # choose a log index where phi / the lhs occurs. must be within the interval!
-        idx = random.randint(0, len(log_end) - 1)
-
-        # the location might already be in the dictionary
-        if idx in assignment_per_idx:
-            # then append
-            assignment_per_idx[idx].append(assignment)
-        else:
-            # otherwise just set it
-            assignment_per_idx[idx] = [assignment]
-
-    for idx in assignment_per_idx:
-        t_once = re.findall(r'@\d+\s', log_end[idx])[0][1:-1]
-        log_end[idx] = "@" + str(t_once) + " " + " ".join(
-            list(set([insert_variables(p, a) for p in lhs_predicates for a in assignment_per_idx[idx]])))
-
-    log = log + log_end
+        log = log + log_end
 
 write_file(os.path.join(output), "\n".join(log) + "\n")
