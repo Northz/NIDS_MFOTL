@@ -316,25 +316,24 @@ lemma safe_max_Some_dest_le: "finite X \<Longrightarrow> safe_max X = Some x \<L
 
 definition newest_tuple_in_mapping :: "
   ('b \<Rightarrow> 'a table) \<Rightarrow>
-  ('a tuple \<Rightarrow> 'a tuple) \<Rightarrow>
   (ts \<times> 'b) queue \<Rightarrow>
   (('a tuple, ts) mapping) \<Rightarrow>
   ((ts \<times> 'a tuple) \<Rightarrow> bool) \<Rightarrow>
   bool"
   where
-  "newest_tuple_in_mapping entry_to_db restrict_tuple data_in tuple_in P = (\<forall>tuple.
+  "newest_tuple_in_mapping entry_to_db data_in tuple_in P = (\<forall>tuple.
     \<comment> \<open>iff something is present in the mapping then the value corresponds
        to the maximum timestamp of a db containing the tuple\<close>
     Mapping.lookup tuple_in tuple =
     safe_max (
       fst ` {
        tas \<in> ts_tuple_rel_f entry_to_db (set (linearize data_in)).
-       P tas \<and> restrict_tuple tuple = snd tas
+       P tas \<and> tuple = snd tas
       }
     )
   )"
 
-lemma "newest_tuple_in_mapping entry_to_db id data_in tuple_in (\<lambda>x. valid_tuple tuple_since x) =
+lemma "newest_tuple_in_mapping entry_to_db data_in tuple_in (\<lambda>x. valid_tuple tuple_since x) =
   (\<forall>as. Mapping.lookup tuple_in as = safe_max (fst `
     {tas \<in> ts_tuple_rel_f entry_to_db (set (linearize data_in)). valid_tuple tuple_since tas \<and> as = snd tas}))"
   by (auto simp add: newest_tuple_in_mapping_def)
@@ -357,7 +356,7 @@ fun valid_mmsaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Rightarrow>
     (\<forall>t \<in> fst ` set (linearize data_prev). t \<le> nt \<and> \<not> memL (args_ivl args) (nt - t)) \<and>
     sorted (map fst (linearize data_in)) \<and>
     (\<forall>t \<in> fst ` set (linearize data_in). t \<le> nt \<and> memL (args_ivl args) (nt - t)) \<and>
-    newest_tuple_in_mapping id id data_in tuple_in (\<lambda>x. valid_tuple tuple_since x)
+    newest_tuple_in_mapping id data_in tuple_in (\<lambda>x. valid_tuple tuple_since x)
   "
 
 lemma Mapping_lookup_filter_keys: "k \<in> Mapping.keys (Mapping.filter f m) \<Longrightarrow>
@@ -395,8 +394,7 @@ lemma valid_init_mmsaux: "L \<subseteq> R \<Longrightarrow> valid_mmsaux (init_a
   by (auto simp add: init_args_def empty_queue_rep ts_tuple_rel_f_def join_mask_def
       Mapping.lookup_empty safe_max_def table_def newest_tuple_in_mapping_def)
 
-abbreviation "filter_cond_r X' r ts t' \<equiv> (\<lambda>as _. \<not> ((r as) \<in> X' \<and> Mapping.lookup ts as = Some t'))"
-abbreviation "filter_cond X' ts t' \<equiv> filter_cond_r X' id ts t'"
+abbreviation "filter_cond X' ts t' \<equiv> (\<lambda>as _. \<not> (as \<in> X' \<and> Mapping.lookup ts as = Some t'))"
 
 lemma dropWhile_filter:
   "sorted (map fst xs) \<Longrightarrow>
@@ -422,7 +420,7 @@ lemma takeWhile_filter':
 
 lemma fold_Mapping_filter_None: "Mapping.lookup ts as = None \<Longrightarrow>
   Mapping.lookup (fold (\<lambda>(t, X) ts. Mapping.filter
-  (filter_cond_r (f X) r ts t) ts) ds ts) as = None"
+  (filter_cond (f X) ts t) ts) ds ts) as = None"
   by (induction ds arbitrary: ts) (auto simp add: Mapping.lookup_filter)
 
 lemma Mapping_lookup_filter_Some_P: "Mapping.lookup (Mapping.filter P m) k = Some v \<Longrightarrow> P k v"
@@ -441,8 +439,8 @@ lemma Mapping_lookup_filter_not_None: "Mapping.lookup (Mapping.filter P m) k \<n
   by (auto simp add: Mapping.lookup_filter split: option.splits)
 
 lemma fold_Mapping_filter_Some_None: "Mapping.lookup ts as = Some t \<Longrightarrow>
-  (r as) \<in> (f X) \<Longrightarrow> (t, X) \<in> set ds \<Longrightarrow>
-  Mapping.lookup (fold (\<lambda>(t, X) ts. Mapping.filter (filter_cond_r (f X) r ts t) ts) ds ts) as = None"
+  as \<in> (f X) \<Longrightarrow> (t, X) \<in> set ds \<Longrightarrow>
+  Mapping.lookup (fold (\<lambda>(t, X) ts. Mapping.filter (filter_cond (f X) ts t) ts) ds ts) as = None"
 proof (induction ds arbitrary: ts)
   case (Cons a ds)
   show ?case
@@ -450,23 +448,23 @@ proof (induction ds arbitrary: ts)
     case (Pair t' X')
     with Cons show ?thesis
       using
-        fold_Mapping_filter_None[of "Mapping.filter (filter_cond_r (f X') r ts t') ts" as r f ds]
-        Mapping_lookup_filter_not_None[of "filter_cond_r (f X') r ts t'" ts as]
-        fold_Mapping_filter_None[OF Mapping_lookup_filter_None, of _ as r f ds ts]
-      by (cases "Mapping.lookup (Mapping.filter (filter_cond_r (f X') r ts t') ts) as = None") auto
+        fold_Mapping_filter_None[of "Mapping.filter (filter_cond (f X') ts t') ts" as f ds]
+        Mapping_lookup_filter_not_None[of "filter_cond (f X') ts t'" ts as]
+        fold_Mapping_filter_None[OF Mapping_lookup_filter_None, of _ as f ds ts]
+      by (cases "Mapping.lookup (Mapping.filter (filter_cond (f X') ts t') ts) as = None") auto
   qed
 qed simp
 
 lemma fold_Mapping_filter_Some_Some: "Mapping.lookup ts as = Some t \<Longrightarrow>
-  (\<And>X. (t, X) \<in> set ds \<Longrightarrow> r as \<notin> f X) \<Longrightarrow>
-  Mapping.lookup (fold (\<lambda>(t, X) ts. Mapping.filter (filter_cond_r (f X) r ts t) ts) ds ts) as = Some t"
+  (\<And>X. (t, X) \<in> set ds \<Longrightarrow> as \<notin> f X) \<Longrightarrow>
+  Mapping.lookup (fold (\<lambda>(t, X) ts. Mapping.filter (filter_cond (f X) ts t) ts) ds ts) as = Some t"
 proof (induction ds arbitrary: ts)
   case (Cons a ds)
   then show ?case
   proof (cases a)
     case (Pair t' X')
     with Cons show ?thesis
-      using Mapping_lookup_filter_Some[of "filter_cond_r (f X') r ts t'" as ts] by auto
+      using Mapping_lookup_filter_Some[of "filter_cond (f X') ts t'" as ts] by auto
   qed
 qed simp
 
@@ -475,13 +473,13 @@ qed simp
   2. for the dropped dbs from data_in we filter a mapping and remove all entries where the entry
      stored points to a dropped db (via the timestamp stored)
 *)
-fun shift_end :: "\<I> \<Rightarrow> ts \<Rightarrow> ('a \<Rightarrow> 'b table) \<Rightarrow> ('b tuple \<Rightarrow> 'b tuple) \<Rightarrow> ((ts \<times> 'c) queue \<times> (ts \<times> 'a) queue \<times> (('b tuple, ts) mapping)) \<Rightarrow> ((ts \<times> 'c) queue \<times> (ts \<times> 'a) queue \<times> (ts \<times> 'a) list \<times> (('b tuple, ts) mapping))" where
-  "shift_end I nt to_table restrict_tuple (data_prev, data_in, tuple_in) =
+fun shift_end :: "\<I> \<Rightarrow> ts \<Rightarrow> ('a \<Rightarrow> 'b table)  \<Rightarrow> ((ts \<times> 'c) queue \<times> (ts \<times> 'a) queue \<times> (('b tuple, ts) mapping)) \<Rightarrow> ((ts \<times> 'c) queue \<times> (ts \<times> 'a) queue \<times> (ts \<times> 'a) list \<times> (('b tuple, ts) mapping))" where
+  "shift_end I nt to_table (data_prev, data_in, tuple_in) =
     (let
       data_prev = dropWhile_queue (\<lambda>(t, _). \<not> memR I (nt - t)) data_prev;
       (data_in, in_discard) = takedropWhile_queue (\<lambda>(t, _). \<not> memR I (nt - t)) data_in;
       tuple_in = fold (\<lambda>(t, X) tuple_in. Mapping.filter
-        (filter_cond_r (to_table X) restrict_tuple tuple_in t) tuple_in) in_discard tuple_in in
+        (filter_cond (to_table X) tuple_in t) tuple_in) in_discard tuple_in in
       (data_prev, data_in, in_discard, tuple_in)
     )"
 
@@ -491,7 +489,6 @@ fun shift_end_mmsaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Rightar
       shift_end
       (args_ivl args)
       nt
-      id
       id
       (data_prev, data_in, tuple_in)
     in
@@ -510,9 +507,9 @@ lemma valid_shift_end_unfolded:
   assumes data_in_props:
     "sorted (map fst (linearize data_in))"
     "(\<forall>t \<in> fst ` set (linearize data_in). t \<le> t' \<and> memL I (cur - t))"
-  assumes max_ts_tuple_in: "newest_tuple_in_mapping f3 r data_in tuple_in P2"
+  assumes max_ts_tuple_in: "newest_tuple_in_mapping f3 data_in tuple_in P2"
   assumes nt_mono: "nt \<ge> cur" "t' \<le> nt"
-  assumes shift_end_appl: "(data_prev', data_in', discard, tuple_in') = shift_end I nt f3 r (data_prev, data_in, tuple_in)"
+  assumes shift_end_appl: "(data_prev', data_in', discard, tuple_in') = shift_end I nt f3 (data_prev, data_in, tuple_in)"
   shows
     "table n V1 (Mapping.keys tuple_in')"
     "ts_tuple_rel_f f1_auxlist (set (filter (\<lambda>(t, rel). memR I (nt - t)) (filter_auxlist auxlist))) =
@@ -523,11 +520,11 @@ lemma valid_shift_end_unfolded:
     "(\<forall>t \<in> fst ` set (linearize data_prev'). t \<le> t' \<and> \<not> memL I (cur - t))"
     "sorted (map fst (linearize data_in'))"
     "(\<forall>t \<in> fst ` set (linearize data_in'). t \<le> t' \<and> mem I (cur - t))"
-    "newest_tuple_in_mapping f3 r data_in' tuple_in' P2"
+    "newest_tuple_in_mapping f3 data_in' tuple_in' P2"
     "discard = snd (takedropWhile_queue (\<lambda>(t, X). \<not> memR I (nt - t)) data_in)"
     "linearize data_in' = filter (\<lambda>(t, X). memR I (nt - t)) (linearize data_in)"
     "tuple_in' = fold (\<lambda>(t, X) tuple_in. Mapping.filter
-    (filter_cond_r (f3 X) r tuple_in t) tuple_in) discard tuple_in"
+    (filter_cond (f3 X) tuple_in t) tuple_in) discard tuple_in"
 proof -
 
   show discard_def: "discard = snd (takedropWhile_queue (\<lambda>(t, X). \<not> memR I (nt - t)) data_in)"
@@ -542,15 +539,15 @@ proof -
     by (auto simp only: shift_end.simps Let_def fst_def split: prod.splits)
 
   show tuple_in'_def: "tuple_in' = fold (\<lambda>(t, X) tuple_in. Mapping.filter
-    (filter_cond_r (f3 X) r tuple_in t) tuple_in) discard tuple_in"
+    (filter_cond (f3 X) tuple_in t) tuple_in) discard tuple_in"
     using shift_end_appl
     by (auto simp only: shift_end.simps Let_def snd_def  split: prod.splits)
   
   have tuple_in_Some_None: "\<And>as t X. Mapping.lookup tuple_in as = Some t \<Longrightarrow>
-    (r as) \<in> (f3 X) \<Longrightarrow> (t, X) \<in> set discard \<Longrightarrow> Mapping.lookup tuple_in' as = None"
+    (as) \<in> (f3 X) \<Longrightarrow> (t, X) \<in> set discard \<Longrightarrow> Mapping.lookup tuple_in' as = None"
     using fold_Mapping_filter_Some_None unfolding tuple_in'_def by fastforce
   have tuple_in_Some_Some: "\<And>as t. Mapping.lookup tuple_in as = Some t \<Longrightarrow>
-    (\<And>X. (t, X) \<in> set discard \<Longrightarrow> (r as) \<notin> f3 X) \<Longrightarrow> Mapping.lookup tuple_in' as = Some t"
+    (\<And>X. (t, X) \<in> set discard \<Longrightarrow> (as) \<notin> f3 X) \<Longrightarrow> Mapping.lookup tuple_in' as = Some t"
     using fold_Mapping_filter_Some_Some unfolding tuple_in'_def by force
   have tuple_in_None_None: "\<And>as. Mapping.lookup tuple_in as = None \<Longrightarrow>
     Mapping.lookup tuple_in' as = None"
@@ -583,19 +580,19 @@ proof -
 
 
   have lookup_tuple_in': "\<And>as. Mapping.lookup tuple_in' as = safe_max (fst `
-    {tas \<in> ts_tuple_rel_f f3 (set (linearize data_in')). P2 tas \<and> r as = snd tas})"
+    {tas \<in> ts_tuple_rel_f f3 (set (linearize data_in')). P2 tas \<and> as = snd tas})"
   proof -
     fix as
     show "Mapping.lookup tuple_in' as = safe_max (fst `
-    {tas \<in> ts_tuple_rel_f f3 (set (linearize data_in')). P2 tas \<and> r as = snd tas})"
+    {tas \<in> ts_tuple_rel_f f3 (set (linearize data_in')). P2 tas \<and> as = snd tas})"
     proof (cases "Mapping.lookup tuple_in as")
       case None
       then have "{tas \<in> ts_tuple_rel_f f3 (set (linearize data_in)).
-        P2 tas \<and> r as = snd tas} = {}"
+        P2 tas \<and> as = snd tas} = {}"
         using max_ts_tuple_in
         by (auto simp add: newest_tuple_in_mapping_def dest!: safe_max_empty_dest)
       then have "{tas \<in> ts_tuple_rel_f f3 (set (linearize data_in')).
-        P2 tas \<and> r as = snd tas} = {}"
+        P2 tas \<and> as = snd tas} = {}"
         using ts_tuple_rel_mono[OF set_lin_data_in'] by auto
       then show ?thesis
         unfolding tuple_in_None_None[OF None] using iffD2[OF safe_max_empty, symmetric] by blast
@@ -603,18 +600,18 @@ proof -
       
       case (Some t)
       show ?thesis
-      proof (cases "\<exists>X. (t, X) \<in> set discard \<and> (r as) \<in> f3 X")
+      proof (cases "\<exists>X. (t, X) \<in> set discard \<and> (as) \<in> f3 X")
         case True
-        then obtain X where X_def: "(t, X) \<in> set discard" "(r as) \<in> f3 X"
+        then obtain X where X_def: "(t, X) \<in> set discard" "(as) \<in> f3 X"
           by auto
         have "\<not> memR I (nt - t)"
           using X_def(1) unfolding discard_alt by simp
-        moreover have "\<And>t'. (t', r as) \<in> ts_tuple_rel_f f3 (set (linearize data_in)) \<Longrightarrow>
-          P2 (t', r as) \<Longrightarrow> t' \<le> t"
+        moreover have "\<And>t'. (t', as) \<in> ts_tuple_rel_f f3 (set (linearize data_in)) \<Longrightarrow>
+          P2 (t', as) \<Longrightarrow> t' \<le> t"
           using max_ts_tuple_in Some safe_max_Some_dest_le[OF finite_fst_ts_tuple_rel]
           by (fastforce simp add: image_iff newest_tuple_in_mapping_def)
         ultimately have "{tas \<in> ts_tuple_rel_f f3 (set (linearize data_in')).
-          P2 tas \<and> r as = snd tas} = {}"
+          P2 tas \<and> as = snd tas} = {}"
           unfolding lin_data_in' using ts_tuple_rel_set_filter
           by (fastforce simp add: ts_tuple_rel_f_def memR_antimono)
         then show ?thesis
@@ -624,23 +621,23 @@ proof -
         case False
         then have lookup_Some: "Mapping.lookup tuple_in' as = Some t"
           using tuple_in_Some_Some[OF Some] by auto
-        have t_as: "(t, r as) \<in> ts_tuple_rel_f f3 (set (linearize data_in))"
-          "P2 (t, r as)"
+        have t_as: "(t, as) \<in> ts_tuple_rel_f f3 (set (linearize data_in))"
+          "P2 (t, as)"
           using max_ts_tuple_in Some
           by (auto simp add: newest_tuple_in_mapping_def dest: safe_max_Some_dest_in[OF finite_fst_ts_tuple_rel])
-        then obtain X where X_def: "r as \<in> f3 X" "(t, X) \<in> set (linearize data_in)"
+        then obtain X where X_def: "as \<in> f3 X" "(t, X) \<in> set (linearize data_in)"
           by (auto simp add: ts_tuple_rel_f_def)
         have "(t, X) \<in> set (linearize data_in')"
           using X_def False unfolding discard_alt lin_data_in' by auto
         then have t_in_fst: "t \<in> fst ` {tas \<in> ts_tuple_rel_f f3 (set (linearize data_in')).
-          P2 tas \<and> r as = snd tas}"
+          P2 tas \<and> as = snd tas}"
           using t_as(2) X_def(1) by (auto simp add: ts_tuple_rel_f_def image_iff)
-        have "\<And>t'. (t', r as) \<in> ts_tuple_rel_f f3 (set (linearize data_in)) \<Longrightarrow>
-          P2 (t', r as) \<Longrightarrow> t' \<le> t"
+        have "\<And>t'. (t', as) \<in> ts_tuple_rel_f f3 (set (linearize data_in)) \<Longrightarrow>
+          P2 (t', as) \<Longrightarrow> t' \<le> t"
           using max_ts_tuple_in Some safe_max_Some_dest_le[OF finite_fst_ts_tuple_rel]
           by (fastforce simp add: image_iff newest_tuple_in_mapping_def)
         then have "Max (fst ` {tas \<in> ts_tuple_rel_f f3 (set (linearize data_in')).
-          P2 tas \<and> r as = snd tas}) = t"
+          P2 tas \<and> as = snd tas}) = t"
           using Max_eqI[OF finite_fst_ts_tuple_rel, OF _ t_in_fst]
             ts_tuple_rel_mono[OF set_lin_data_in'] by fastforce
         then show ?thesis
@@ -649,7 +646,7 @@ proof -
     qed
   qed
 
-  then show "newest_tuple_in_mapping f3 r data_in' tuple_in' P2"
+  then show "newest_tuple_in_mapping f3 data_in' tuple_in' P2"
     by (auto simp only: newest_tuple_in_mapping_def id_def)
   show table_in: "table n V1 (Mapping.keys tuple_in')"
     using tuple_in'_keys table_tuple_in
@@ -687,12 +684,12 @@ lemma valid_shift_end_mmsaux_unfolded:
     (ot, gc, maskL, maskR, data_prev, data_in, tuple_in, tuple_since))
     (filter (\<lambda>(t, rel). memR (args_ivl args) (nt - t)) auxlist)"
 proof - 
-  define shift_res where "shift_res = shift_end (args_ivl args) nt id id (data_prev, data_in, tuple_in)"
+  define shift_res where "shift_res = shift_end (args_ivl args) nt id (data_prev, data_in, tuple_in)"
   define data_prev' where "data_prev' = fst shift_res"
   define data_in' where "data_in' = (fst o snd) shift_res"
   define in_discard where "in_discard = (fst o snd o snd) shift_res"
   define tuple_in' where "tuple_in' = (snd o snd o snd) shift_res"
-  have shift_end_res: "(data_prev', data_in', in_discard, tuple_in') = shift_end (args_ivl args) nt id id (data_prev, data_in, tuple_in)"
+  have shift_end_res: "(data_prev', data_in', in_discard, tuple_in') = shift_end (args_ivl args) nt id (data_prev, data_in, tuple_in)"
     using data_prev'_def data_in'_def in_discard_def tuple_in'_def shift_res_def
     by auto
 
@@ -725,7 +722,7 @@ proof -
     "(\<forall>t \<in> fst ` set (linearize data_in). t \<le> cur \<and> memL (args_ivl args) (cur - t))"
     by auto
 
-  from assms(1) have max_ts_tuple_in: "newest_tuple_in_mapping id id data_in tuple_in (\<lambda>x. valid_tuple tuple_since x)"
+  from assms(1) have max_ts_tuple_in: "newest_tuple_in_mapping id data_in tuple_in (\<lambda>x. valid_tuple tuple_since x)"
     by auto
 
   from assms(1) have time: "cur = ot" by auto
@@ -898,7 +895,7 @@ lemma valid_add_new_ts_past_unfolded:
   assumes data_in_props:
     "sorted (map fst (linearize data_in))"
     "(\<forall>t \<in> fst ` set (linearize data_in). t \<le> cur \<and> memL (args_ivl args) (cur - t))"
-  assumes max_ts_tuple_in: "newest_tuple_in_mapping f id data_in tuple_in (\<lambda>x. valid_tuple tuple_since x)"
+  assumes max_ts_tuple_in: "newest_tuple_in_mapping f data_in tuple_in (\<lambda>x. valid_tuple tuple_since x)"
   assumes nt_mono: "nt \<ge> cur"
   assumes add_new_ts_appl: "(data_prev', data_in', tuple_in') = add_new_ts_past (args_ivl args) nt f (data_prev, data_in, tuple_in, tuple_since)"
   shows
@@ -911,7 +908,7 @@ lemma valid_add_new_ts_past_unfolded:
     "(\<forall>t \<in> fst ` set (linearize data_prev'). t \<le> nt \<and> \<not> memL (args_ivl args) (nt - t))"
     "sorted (map fst (linearize data_in'))"
     "(\<forall>t \<in> fst ` set (linearize data_in'). t \<le> nt \<and> memL (args_ivl args) (nt - t))"
-    "newest_tuple_in_mapping f id data_in' tuple_in' (\<lambda>x. valid_tuple tuple_since x)"
+    "newest_tuple_in_mapping f data_in' tuple_in' (\<lambda>x. valid_tuple tuple_since x)"
 proof -
   define I where "I = args_ivl args"
   define n where "n = args_n args"
@@ -1027,7 +1024,7 @@ proof -
         by (auto simp add: safe_max_def lin_data_in' ts_tuple_rel_f_def)
     qed
   qed
-  then show "newest_tuple_in_mapping f id data_in' tuple_in' (\<lambda>x. valid_tuple tuple_since x)"
+  then show "newest_tuple_in_mapping f data_in' tuple_in' (\<lambda>x. valid_tuple tuple_since x)"
     by (auto simp only: newest_tuple_in_mapping_def id_def)
 
   have table_in': "table n R (Mapping.keys tuple_in')"
@@ -1126,7 +1123,7 @@ proof -
     using assms(1)
     by auto
 
-  have max_ts_tuple_in: "newest_tuple_in_mapping id id data_in tuple_in (\<lambda>x. valid_tuple tuple_since x)"
+  have max_ts_tuple_in: "newest_tuple_in_mapping id data_in tuple_in (\<lambda>x. valid_tuple tuple_since x)"
     using assms(1)
     by auto
 
@@ -3445,7 +3442,7 @@ fun valid_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow>
     \<comment> \<open>also all tuples in auxlist (and hence data_prev/data_in) satisfy memR \<close>
     (\<forall>db \<in> set auxlist. time db \<le> mt \<and> memR (args_ivl args) (mt - time db)) \<and>
      \<comment> \<open>check whether tuple_in once contains the newest occurence of the tuple satisfying the lhs\<close>
-    newest_tuple_in_mapping fst id data_prev tuple_in_once (\<lambda>x. True) \<and>
+    newest_tuple_in_mapping fst data_prev tuple_in_once (\<lambda>x. True) \<and>
     (\<forall>as \<in> Mapping.keys tuple_in_once. case Mapping.lookup tuple_in_once as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> join_cond (args_pos args) l (proj_tuple maskL as)) \<and>
     (\<forall>as. (case Mapping.lookup tuple_since_hist as of
       Some idx \<Rightarrow> tuple_since_tp args as (linearize data_in) idx_oldest idx_mid idx
@@ -4132,7 +4129,7 @@ proof -
         by (simp add: aux_def split: if_splits)
       moreover {
         assume assm: "tuple \<in> (Mapping.keys tuple_in_once)"
-        then have "newest_tuple_in_mapping fst id data_prev tuple_in_once (\<lambda>x. True)"
+        then have "newest_tuple_in_mapping fst data_prev tuple_in_once (\<lambda>x. True)"
           using assms(1)
           by auto
         then have "Mapping.lookup tuple_in_once tuple =
@@ -4743,7 +4740,7 @@ proof -
             tas \<in> ts_tuple_rel_binary_lhs (set (linearize data_prev)).
             tuple = snd tas
           }"
-          from assms(1) have "newest_tuple_in_mapping fst id data_prev tuple_in_once (\<lambda>x. True)"
+          from assms(1) have "newest_tuple_in_mapping fst data_prev tuple_in_once (\<lambda>x. True)"
             by auto
           then have mapping_val: "Mapping.lookup tuple_in_once tuple = safe_max B"
             unfolding newest_tuple_in_mapping_def B_def
@@ -5015,7 +5012,6 @@ fun update_mmtaux' :: "args \<Rightarrow> ts \<Rightarrow> nat \<Rightarrow> nat
       (flip_int_less_lower (args_ivl args)) \<comment> \<open>[0, a-1]\<close>
       nt  \<comment> \<open>the new timestamp\<close>
       fst \<comment> \<open>here we look at the lhs tuples / \<phi>\<close>
-      id
       (empty_queue::(ts \<times> 'a option list set \<times> 'a option list set) queue, data_prev, tuple_in_once); \<comment> \<open>add type\<close>
     \<comment> \<open>pass empty_queue as the first argument as it would filter out all: [0, a-1] \<inter> [a, b] = {}.
        idx_mid can be moved forward by the number of all tuples dropped from data_prev (move)\<close>
@@ -5587,7 +5583,7 @@ lemma valid_update_mmtaux'_unfolded:
     "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_L args) as)"
     "(\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_R args) as)"
     "auxlist_data_prev args nt (filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist) = (linearize data_prev')"
-    "newest_tuple_in_mapping fst id data_prev' tuple_in_once' (\<lambda>x. True)"
+    "newest_tuple_in_mapping fst data_prev' tuple_in_once' (\<lambda>x. True)"
     "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> join_cond (args_pos args) l (proj_tuple maskL as))"
     "length (linearize data_prev') + idx_mid' = idx_next"
 
@@ -5619,7 +5615,6 @@ proof -
       (flip_int_less_lower (args_ivl args))
       nt
       fst
-      id
       (empty_queue::(ts \<times> 'a option list set \<times> 'a option list set) queue, data_prev, tuple_in_once)"
   define empty_queue' where "empty_queue' = fst shift_res"
   
@@ -5664,7 +5659,6 @@ proof -
       (flip_int_less_lower (args_ivl args))
       nt
       fst
-      id
       (empty_queue::(ts \<times> 'a option list set \<times> 'a option list set) queue, data_prev, tuple_in_once)"
     using empty_queue'_def data_prev'_def move_def tuple_in_once'_def shift_res_def
     by auto
@@ -5761,7 +5755,7 @@ proof -
     by (auto simp add: empty_queue_rep)
 
   from assms(1) have max_ts_tuple_in:
-    "newest_tuple_in_mapping fst id data_prev tuple_in_once (\<lambda>x. True)"
+    "newest_tuple_in_mapping fst data_prev tuple_in_once (\<lambda>x. True)"
     by auto
 
   (*
@@ -5774,7 +5768,7 @@ proof -
   have nt_mono: "nt \<ge> cur" "nt \<le> nt" using nt_mono by auto
   have shift_end_props:
     "table (args_n args) (args_L args) (Mapping.keys tuple_in_once')"
-    "newest_tuple_in_mapping fst id data_prev' tuple_in_once' (\<lambda>x. True)"
+    "newest_tuple_in_mapping fst data_prev' tuple_in_once' (\<lambda>x. True)"
     "sorted (map fst (linearize data_prev'))"
     "\<forall>t\<in>fst ` set (linearize data_prev'). t \<le> nt \<and> mem (flip_int_less_lower (args_ivl args)) (cur - t)"
     "move = snd (takedropWhile_queue (\<lambda>(t, X). \<not> memR (flip_int_less_lower (args_ivl args)) (nt - t)) data_prev)"
@@ -5785,7 +5779,7 @@ proof -
     using valid_shift_end_unfolded [of
         "(args_n args)" "(args_L args)" tuple_in_once "(\<lambda>_. {})" "(auxlist_data_prev args mt)" auxlist
         "(\<lambda>_. {})" empty_queue fst data_prev "(\<lambda>db. False)" fst "(args_L args)"
-        nt "flip_int_less_lower (args_ivl args)" cur fst id "(\<lambda>x. True)" nt empty_queue' data_prev' move tuple_in_once',
+        nt "flip_int_less_lower (args_ivl args)" cur fst "(\<lambda>x. True)" nt empty_queue' data_prev' move tuple_in_once',
         OF table_tuple_in auxlist_tuples_lhs empty_queue_props(1, 3-4) 
         data_prev_props max_ts_tuple_in nt_mono shift_end_res
       ]
@@ -5793,7 +5787,7 @@ proof -
 
   show
     "table (args_n args) (args_L args) (Mapping.keys tuple_in_once')"
-    "newest_tuple_in_mapping fst id data_prev' tuple_in_once' (\<lambda>x. True)"
+    "newest_tuple_in_mapping fst data_prev' tuple_in_once' (\<lambda>x. True)"
     using shift_end_props(1,2)
     by auto
 
@@ -5899,15 +5893,15 @@ proof -
   {
     assume assm: "mem (args_ivl args) 0"
     then have tuple_in_once_empty: "tuple_in_once = Mapping.empty" using tuple_in_once_mem0[OF assms(1)] by auto
-    have filter_simp:"(\<lambda>el tuple_in. Mapping.filter ((case el of (t, X) \<Rightarrow> \<lambda>tuple_in. filter_cond_r (fst X) id tuple_in t) tuple_in) tuple_in) =
-      (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond_r (fst X) id tuple_in t) tuple_in)"
+    have filter_simp:"(\<lambda>el tuple_in. Mapping.filter ((case el of (t, X) \<Rightarrow> \<lambda>tuple_in. filter_cond (fst X) tuple_in t) tuple_in) tuple_in) =
+      (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond (fst X) tuple_in t) tuple_in)"
       by auto
-    have "fold (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond_r (fst X) id tuple_in t) tuple_in)
+    have "fold (\<lambda>(t, X) tuple_in. Mapping.filter (filter_cond (fst X) tuple_in t) tuple_in)
    (snd (takedropWhile_queue (\<lambda>(t, X). \<not> memR (flip_int_less_lower (args_ivl args)) (nt - t)) data_prev)) Mapping.empty = Mapping.empty"
       (* Mapping.filter (filter_cond_r (fst X) (proj_tuple maskL) tuple_in t) *)
       using 
         fold_Mapping_filter_empty[of
-          "\<lambda>(t, X) tuple_in. (filter_cond_r (fst X) id tuple_in t)"
+          "\<lambda>(t, X) tuple_in. (filter_cond (fst X) tuple_in t)"
           "(snd (takedropWhile_queue (\<lambda>(t, X). \<not> memR (flip_int_less_lower (args_ivl args)) (nt - t)) data_prev))"]
       by (auto simp only: filter_simp)
    
@@ -5949,7 +5943,7 @@ proof -
       fix tuple
       assume t'_props: "Mapping.lookup tuple_in_once tuple = None"     
       then have "Mapping.lookup (fold fold_fn fold_list tuple_in_once) tuple = None"
-        using fold_Mapping_filter_None[of tuple_in_once tuple "id" fst fold_list]
+        using fold_Mapping_filter_None[of tuple_in_once tuple fst fold_list]
         unfolding fold_fn_def
         by auto
       then have "Mapping.lookup tuple_in_once tuple = Mapping.lookup tuple_in_once' tuple"
@@ -6025,7 +6019,7 @@ proof -
           by auto
       qed
       ultimately have "Mapping.lookup (fold fold_fn fold_list tuple_in_once) tuple = None"
-        using fold_Mapping_filter_Some_None[of tuple_in_once tuple t "id" fst _ fold_list] t_props(1) X_props(2)
+        using fold_Mapping_filter_Some_None[of tuple_in_once tuple t fst _ fold_list] t_props(1) X_props(2)
         unfolding fold_fn_def
         by auto
       then have "Mapping.lookup tuple_in_once' tuple = None"
@@ -6050,7 +6044,7 @@ proof -
       then have "(\<And>X. (t, X) \<in> set fold_list \<Longrightarrow> tuple \<notin> fst X)" by auto
       moreover have "Mapping.lookup tuple_in_once tuple = Some t" using t_props by auto
       ultimately have "Mapping.lookup (fold fold_fn fold_list tuple_in_once) tuple = Mapping.lookup tuple_in_once tuple"
-        using fold_Mapping_filter_Some_Some[of tuple_in_once tuple t fold_list "id" fst]
+        using fold_Mapping_filter_Some_Some[of tuple_in_once tuple t fold_list fst]
         unfolding fold_fn_def
         by auto
       then have "Mapping.lookup tuple_in_once tuple = Mapping.lookup tuple_in_once' tuple"
@@ -8822,7 +8816,7 @@ proof -
     }
     then show ?thesis by auto
   qed
-  moreover have "newest_tuple_in_mapping fst id data_prev' tuple_in_once' (\<lambda>x. True)"
+  moreover have "newest_tuple_in_mapping fst data_prev' tuple_in_once' (\<lambda>x. True)"
     using valid_update_mmtaux'_unfolded[OF assms]
     by auto
   moreover have "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> join_cond (args_pos args) l (proj_tuple maskL as)) \<and>
@@ -9147,7 +9141,7 @@ proof -
         unfolding auxlist''_def time_def
         by auto
     qed
-    moreover have "newest_tuple_in_mapping fst id data_prev' tuple_in_once' (\<lambda>x. True)"
+    moreover have "newest_tuple_in_mapping fst data_prev' tuple_in_once' (\<lambda>x. True)"
       using valid
       by auto
     moreover have "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> join_cond (args_pos args) l (proj_tuple maskL as))"
@@ -9782,9 +9776,9 @@ proof -
         unfolding auxlist''_def time_def
         by auto
     qed
-    moreover have "newest_tuple_in_mapping fst id data_prev'' tuple_in_once'' (\<lambda>x. True)"
+    moreover have "newest_tuple_in_mapping fst data_prev'' tuple_in_once'' (\<lambda>x. True)"
     proof -
-      have before: "newest_tuple_in_mapping fst id data_prev' tuple_in_once' (\<lambda>x. True)"
+      have before: "newest_tuple_in_mapping fst data_prev' tuple_in_once' (\<lambda>x. True)"
         using valid
         by auto
       {

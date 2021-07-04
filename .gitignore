@@ -7,8 +7,8 @@ _build
 
 /thys/*/*.ocaml
 
-trigger-performance-evaluation/experiments/
-trigger-performance-evaluation/asymptotic-experiments-*/
+trigger-performance-evaluation/experiments*/
+trigger-performance-evaluation/asymptotic-experiments*/
 trigger-performance-evaluation/asymptotic-experiments-rewritten/
 trigger-performance-evaluation/asymptotic-experiments-constant-interval/
 trigger-performance-evaluation/asymptotic-experiments-fraction-interval/
