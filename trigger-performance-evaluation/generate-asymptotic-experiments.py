@@ -1,4 +1,28 @@
+import argparse
 import os
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--output',
+                    help='The output directory', required=True)
+parser.add_argument('--length',
+                    help='The 1x log length (Default: 100)')
+parser.add_argument('--n',
+                    help='The 1x number of tuples (Default: 100)')
+parser.add_argument('--intervals', nargs='+',
+                    help='The intervals used, separated by spaces. (Default: ["[a,b]"])')
+parser.add_argument('--asymptotics', nargs='+',
+                    help='The asymptotic values used, separated by spaces. (Default: ["2n", "2l", "4n", "4l", "8n", "8l", "16n", "16l"])')
+#parser.add_argument( '--yscale', help='The scale of the y-axis. Default: linear')
+
+
+args = parser.parse_args()
+
+output_dir = args.output
+base_length = int(args.length) or 10 ** 2
+base_n = int(args.n) or 10 ** 2
+intervals = args.intervals or ["[a,b]"]
+asymptotics = args.asymptotics or [
+    "2n", "2l", "4n", "4l", "8n", "8l", "16n", "16l"]
 
 
 def gen_int(interval, length, interval_size):
@@ -50,10 +74,10 @@ def int_to_s(interval):
 
 
 # trigger
-for interval in ["[a,b]"]:
-    for lhs in ["A(x,y)"]:
+for interval in intervals:
+    for lhs in ["FALSE", "A(x)", "A(x,y)"]:
         for log_type in ["historically", "since", "once"]:
-            for asymptotic in ["baseline", "2n", "2l", "4n", "4l", "8n", "8l", "16n", "16l"]:
+            for asymptotic in ["baseline"] + asymptotics:
                 # once is only allowed for a > 0
                 if log_type == "once" and (interval != "[a,*]" and interval != "[a,b]"):
                     continue
@@ -67,34 +91,24 @@ for interval in ["[a,b]"]:
 
                 #orig_length = 10 ** 2
 
-                length = 10 ** 2
-                n = 10 ** 2
+                length = base_length
+                n = base_n
                 interval_size = 0.75
 
                 if asymptotic == "baseline":
                     pass
-                elif asymptotic == "2n":
-                    n = 2 * n
-                elif asymptotic == "2l":
-                    length = 2 * length
-                elif asymptotic == "4n":
-                    n = 4 * n
-                elif asymptotic == "4l":
-                    length = 4 * length
-                elif asymptotic == "8n":
-                    n = 8 * n
-                elif asymptotic == "8l":
-                    length = 8 * length
-                elif asymptotic == "16n":
-                    n = 16 * n
-                elif asymptotic == "16l":
-                    length = 16 * length
+                elif asymptotic.endswith("n"):
+                    n = int(asymptotic[:1]) * n
+                elif asymptotic.endswith("l"):
+                    length = int(asymptotic[:1]) * length
+                else:
+                    print(f'Invalid asymptotic value: "{asymptotic}"!')
+                    exit()
 
                 experiment = f'trigger-{int_to_s(interval)}-{lhs_to_s(lhs)}-{log_type}'
                 print(f'Generating experiment {experiment} ({asymptotic})..')
 
-                output = os.path.join(
-                    "./asymptotic-experiments", experiment)
+                output = os.path.join(output_dir, experiment)
                 if not(os.path.isdir(output)):
                     os.makedirs(output)
 

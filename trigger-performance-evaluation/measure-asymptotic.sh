@@ -4,24 +4,25 @@ ITERATIONS=10
 
 echo "Running experiments.."
 
-echo "experiment;asymptotic;native real time;native user time;native sys time;native trigger time;native meval time" > ./measurements-asymptotic.csv
+if [ "$3" == "rewritten" ];then
+	echo "experiment;asymptotic;rewritten real time;rewritten user time;rewritten sys time;rewritten meval time" > $4
+else
+	echo "experiment;asymptotic;native real time;native user time;native sys time;native trigger time;native meval time" > $4
+fi
 
-for dir in ./asymptotic-experiments/*/
+for dir in $1/*/
 do
     dir=${dir%*/}            # remove the trailing "/"
     experiment="${dir##*/}"  # print everything after the final "/"
 	
 	echo "Running experiment $experiment for $ITERATIONS iterations"
 	for iteration in $( seq 1 $ITERATIONS ); do
-		./measure-single-asymptotic.sh $experiment baseline >> ./measurements-asymptotic.csv
-		./measure-single-asymptotic.sh $experiment 2n >> ./measurements-asymptotic.csv
-		./measure-single-asymptotic.sh $experiment 2l >> ./measurements-asymptotic.csv
-		./measure-single-asymptotic.sh $experiment 4n >> ./measurements-asymptotic.csv
-		./measure-single-asymptotic.sh $experiment 4l >> ./measurements-asymptotic.csv
-		./measure-single-asymptotic.sh $experiment 8n >> ./measurements-asymptotic.csv
-		./measure-single-asymptotic.sh $experiment 8l >> ./measurements-asymptotic.csv
-		./measure-single-asymptotic.sh $experiment 16n >> ./measurements-asymptotic.csv
-		./measure-single-asymptotic.sh $experiment 16l >> ./measurements-asymptotic.csv
+		
+		./measure-single-asymptotic.sh $1 $experiment baseline $3 >> $4
+		
+		for asymptotic in $2; do
+			./measure-single-asymptotic.sh $1 $experiment $asymptotic $3 >> $4
+		done
 	done
 done
 

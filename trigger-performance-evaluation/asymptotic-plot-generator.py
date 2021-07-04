@@ -85,10 +85,10 @@ for experiment_name in experiments:
     ax.legend()
 
     # plt.yscale('log')
-    if "a-bounded" in experiment_name:
-        plt.yscale('log')
-    else:
-        plt.yscale('linear')
+    # if "a-bounded" in experiment_name:
+    #     plt.yscale('log')
+    # else:
+    #     plt.yscale('linear')
 
     # ax.bar_label(rects1, padding=3)
     # ax.bar_label(rects2, padding=3)
