@@ -204,7 +204,7 @@ lemma is_empty_table_unfold [code_unfold]:
   unfolding set_eq_def set_empty_def empty_table_def Set.is_empty_def Cardinality.eq_set_def by auto
 
 lemma tabulate_rbt_code[code]: "Monitor.mrtabulate (xs :: mregex list) f =
-  (case ID CCOMPARE(mregex) of None \<Rightarrow> Code.abort (STR ''tabulate RBT_Mapping: ccompare = None'') (\<lambda>_. Monitor.mrtabulate (xs :: mregex list) f)
+  (case ID CCOMPARE(mregex) of None \<Rightarrow> Code.abort (STR ''mrtabulate RBT_Mapping: ccompare = None'') (\<lambda>_. Monitor.mrtabulate (xs :: mregex list) f)
   | _ \<Rightarrow> RBT_Mapping (RBT_Mapping2.bulkload (List.map_filter (\<lambda>k. let fk = f k in if fk = empty_table then None else Some (k, fk)) xs)))"
   unfolding mrtabulate.abs_eq RBT_Mapping_def
   by (auto split: option.splits)
@@ -245,10 +245,78 @@ lemma lexordp_eq_code[code]: "lexordp_eq xs ys \<longleftrightarrow> (case xs of
     | y # ys \<Rightarrow> if x < y then True else if x > y then False else lexordp_eq xs ys))"
   by (subst lexordp_eq.simps) (auto split: list.split)
 
-definition "filter_set m X t = Mapping.filter (filter_cond X m t) m"
+definition "filter_mapping m X t = Mapping.filter (filter_cond X m t) m"
+
+lemma filter_mapping_empty[simp]: "filter_mapping m {} t = m"
+  unfolding filter_mapping_def
+  by transfer (auto simp: fun_eq_iff split: option.splits)
+
+lemma filter_mapping_insert[simp]: "filter_mapping m (insert x A) t = (let m' = filter_mapping m A t in
+  case Mapping.lookup m' x of Some u \<Rightarrow> if t = u then Mapping.delete x m' else m' | _ \<Rightarrow> m')"
+  unfolding filter_mapping_def
+  by transfer (auto simp: fun_eq_iff Let_def Map_To_Mapping.map_apply_def split: option.splits)
+
+lemma filter_mapping_fold:
+  assumes "finite A"
+  shows "filter_mapping m A t = Finite_Set.fold (\<lambda>a m.
+    case Mapping.lookup m a of Some u \<Rightarrow> if t = u then Mapping.delete a m else m | _ \<Rightarrow> m) m A"
+proof -
+  interpret comp_fun_idem "\<lambda>a m.
+    case Mapping.lookup m a of Some u \<Rightarrow> if t = u then Mapping.delete a m else m | _ \<Rightarrow> m"
+    by unfold_locales
+      (transfer; auto simp: fun_eq_iff Map_To_Mapping.map_apply_def split: option.splits)+
+  from assms show ?thesis
+    by (induct A arbitrary: m rule: finite.induct) (auto simp: Let_def)
+qed
+
+lift_definition filter_mapping_cfi :: "'b \<Rightarrow> ('a, ('a, 'b) mapping) comp_fun_idem"
+  is "\<lambda>t a m.
+    case Mapping.lookup m a of Some u \<Rightarrow> if t = u then Mapping.delete a m else m | _ \<Rightarrow> m"
+  by unfold_locales
+    (transfer; auto simp: fun_eq_iff Map_To_Mapping.map_apply_def split: option.splits)+
+
+lemma filter_mapping_code[code]:
+  "filter_mapping m A t = (if finite A then set_fold_cfi (filter_mapping_cfi t) m A else Code.abort (STR ''filter_mapping: infinite'') (\<lambda>_. filter_mapping m A t))"
+  by (transfer fixing: m) (auto simp: filter_mapping_fold)
+
+definition "filter_set Z m X t = {as \<in> Z. filter_cond' X m t as}"
+
+lemma filter_set_empty[simp]: "filter_set Z m {} t = Z"
+  unfolding filter_set_def
+  by transfer (auto simp: fun_eq_iff split: option.splits)
+
+lemma filter_set_insert[simp]: "filter_set Z m (insert x A) t = (let Z' = filter_set Z m A t in
+  case Mapping.lookup m x of Some u \<Rightarrow> if t = u then Z' - {x} else Z' | _ \<Rightarrow> Z')"
+  unfolding filter_set_def
+  by transfer (auto simp: Let_def Map_To_Mapping.map_apply_def split: option.splits)
+
+lemma filter_set_fold:
+  assumes "finite A"
+  shows "filter_set Z m A t = Finite_Set.fold (\<lambda>a Z'.
+    case Mapping.lookup m a of Some u \<Rightarrow> if t = u then Z' - {a} else Z' | _ \<Rightarrow> Z') Z A"
+proof -
+  interpret comp_fun_idem "\<lambda>a Z'.
+    case Mapping.lookup m a of Some u \<Rightarrow> if t = u then Z' - {a} else Z' | _ \<Rightarrow> Z'"
+    by unfold_locales
+      (transfer; auto simp: fun_eq_iff Map_To_Mapping.map_apply_def split: option.splits)+
+  from assms show ?thesis
+    by (induct A arbitrary: Z rule: finite.induct) (auto simp: Let_def)
+qed
+
+lift_definition filter_set_cfi :: "('a, 'b) mapping \<Rightarrow> 'b \<Rightarrow> ('a, 'a set) comp_fun_idem"
+  is "\<lambda>m t a Z'.
+    case Mapping.lookup m a of Some u \<Rightarrow> if t = u then Z' - {a} else Z' | _ \<Rightarrow> Z'"
+  apply unfold_locales
+   apply (transfer)
+   apply (fastforce simp: comp_def split: option.splits)+
+  done
+
+lemma filter_set_code[code]:
+  "filter_set Z m A t = (if finite A then set_fold_cfi (filter_set_cfi m t) Z A else Code.abort (STR ''filter_set: infinite'') (\<lambda>_. filter_set Z m A t))"
+  by transfer (auto simp: filter_set_fold)
 
 declare [[code drop: shift_end]]
-declare shift_end.simps[folded filter_set_def, code]
+declare shift_end.simps[folded filter_mapping_def filter_set_def, code]
 
 lemma upd_set'_empty[simp]: "upd_set' m d f {} = m"
   by (rule mapping_eqI) (auto simp add: upd_set'_lookup)
@@ -329,49 +397,7 @@ lemma upd_nested_max_tstp_code[code]:
 declare [[code drop: add_new_mmuaux']]
 declare add_new_mmuaux'_def[unfolded add_new_mmuaux.simps, folded upd_nested_max_tstp_def, code]
 
-lemma filter_set_empty[simp]: "filter_set m {} t = m"
-  unfolding filter_set_def
-  by transfer (auto simp: fun_eq_iff split: option.splits)
-
-lemma filter_set_insert[simp]: "filter_set m (insert x A) t = (let m' = filter_set m A t in
-  case Mapping.lookup m' x of Some u \<Rightarrow> if t = u then Mapping.delete x m' else m' | _ \<Rightarrow> m')"
-  unfolding filter_set_def
-  by transfer (auto simp: fun_eq_iff Let_def Map_To_Mapping.map_apply_def split: option.splits)
-
-lemma filter_set_fold:
-  assumes "finite A"
-  shows "filter_set m A t = Finite_Set.fold (\<lambda>a m.
-    case Mapping.lookup m a of Some u \<Rightarrow> if t = u then Mapping.delete a m else m | _ \<Rightarrow> m) m A"
-proof -
-  interpret comp_fun_idem "\<lambda>a m.
-    case Mapping.lookup m a of Some u \<Rightarrow> if t = u then Mapping.delete a m else m | _ \<Rightarrow> m"
-    by unfold_locales
-      (transfer; auto simp: fun_eq_iff Map_To_Mapping.map_apply_def split: option.splits)+
-  from assms show ?thesis
-    by (induct A arbitrary: m rule: finite.induct) (auto simp: Let_def)
-qed
-
-lift_definition filter_cfi :: "'b \<Rightarrow> ('a, ('a, 'b) mapping) comp_fun_idem"
-  is "\<lambda>t a m.
-    case Mapping.lookup m a of Some u \<Rightarrow> if t = u then Mapping.delete a m else m | _ \<Rightarrow> m"
-  by unfold_locales
-    (transfer; auto simp: fun_eq_iff Map_To_Mapping.map_apply_def split: option.splits)+
-
-lemma filter_set_code[code]:
-  "filter_set m A t = (if finite A then set_fold_cfi (filter_cfi t) m A else Code.abort (STR ''upd_set: infinite'') (\<lambda>_. filter_set m A t))"
-  by (transfer fixing: m) (auto simp: filter_set_fold)
-
-lemma filter_Mapping[code]:
-  fixes t :: "('a :: ccompare, 'b) mapping_rbt" shows
-  "Mapping.filter P (RBT_Mapping t) = 
-  (case ID CCOMPARE('a) of None \<Rightarrow> Code.abort (STR ''filter RBT_Mapping: ccompare = None'') (\<lambda>_. Mapping.filter P (RBT_Mapping t))
-                     | Some _ \<Rightarrow> RBT_Mapping (RBT_Mapping2.filter (case_prod P) t))"
-  by (auto simp add: Mapping.filter.abs_eq Mapping_inject split: option.split)
-
 definition "filter_join pos X m = Mapping.filter (join_filter_cond pos X) m"
-
-declare [[code drop: join_mmsaux]]
-declare join_mmsaux.simps[folded filter_join_def, code]
 
 lemma filter_join_False_empty: "filter_join False {} m = m"
   unfolding filter_join_def
@@ -412,6 +438,10 @@ lemma filter_join_code[code]:
   unfolding filter_join_def
   by (transfer fixing: m) (use filter_join_False in \<open>auto simp add: filter_join_def\<close>)
 
+declare [[code drop: join_mmsaux]]
+declare join_mmsaux.simps[folded filter_join_def, code]
+
+(*
 definition set_minus :: "'a set \<Rightarrow> 'a set \<Rightarrow> 'a set" where
   "set_minus X Y = X - Y"
 
@@ -435,6 +465,7 @@ lemma set_minus_code[code]: "set_minus X Y =
 
 declare [[code drop: bin_join]]
 declare bin_join.simps[folded set_minus_def, code]
+*)
 
 definition remove_Union where
   "remove_Union A X B = A - (\<Union>x \<in> X. B x)"

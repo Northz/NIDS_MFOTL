@@ -5612,7 +5612,7 @@ let rec mrtabulate (_A1, _A2)
   xs f =
     (match ccompare_mregexa
       with None ->
-        failwith "tabulate RBT_Mapping: ccompare = None"
+        failwith "mrtabulate RBT_Mapping: ccompare = None"
           (fun _ -> mrtabulate (_A1, _A2) xs f)
       | Some _ ->
         RBT_Mapping
@@ -6169,18 +6169,32 @@ let rec dropWhile_queue
           | (Some a, qa) ->
             (if f a then dropWhile_queue f (tl_queue qa) else qa));;
 
-let rec filter_cfi _B (_A1, _A2)
+let rec filter_mapping_cfi _B (_A1, _A2)
   xa = Abs_comp_fun_idem
          (fun a m ->
            (match lookupa (_A1, _A2) m a with None -> m
              | Some u -> (if eq _B xa u then deletea (_A1, _A2) a m else m)));;
 
-let rec filter_set (_A1, _A2, _A3, _A4) _B
+let rec filter_mapping (_A1, _A2, _A3, _A4) _B
   m a t =
     (if finite (_A1, _A2, _A3) a
-      then set_fold_cfi (_A2, _A3) (filter_cfi _B (_A3, _A4) t) m a
-      else failwith "upd_set: infinite"
-             (fun _ -> filter_set (_A1, _A2, _A3, _A4) _B m a t));;
+      then set_fold_cfi (_A2, _A3) (filter_mapping_cfi _B (_A3, _A4) t) m a
+      else failwith "filter_mapping: infinite"
+             (fun _ -> filter_mapping (_A1, _A2, _A3, _A4) _B m a t));;
+
+let rec filter_set_cfi (_A1, _A2, _A3) _B
+  xb xc =
+    Abs_comp_fun_idem
+      (fun a z ->
+        (match lookupa (_A2, _A3) xb a with None -> z
+          | Some u -> (if eq _B xc u then remove (_A1, _A2) a z else z)));;
+
+let rec filter_set (_A1, _A2, _A3, _A4) _B
+  z m a t =
+    (if finite (_A1, _A2, _A3) a
+      then set_fold_cfi (_A2, _A3) (filter_set_cfi (_A2, _A3, _A4) _B m t) z a
+      else failwith "filter_set: infinite"
+             (fun _ -> filter_set (_A1, _A2, _A3, _A4) _B z m a t));;
 
 let rec shift_end (_B1, _B2, _B3)
   i nt to_table (data_prev, (data_in, (tuple_in, tuple_in_keys))) =
@@ -6193,30 +6207,16 @@ let rec shift_end (_B1, _B2, _B3)
        in
      let (tuple_ina, tuple_in_keysa) =
        fold (fun (t, x) (tuple_ina, tuple_in_keysa) ->
-              (filter_set
+              (filter_mapping
                  (finite_UNIV_list, (ceq_list (ceq_option _B1)),
                    (ccompare_list (ccompare_option _B2)),
                    (equal_list (equal_option _B3)))
                  equal_nat tuple_ina (to_table x) t,
-				 let t1 = Unix.gettimeofday () in
-                let keys = filter
-                  ((ceq_list (ceq_option _B1)),
-                    (ccompare_list (ccompare_option _B2)))
-                  (fun asa ->
-                    not (member
-                           ((ceq_list (ceq_option _B1)),
-                             (ccompare_list (ccompare_option _B2)))
-                           asa (to_table x) &&
-                          equal_optiona equal_nat
-                            (lookupa
-                              ((ccompare_list (ccompare_option _B2)),
-                                (equal_list (equal_option _B3)))
-                              tuple_ina asa)
-                            (Some t)))
-                  tuple_in_keysa in
-			  let t2 = Unix.gettimeofday () in
-			  let _ = Printf.printf "keys: %f\n" (t2 -. t1) in
-			  keys))
+                filter_set
+                  (finite_UNIV_list, (ceq_list (ceq_option _B1)),
+                    (ccompare_list (ccompare_option _B2)),
+                    (equal_list (equal_option _B3)))
+                  equal_nat tuple_in_keysa tuple_ina (to_table x) t))
          in_discard (tuple_in, tuple_in_keys)
        in
       (data_preva, (data_ina, (in_discard, (tuple_ina, tuple_in_keysa)))));;
@@ -7340,14 +7340,6 @@ let rec mmulti_joina (_A1, _A2)
        in
       new_max_getIJ_wrapperGenericJoin (_A1, _A2) q a);;
 
-let rec remove_cfi (_A1, _A2) = Abs_comp_fun_idem (remove (_A1, _A2));;
-
-let rec set_minus (_A1, _A2, _A3)
-  x y = (if finite (_A1.finite_UNIV_card_UNIV, _A2, _A3) y &&
-              less_nat (card (_A1, _A2, _A3) y) (card (_A1, _A2, _A3) x)
-          then set_fold_cfi (_A2, _A3) (remove_cfi (_A2, _A3)) x y
-          else minus_set _A3 x y);;
-
 let rec bin_join (_A1, _A2, _A3)
   n aa ta pos a t =
     (if is_empty
@@ -7385,10 +7377,8 @@ let rec bin_join (_A1, _A2, _A3)
                            then (if pos
                                   then inf_seta
  ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2))) ta t
-                                  else set_minus
- (card_UNIV_list, (ceq_list (ceq_option _A1)),
-   (ccompare_list (ccompare_option _A2)))
- ta t)
+                                  else minus_set
+ (ccompare_list (ccompare_option _A2)) ta t)
                            else (if subset
                                       (card_UNIV_nat, cenum_nat, ceq_nat,
 ccompare_nat)
@@ -7966,26 +7956,18 @@ let rec meval
     | n, ts, db, MTrigger (args, phi, psi, bufb, nts, auxb) ->
         (let (xs, phia) = meval n ts db phi in
          let (ys, psia) = meval n ts db psi in
-		 let t_start = Unix.gettimeofday () in
          let a =
            mbuf2t_take
              (fun r1 r2 t (zs, aux) ->
-               (let t1 = Unix.gettimeofday () in
-			   let auxa =
+               (let auxa =
                   update_mmtaux
                     (ceq_event_data, ccompare_event_data, equal_event_data) args
                     t r1 r2 aux
                   in
-				  let t2 = Unix.gettimeofday () in
                 let (_, z) = result_mmtaux args auxa in
-				let t3 = Unix.gettimeofday () in
-		   	  let _ = Printf.printf "update: %f\n" (t2 -. t1) in
-		   	  let _ = Printf.printf "result: %f\n" (t3 -. t2) in
                  (zs @ [z], auxa)))
              ([], auxb) (mbuf2_add xs ys bufb) (nts @ ts)
            in
-		   let t_stop = Unix.gettimeofday () in
-    		 let _ = Printf.printf "mmtaux: %f\n" (t_stop -. t_start) in
          let (aa, b) = a in
           (let (zs, aux) = aa in
             (fun (buf, ntsa) ->
@@ -8100,29 +8082,19 @@ let rec meval
         -> (let (asa, phiaa) = meval n ts db phia in
             let (xs, phib) = meval n ts db phi in
             let (ys, psia) = meval n ts db psi in
-			let t_start = Unix.gettimeofday () in
             let a =
               mbuf2t_take
                 (fun r1 r2 t (zs, aux) ->
-                  (let t1 = Unix.gettimeofday () in
-				  let auxa =
+                  (let auxa =
                      update_mmtaux
                        (ceq_event_data, ccompare_event_data, equal_event_data)
                        args t r1 r2 aux
                      in
-					let t2 = Unix.gettimeofday () in
                    let (fv_z, z) = result_mmtaux args auxa in
-				   let t3 = Unix.gettimeofday () in
-	 		   	  let _ = Printf.printf "update: %f\n" (t2 -. t1) in
-	 		   	  let _ = Printf.printf "result: %f\n" (t3 -. t2) in
                     (zs @ [(fv_z, z)], auxa)))
                 ([], auxb) (mbuf2_add xs ys buf2) (nts @ ts)
               in
-  			let t_stop = Unix.gettimeofday () in
-  		    let _ = Printf.printf "mmtaux: %f\n" (t_stop -. t_start) in
-			let t_start = Unix.gettimeofday () in
-			
-            let r = (let (aa, b) = a in
+            let (aa, b) = a in
              (let (zs_trigger, aux) = aa in
                (fun (buf2a, ntsa) ->
                  (let (zs, buf1a) =
@@ -8137,9 +8109,7 @@ let rec meval
                    (zs, MAndTrigger
                           (v_phi, phiaa, buf1a, args, phib, psia, buf2a, ntsa,
                             aux)))))
-               b) in
-           	let t_stop = Unix.gettimeofday () in
-      	        let _ = Printf.printf "join: %f\n" (t_stop -. t_start) in r)
+               b)
     | n, ts, db, MAndRel (phi, confa) ->
         (let (xs, phia) = meval n ts db phi in
           (mapa (filter
@@ -8525,11 +8495,7 @@ let rec mstate_i (Mstate_ext (mstate_i, mstate_m, mstate_n, more)) = mstate_i;;
 
 let rec mstep
   tdb st =
-    (
-		let t_start = Unix.gettimeofday () in
-		let (xs, m) = meval (mstate_n st) [snd tdb] (fst tdb) (mstate_m st) in
-		let t_stop = Unix.gettimeofday () in
-		let _ = Printf.printf "meval: %f\n" (t_stop -. t_start) in
+    (let (xs, m) = meval (mstate_n st) [snd tdb] (fst tdb) (mstate_m st) in
       (enumerate (mstate_i st) xs,
         Mstate_ext
           (plus_nata (mstate_i st) (size_list xs), m, mstate_n st, ())));;
