@@ -21,7 +21,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--measurements',
                     help='The measurement csv', required=True)
 parser.add_argument('--output',
-                    help='The output path and filename', required=True)
+                    help='The output directory', required=True)
 #parser.add_argument( '--yscale', help='The scale of the y-axis. Default: linear')
 
 

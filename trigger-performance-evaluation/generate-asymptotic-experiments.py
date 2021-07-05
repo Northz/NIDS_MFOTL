@@ -18,11 +18,14 @@ parser.add_argument('--asymptotics', nargs='+',
 args = parser.parse_args()
 
 output_dir = args.output
-base_length = int(args.length) or 10 ** 2
-base_n = int(args.n) or 10 ** 2
+base_length = args.length or 10 ** 2
+base_n = args.n or 10 ** 2
 intervals = args.intervals or ["[a,b]"]
 asymptotics = args.asymptotics or [
     "2n", "2l", "4n", "4l", "8n", "8l", "16n", "16l"]
+
+base_length = int(base_length)
+base_n = int(base_n)
 
 
 def gen_int(interval, length, interval_size):
@@ -98,9 +101,9 @@ for interval in intervals:
                 if asymptotic == "baseline":
                     pass
                 elif asymptotic.endswith("n"):
-                    n = int(asymptotic[:1]) * n
+                    n = int(asymptotic[:-1]) * n
                 elif asymptotic.endswith("l"):
-                    length = int(asymptotic[:1]) * length
+                    length = int(asymptotic[:-1]) * length
                 else:
                     print(f'Invalid asymptotic value: "{asymptotic}"!')
                     exit()
