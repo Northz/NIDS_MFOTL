@@ -9,7 +9,7 @@ parser.add_argument('--length',
 parser.add_argument('--n',
                     help='The 1x number of tuples (Default: 100)')
 parser.add_argument('--intervals', nargs='+',
-                    help='The intervals used, separated by spaces. (Default: ["[0,*]", "[0,b]", "[a,*]", "[a,b]"]:')
+                    help='The intervals used, separated by spaces. (Default: ["[0,b]", "[a,b]"]:')
 parser.add_argument('--asymptotics', nargs='+',
                     help='The asymptotic values used, separated by spaces. (Default: ["2n", "2l", "4n", "4l", "8n", "8l", "16n", "16l"])')
 #parser.add_argument( '--yscale', help='The scale of the y-axis. Default: linear')
@@ -20,7 +20,7 @@ args = parser.parse_args()
 output_dir = args.output
 base_length = args.length or 10 ** 2
 base_n = args.n or 10 ** 2
-intervals = args.intervals or ["[0,*]", "[0,b]", "[a,*]", "[a,b]"]
+intervals = args.intervals or ["[0,b]", "[a,b]"]
 asymptotics = args.asymptotics or [
     "2n", "2l", "4n", "4l", "8n", "8l", "16n", "16l"]
 
@@ -76,13 +76,13 @@ def int_to_s(interval):
         raise ValueError(f'Unknown interval: {interval}')
 
 
-# trigger
+# release
 for interval in intervals:
     for lhs in ["FALSE", "A(x)", "A(x,y)"]:
-        for log_type in ["historically", "since", "once"]:
+        for log_type in ["always", "until", "eventually"]:
             for asymptotic in ["baseline"] + asymptotics:
                 # once is only allowed for a > 0
-                if log_type == "once" and (interval != "[a,*]" and interval != "[a,b]"):
+                if log_type == "eventually" and (interval != "[a,*]" and interval != "[a,b]"):
                     continue
 
                 # if 0 is not in the interval, the lhs has to be A(x, y) (same set of free variables)
@@ -108,7 +108,7 @@ for interval in intervals:
                     print(f'Invalid asymptotic value: "{asymptotic}"!')
                     exit()
 
-                experiment = f'trigger-{int_to_s(interval)}-{lhs_to_s(lhs)}-{log_type}'
+                experiment = f'release-{int_to_s(interval)}-{lhs_to_s(lhs)}-{log_type}'
                 print(f'Generating experiment {experiment} ({asymptotic})..')
 
                 output = os.path.join(output_dir, experiment)
@@ -123,10 +123,10 @@ for interval in intervals:
                 # if 0 is not in the interval, we have to use a conjunction
                 if (interval == "[a,*]" or interval == "[a,b]"):
                     write_file(formula_path,
-                               f'({rhs}) AND (({lhs}) TRIGGER{gen_int(interval, length, interval_size)} ({rhs}))')
+                               f'({rhs}) AND (({lhs}) RELEASE{gen_int(interval, length, interval_size)} ({rhs}))')
                 else:
                     write_file(formula_path,
-                               f'({lhs}) TRIGGER{gen_int(interval, length, interval_size)} ({rhs})')
+                               f'({lhs}) RELEASE{gen_int(interval, length, interval_size)} ({rhs})')
 
                 if lhs == "A(x)":
                     write_file(signature_path,

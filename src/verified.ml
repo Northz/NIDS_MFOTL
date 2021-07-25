@@ -7956,18 +7956,26 @@ let rec meval
     | n, ts, db, MTrigger (args, phi, psi, bufb, nts, auxb) ->
         (let (xs, phia) = meval n ts db phi in
          let (ys, psia) = meval n ts db psi in
+		 let t_start = Unix.gettimeofday () in
          let a =
            mbuf2t_take
              (fun r1 r2 t (zs, aux) ->
-               (let auxa =
+               (let t1 = Unix.gettimeofday () in
+			   let auxa =
                   update_mmtaux
                     (ceq_event_data, ccompare_event_data, equal_event_data) args
                     t r1 r2 aux
                   in
+				let t2 = Unix.gettimeofday () in
                 let (_, z) = result_mmtaux args auxa in
+				let t3 = Unix.gettimeofday () in
+				let _ = Printf.printf "update: %f\n" (t2 -. t1) in
+				let _ = Printf.printf "result: %f\n" (t3 -. t2) in
                  (zs @ [z], auxa)))
              ([], auxb) (mbuf2_add xs ys bufb) (nts @ ts)
            in
+		let t_stop = Unix.gettimeofday () in
+		let _ = Printf.printf "mmtaux: %f\n" (t_stop -. t_start) in
          let (aa, b) = a in
           (let (zs, aux) = aa in
             (fun (buf, ntsa) ->
@@ -8082,18 +8090,26 @@ let rec meval
         -> (let (asa, phiaa) = meval n ts db phia in
             let (xs, phib) = meval n ts db phi in
             let (ys, psia) = meval n ts db psi in
+			let t_start = Unix.gettimeofday () in
             let a =
               mbuf2t_take
                 (fun r1 r2 t (zs, aux) ->
-                  (let auxa =
+                  (let t1 = Unix.gettimeofday () in
+				  let auxa =
                      update_mmtaux
                        (ceq_event_data, ccompare_event_data, equal_event_data)
                        args t r1 r2 aux
                      in
+				   let t2 = Unix.gettimeofday () in
                    let (fv_z, z) = result_mmtaux args auxa in
+				   let t3 = Unix.gettimeofday () in
+				   let _ = Printf.printf "update: %f\n" (t2 -. t1) in
+				   let _ = Printf.printf "result: %f\n" (t3 -. t2) in
                     (zs @ [(fv_z, z)], auxa)))
                 ([], auxb) (mbuf2_add xs ys buf2) (nts @ ts)
               in
+			let t_stop = Unix.gettimeofday () in
+			let _ = Printf.printf "mmtaux: %f\n" (t_stop -. t_start) in
             let (aa, b) = a in
              (let (zs_trigger, aux) = aa in
                (fun (buf2a, ntsa) ->
@@ -8495,7 +8511,11 @@ let rec mstate_i (Mstate_ext (mstate_i, mstate_m, mstate_n, more)) = mstate_i;;
 
 let rec mstep
   tdb st =
-    (let (xs, m) = meval (mstate_n st) [snd tdb] (fst tdb) (mstate_m st) in
+    (
+		let t_start = Unix.gettimeofday () in
+		let (xs, m) = meval (mstate_n st) [snd tdb] (fst tdb) (mstate_m st) in
+		let t_stop = Unix.gettimeofday () in
+		let _ = Printf.printf "meval: %f\n" (t_stop -. t_start) in
       (enumerate (mstate_i st) xs,
         Mstate_ext
           (plus_nata (mstate_i st) (size_list xs), m, mstate_n st, ())));;

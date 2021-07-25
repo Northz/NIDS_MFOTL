@@ -11,7 +11,7 @@ asymptotic_order = ["16l", "8l", "4l", "2l",
 
 
 def index_to_key(idx):
-    if "trigger" in idx[0]:
+    if "trigger" in idx[0] or "release" in idx[0]:
         # don't apply the function on the first level
         return idx
 
@@ -41,9 +41,7 @@ experiments = pd.unique(df.sort_values(by=['experiment']).experiment)
 asymptotics = pd.unique(df.sort_values(by=['asymptotic']).asymptotic)
 
 df = df.groupby(['experiment', 'asymptotic']).agg({
-    'native real time': ['mean', 'std'],
-    'native meval time': ['mean', 'std'],
-    'native trigger time': ['mean', 'std']
+    'rewritten meval time': ['mean', 'std']
 })
 
 plt.rcParams.update({
@@ -62,24 +60,23 @@ for experiment_name in experiments:
 
     x_n = (list(range(nExps)))
     x_n.reverse()
+    x_n = np.array(x_n)
 
-    x_l = list(range(lExps))
+    x_l = np.array(list(range(lExps)))
 
     # native_means = df['native real time']['mean'].to_numpy()
-    native_meval_means = exp['native meval time']['mean'].to_numpy()
-    native_mmtaux_means = exp['native trigger time']['mean'].to_numpy()
+    rewritten_meval_means = exp['rewritten meval time']['mean'].to_numpy()
 
     # native_stds = df['native real time']['std'].to_numpy()
-    native_meval_stds = exp['native meval time']['std'].to_numpy()
-    native_mmtaux_stds = exp['native trigger time']['std'].to_numpy()
+    rewritten_meval_stds = exp['rewritten meval time']['std'].to_numpy()
 
     A_n = np.vstack([x_n, np.ones(3)]).T
     a_n, b_n = np.linalg.lstsq(
-        A_n, native_mmtaux_means[0:baselineIndex+1], rcond=None)[0]
+        A_n, rewritten_meval_means[0:baselineIndex+1], rcond=None)[0]
 
     A_l = np.vstack([x_l, np.ones(3)]).T
     a_l, b_l = np.linalg.lstsq(
-        A_l, native_mmtaux_means[baselineIndex:], rcond=None)[0]
+        A_l, rewritten_meval_means[baselineIndex:], rcond=None)[0]
 
     linearFunctionX_n = np.linspace(0, 2, 100)
     linearFunctionY_n = a_n * (2 - linearFunctionX_n) + \
@@ -100,10 +97,8 @@ for experiment_name in experiments:
     fig, ax = plt.subplots()
     # rects_native = ax.bar(x + width/2, native_means, width,
     #                       label='native', yerr=native_stds, ecolor='black', capsize=2, color='#e67e22')
-    rects_native_meval = ax.bar(x, native_meval_means, width,
-                                label='meval', yerr=native_meval_stds, ecolor='black', capsize=2, color='tab:orange')  # , color='#d35400'
-    rects_native_mmtaux = ax.bar(x, native_mmtaux_means, 0.75*width,
-                                 label='mmtaux', yerr=native_mmtaux_stds, ecolor='black', capsize=2, color='tab:green')  # , color='#2ecc71'
+    rects_native_meval = ax.bar(x, rewritten_meval_means, width,
+                                label='meval', yerr=rewritten_meval_stds, ecolor='black', capsize=2, color='tab:purple')  # , color='#d35400'
 
     plt.ylim(bottom=0)
     plt.plot(linearFunctionX_n, linearFunctionY_n, 'black', linestyle='dotted')
@@ -112,9 +107,26 @@ for experiment_name in experiments:
     # custom legend
     custom_lines = [Line2D([0], [0], color="black", lw=1, linestyle='dotted'),
                     Line2D([0], [0], color="black", lw=1, linestyle='dashed')]
+    legend = [str(round(a_n, 2)) + r'$ \: \cdot \: x \: + \: $' + str(round(b_n, 2)),
+              str(round(a_l, 2)) + r'$\: \cdot \: x \: + \:$' + str(round(b_l, 2))]
 
-    ax.legend(custom_lines, [
-              str(round(a_n, 2)) + r'$ \: \cdot \: x \: + \: $' + str(round(b_n, 2)), str(round(a_l, 2)) + r'$\: \cdot \: x \: + \:$' + str(round(b_l, 2))])
+    if "a-" in experiment_name:
+        B_l = np.vstack([x_l*x_l, x_l, np.ones(3)]).T
+        a_l, b_l, c_l = np.linalg.lstsq(
+            B_l, rewritten_meval_means[baselineIndex:], rcond=None)[0]
+
+        quadraticFunctionX_l = np.linspace(2, 4, 100)
+        quadraticFunctionY_l = a_l * ((quadraticFunctionX_l-2) ** 2) + b_l * (quadraticFunctionX_l-2) + \
+            c_l  # start at x = 2, a * x^2 + b * x + c
+
+        plt.plot(quadraticFunctionX_l, quadraticFunctionY_l,
+                 'silver', linestyle='dashdot')
+        custom_lines.append(
+            Line2D([0], [0], color="silver", lw=1, linestyle='dashdot'))
+        legend.append(str(round(a_l, 2)) +
+                      r'$\: \cdot \: x^2 \: + \:$' + str(round(b_l, 2)) + r'$\: \cdot \: x \: + \:$' + str(round(c_l, 2)))
+
+    ax.legend(custom_lines, legend)
 
     # Add some text for labels, title and custom x-axis tick labels, etc.
     # ax.set_ylabel('Running time in seconds')

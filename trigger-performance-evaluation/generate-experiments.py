@@ -50,7 +50,7 @@ def int_to_s(interval):
 
 
 # trigger
-for interval in ["[0,*]", "[0,b]", "[a,*]", "[a,b]"]:
+for interval in ["[a,b]"]:
     for lhs in ["FALSE", "A(x)", "A(x,y)"]:
         for log_type in ["historically", "since", "once"]:
             # once is only allowed for a > 0
@@ -61,11 +61,10 @@ for interval in ["[0,*]", "[0,b]", "[a,*]", "[a,b]"]:
             if (interval == "[a,*]" or interval == "[a,b]") and (lhs != "A(x,y)"):
                 continue
 
-            # intervals of the form [a,b] are much slower!
             if interval == "[a,b]":
                 orig_length = 2 * 10 ** 2
             elif interval == "[a,*]":
-                orig_length = 4 * 10 ** 2
+                orig_length = 2 * 10 ** 3
             else:
                 orig_length = 2 * 10 ** 3
 
@@ -82,27 +81,27 @@ for interval in ["[0,*]", "[0,b]", "[a,*]", "[a,b]"]:
                 os.makedirs(output)
 
             formula_path = os.path.join(
-                output, f'formula.txt')
+                output, f'formula-baseline.txt')
             signature_path = os.path.join(output, "signature.txt")
-            log_path = os.path.join(output, f'log.txt')
+            log_path = os.path.join(output, f'log-baseline.txt')
 
             # if 0 is not in the interval, we have to use a conjunction
             if (interval == "[a,*]" or interval == "[a,b]"):
                 write_file(formula_path,
-                           f'({rhs}) AND (({lhs}) TRIGGER{gen_int(interval, orig_length, interval_size)} ({rhs}))')
+                           f'(C(x,y)) AND (({lhs}) TRIGGER{gen_int(interval, orig_length, interval_size)} ({rhs}))')
             else:
                 write_file(formula_path,
                            f'({lhs}) TRIGGER{gen_int(interval, orig_length, interval_size)} ({rhs})')
 
             if lhs == "A(x)":
                 write_file(signature_path,
-                           f'A (int)\nB(int,int)')
+                           f'A(int)\nB(int,int)\nC(int,int)')
             elif lhs == "A(x,y)":
                 write_file(signature_path,
-                           f'A (int,int)\nB(int,int)')
+                           f'A(int,int)\nB(int,int)\nC(int,int)')
             else:
                 write_file(signature_path,
-                           f'B(int,int)')
+                           f'B(int,int)\nC(int,int)')
 
             # to generate the log, execute the other script
             os.system(

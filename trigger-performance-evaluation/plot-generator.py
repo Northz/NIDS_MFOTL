@@ -9,7 +9,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--measurements',
                     help='The measurement csv', required=True)
 parser.add_argument('--output',
-                    help='The output path and filename', required=True)
+                    help='The output path', required=True)
 #parser.add_argument( '--yscale', help='The scale of the y-axis. Default: linear')
 
 
@@ -24,9 +24,17 @@ df = pd.read_csv(measurements, sep=";", quotechar='"', skipinitialspace=True)
 # df.drop(['rewritten real time', 'native real time',
 #         'rewritten sys time', 'native sys time'], axis=1)
 
-experiments = pd.unique(df.sort_values(by=['experiment']).experiment)
 
-df = df.sort_values(by=['experiment']).groupby(['experiment']).agg({
+def exp_sort_key(x):
+    return x.map(lambda x: x.replace("0-unbounded", "1").replace("0-bounded", "2").replace("a-unbounded", "3").replace("a-bounded", "4").replace("-historically", "1").replace("-since", "2").replace("-once", "3"))
+
+
+df = df.sort_values(by=['experiment'], key=exp_sort_key)
+experiments = pd.unique(df.experiment)
+
+#print(df.sort_values(by=['experiment'], key=exp_sort_key))
+
+df = df.groupby(['experiment'], sort=False).agg({
     'rewritten real time': ['mean', 'std'],
     'rewritten meval time': ['mean', 'std'],
     'native real time': ['mean', 'std'],
@@ -34,8 +42,45 @@ df = df.sort_values(by=['experiment']).groupby(['experiment']).agg({
     'native trigger time': ['mean', 'std']
 })
 
+plt.rcParams.update({
+    "text.usetex": True
+})
 
-labels = [i for i, e in enumerate(experiments)]
+labels = []
+last = ""
+for e in experiments:
+    if "0-bounded" in e:
+        interval = r'[0, b)'
+    elif "0-unbounded" in e:
+        interval = r'[0, \infty)'
+    elif "a-bounded" in e:
+        interval = r'[a, b)'
+    elif "a-unbounded" in e:
+        interval = r'[a, \infty)'
+
+    if "lhs-0" in e:
+        lhs = r'False'
+    elif "lhs-1" in e:
+        lhs = r'A(x)'
+    elif "lhs-2" in e:
+        lhs = r'A(x, y)'
+
+    if "historically" in e:
+        pattern = r'p_{1}'
+    elif "since" in e:
+        pattern = r'p_{2}'
+    elif "once" in e:
+        pattern = r'p_{3}'
+
+    current = e.replace("-historically", "").replace("-since",
+                                                     "").replace("-once", "")
+    if last == current:
+        labels.append(r'$' + pattern + r'$')
+    else:
+        labels.append(
+            r'$' + lhs + r'\: ${T}$_{' + interval + r'} \: B(x,y), \:' + pattern + r'$')
+
+    last = current
 
 #rewritten_means = df['rewritten real time']['mean'].to_numpy()
 rewritten_meval_means = df['rewritten meval time']['mean'].to_numpy()
@@ -61,20 +106,21 @@ fig, ax = plt.subplots()
 # rects_rewritten = ax.bar(x - width/2, rewritten_means, width,
 #                          label='rewritten', yerr=rewritten_stds, ecolor='black', capsize=2, color='#3498db')
 rects_rewritten_meval = ax.bar(x - width/2, rewritten_meval_means, width,
-                               label='rewritten meval', yerr=rewritten_meval_stds, ecolor='black', capsize=2)  # , color='#2980b9'
+                               label='rewritten meval', yerr=rewritten_meval_stds, ecolor='black', capsize=2, color='tab:blue')  # , color='#2980b9'
 
 # rects_native = ax.bar(x + width/2, native_means, width,
 #                       label='native', yerr=native_stds, ecolor='black', capsize=2, color='#e67e22')
 rects_native_meval = ax.bar(x + width/2, native_meval_means, width,
-                            label='native meval', yerr=native_meval_stds, ecolor='black', capsize=2)  # , color='#d35400'
-rects_native_mmtaux = ax.bar(x + width/2, native_mmtaux_means, 0.75*width,
-                             label='mmtaux', yerr=native_mmtaux_stds, ecolor='black', capsize=2)  # , color='#2ecc71'
+                            label='native meval', yerr=native_meval_stds, ecolor='black', capsize=2, color='tab:orange')  # , color='#d35400'
+rects_native_mmtaux = ax.bar(x + width/2, native_mmtaux_means, 0.5*width,
+                             label='mmtaux', yerr=native_mmtaux_stds, ecolor='black', capsize=2, color='tab:green')  # , color='#2ecc71'
 
 # Add some text for labels, title and custom x-axis tick labels, etc.
-ax.set_ylabel('Running time of meval in seconds')
+#ax.set_ylabel('Running time of meval in seconds')
+plt.xticks(rotation=30, ha='right')
 ax.set_xticks(x)
-ax.set_xticklabels(labels)
-ax.legend()
+ax.set_xticklabels(labels, fontsize=8)
+# ax.legend()
 
 plt.yscale('log')
 # if "a-bounded" in experiment_name:
