@@ -9103,7 +9103,7 @@ let rec rewrite_trigger
   = function
     And (phi, Trigger (alpha, i, beta)) ->
       (if memL i zero_nata && memR i zero_nata
-        then And (phi, Trigger (alpha, i, beta))
+        then And (phi, trigger_safe_0 alpha i beta)
         else (if bounded i then and_trigger_safe_bounded phi alpha i beta
                else and_trigger_safe_unbounded phi alpha i beta))
     | Trigger (alpha, i, beta) ->
