@@ -11,7 +11,7 @@ parser.add_argument('--n',
 parser.add_argument('--intervals', nargs='+',
                     help='The intervals used, separated by spaces. (Default: ["[0,*]", "[0,b]", "[a,*]", "[a,b]"]:')
 parser.add_argument('--asymptotics', nargs='+',
-                    help='The asymptotic values used, separated by spaces. (Default: ["2n", "2l", "4n", "4l", "8n", "8l", "16n", "16l"])')
+                    help='The asymptotic values used, separated by spaces. (Default: ["2n", "2l", "2c", "4n", "4l", "4c", "8n", "8l", "8c"])')
 #parser.add_argument( '--yscale', help='The scale of the y-axis. Default: linear')
 
 
@@ -22,7 +22,7 @@ base_length = args.length or 10 ** 2
 base_n = args.n or 10 ** 2
 intervals = args.intervals or ["[0,*]", "[0,b]", "[a,*]", "[a,b]"]
 asymptotics = args.asymptotics or [
-    "2n", "2l", "4n", "4l", "8n", "8l", "16n", "16l"]
+    "2n", "2l", "2c", "4n", "4l", "4c", "8n", "8l", "8c"]
 
 base_length = int(base_length)
 base_n = int(base_n)
@@ -57,8 +57,12 @@ def lhs_to_s(lhs):
         return "lhs-0"
     elif lhs == "A(x)":
         return "lhs-1"
+    elif lhs == "(NOT A(x))":
+        return "lhs-1-neg"
     elif lhs == "A(x,y)":
         return "lhs-2"
+    elif lhs == "(NOT A(x,y))":
+        return "lhs-2-neg"
     else:
         raise ValueError(f'Unknown lhs: {lhs}')
 
@@ -78,14 +82,14 @@ def int_to_s(interval):
 
 # trigger
 for interval in intervals:
-    for lhs in ["FALSE", "A(x)", "A(x,y)"]:
+    for lhs in ["FALSE", "A(x)", "(NOT A(x))", "A(x,y)", "(NOT A(x,y))"]:
         for log_type in ["historically", "since", "once"]:
             for asymptotic in ["baseline"] + asymptotics:
                 # once is only allowed for a > 0
                 if log_type == "once" and (interval != "[a,*]" and interval != "[a,b]"):
                     continue
 
-                # if 0 is not in the interval, the lhs has to be A(x, y) (same set of free variables)
+                # if 0 is not in the interval, the lhs has to be A(x, y) (same set of free variables and not negated)
                 if (interval == "[a,*]" or interval == "[a,b]") and (lhs != "A(x,y)"):
                     continue
 
@@ -104,6 +108,9 @@ for interval in intervals:
                     n = int(asymptotic[:-1]) * n
                 elif asymptotic.endswith("l"):
                     length = int(asymptotic[:-1]) * length
+                elif asymptotic.endswith("c"):
+                    n = int(asymptotic[:-1]) * n
+                    length = int(asymptotic[:-1]) * length
                 else:
                     print(f'Invalid asymptotic value: "{asymptotic}"!')
                     exit()
@@ -120,23 +127,17 @@ for interval in intervals:
                 signature_path = os.path.join(output, "signature.txt")
                 log_path = os.path.join(output, f'log-{asymptotic}.txt')
 
-                # if 0 is not in the interval, we have to use a conjunction
-                if (interval == "[a,*]" or interval == "[a,b]"):
-                    write_file(formula_path,
-                               f'({rhs}) AND (({lhs}) TRIGGER{gen_int(interval, length, interval_size)} ({rhs}))')
-                else:
-                    write_file(formula_path,
-                               f'({lhs}) TRIGGER{gen_int(interval, length, interval_size)} ({rhs})')
+                write_file(formula_path,
+                           f'(C(x,y)) AND (({lhs}) TRIGGER{gen_int(interval, length, interval_size)} ({rhs}))')
 
-                if lhs == "A(x)":
+                if lhs == "A(x)" or lhs == "(NOT A(x))":
                     write_file(signature_path,
-                               f'A (int)\nB(int,int)')
-                elif lhs == "A(x,y)":
+                               f'A(int)\nB(int,int)\nC(int,int)')
+                elif lhs == "A(x,y)" or lhs == "(NOT A(x,y))":
                     write_file(signature_path,
-                               f'A (int,int)\nB(int,int)')
+                               f'A(int,int)\nB(int,int)\nC(int,int)')
                 else:
-                    write_file(signature_path,
-                               f'B(int,int)')
+                    write_file(signature_path, f'B(int,int)\nC(int,int)')
 
                 # to generate the log, execute the other script
                 os.system(

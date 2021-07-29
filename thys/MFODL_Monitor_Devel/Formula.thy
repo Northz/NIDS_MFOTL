@@ -4541,7 +4541,7 @@ fun rewrite_trigger :: "Formula.formula \<Rightarrow> Formula.formula" where
   "rewrite_trigger (Formula.And \<phi> (Formula.Trigger \<alpha> I \<beta>)) = (
     if (mem I 0) then
       \<comment> \<open>the rewrite function already was applied recursively, hence the trigger should already be rewritten\<close>
-      Formula.And \<phi> (Formula.Trigger \<alpha> I \<beta>)
+      Formula.And \<phi> ( trigger_safe_0 \<alpha> I \<beta>)
     else (
       if (bounded I) then
         and_trigger_safe_bounded \<phi> \<alpha> I \<beta>
@@ -4585,7 +4585,7 @@ proof (cases \<phi>)
     then show ?thesis
     proof (cases "mem I 0")
       case True
-      then have "(rewrite_trigger (formula.And \<phi> \<psi>)) = Formula.And \<phi> (Formula.Trigger \<alpha> I \<beta>)"
+      then have "(rewrite_trigger (formula.And \<phi> \<psi>)) = Formula.And \<phi> ( trigger_safe_0 \<alpha> I \<beta>)"
         unfolding Trigger
         by auto
       then show ?thesis
@@ -4627,7 +4627,6 @@ next
       by auto
     show ?thesis
       unfolding Trigger rewrite
-      using trigger_safe_0_fvi[of b \<alpha> I \<beta>]
       by auto
   next
     case False
@@ -4646,11 +4645,12 @@ proof (cases \<phi>)
     then show ?thesis
     proof (cases "mem I 0")
       case True
-      then have "(rewrite_trigger (formula.And \<phi> \<psi>)) = Formula.And \<phi> (Formula.Trigger \<alpha> I \<beta>)"
+      then have "(rewrite_trigger (formula.And \<phi> \<psi>)) = Formula.And \<phi> (trigger_safe_0 \<alpha> I \<beta>)"
         unfolding Trigger
         by auto
       then show ?thesis
         unfolding And Trigger
+        using sat_trigger_rewrite_0[OF True]
         by auto
     next
       case not_mem: False
@@ -4714,13 +4714,21 @@ proof (cases \<phi>)
     then show ?thesis
     proof (cases "mem I 0")
       case True
-      then have "(rewrite_trigger (formula.And \<phi> \<psi>)) = Formula.And \<phi> (Formula.Trigger \<alpha> I \<beta>)"
+      then have rewrite: "(rewrite_trigger (formula.And \<phi> \<psi>)) = Formula.And \<phi> (trigger_safe_0 \<alpha> I \<beta>)"
         unfolding Trigger
         by auto
+      have "safe_formula_dual False safe_formula \<alpha> I \<beta>"
+        using safe True
+        unfolding And Trigger
+        by (auto simp add: safe_assignment_def safe_formula_dual_def split: if_splits)
+      then have "safe_formula (trigger_safe_0 \<alpha> I \<beta>)"
+        using True
+        unfolding safe_formula_dual_def trigger_safe_0_def
+        by (auto) (auto split: formula.splits)
       then show ?thesis
-        using safe Trigger trigger_not_safe_assignment
-        unfolding And
-        by (auto split: if_splits simp add: safe_formula_dual_def)
+        using safe
+        unfolding And rewrite
+        by auto
     next
       case not_mem: False
       show ?thesis

@@ -60,8 +60,12 @@ for e in experiments:
 
     if "lhs-0" in e:
         lhs = r'False'
+    elif "lhs-1-neg" in e:
+        lhs = r'\neg A(x)'
     elif "lhs-1" in e:
         lhs = r'A(x)'
+    elif "lhs-2-neg" in e:
+        lhs = r'\neg A(x, y)'
     elif "lhs-2" in e:
         lhs = r'A(x, y)'
 

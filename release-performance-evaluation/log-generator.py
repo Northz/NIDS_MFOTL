@@ -73,8 +73,11 @@ rhs = subformulas[1][1:-1]
 lhs_predicates = []
 rhs_predicates = []
 
+negated_lhs = "NOT" in lhs
+
 if not(lhs in ["TRUE", "FALSE"]):
-    lhs_predicates.append(lhs)
+    lhs_predicates.append(lhs.replace(
+        "(NOT A(x))", "A(x)").replace("(NOT A(x,y))", "A(x,y)"))
 
 if not(rhs in ["TRUE", "FALSE"]):
     rhs_predicates.append(rhs)
@@ -101,9 +104,13 @@ def generate_assignments():
     return assignments
 
 
-def append_to_log(log, t, preds, assignments, additional_assignments=[]):
-    log.append(
-        "@" + str(t) + " " + " ".join(list(set([insert_variables(p, a) for p in preds for a in assignments] + [insert_variables(p, a) for p in predicates for a in additional_assignments]))))
+def gen_log_entry(t, preds, assignments, additional_assignments=[], negative_predicates=[], negative_assignments=[]):
+    return "@" + str(t) + " " + " ".join(list(set([insert_variables(p, a) for p in preds for a in assignments]).union(set([insert_variables(p, a) for p in predicates for a in additional_assignments])).difference(set([insert_variables(p, a) for p in negative_predicates for a in negative_assignments]))))
+
+
+def append_to_log(log, t, preds, assignments, additional_assignments=[], negative_predicates=[], negative_assignments=[]):
+    log.append(gen_log_entry(t, preds, assignments,
+                             additional_assignments, negative_predicates, negative_assignments))
 
 
 i = 0
@@ -170,30 +177,31 @@ while i < length:
 
         # from there on only generate rhs with the at least same assignments until the end of the interval is reached
         while i < upper_bound - (int(interval[0])):
-            u = []
+            a_lhs = []
 
             # collect all assignments that have to appear after i
             for loc in assignment_per_loc:
                 if loc == i:
-                    u = u + assignment_per_loc[loc]
-                    # remove after printing phi and psi at loc
-                    for a in assignment_per_loc[loc]:
-                        assignments.remove(a)
+                    a_lhs = a_lhs + assignment_per_loc[loc]
 
             if random.uniform(0, 1) < 0.5:
                 t = t+1
 
-            if len(u) > 0:
-                additional_assignments = generate_assignments()
-
-                append_to_log(log, t, predicates, u, additional_assignments)
-                i = i+1
-
-            # additional assignments, just s.t. the log isn't perfectly uniform
             additional_assignments = generate_assignments()
-            append_to_log(log, t, rhs_predicates,
-                          assignments, additional_assignments)
+
+            if negated_lhs:
+                # generate rhs and random, subtract lhs
+                log.append("@" + str(t) + " " + " ".join(list(set([insert_variables(p, a) for p in rhs_predicates for a in assignments]).union(set([insert_variables(
+                    p, a) for p in predicates for a in additional_assignments])).difference(set([insert_variables(p, a) for p in lhs_predicates for a in a_lhs])))))
+            else:
+                log.append("@" + str(t) + " " + " ".join(list(set([insert_variables(p, a) for p in lhs_predicates for a in a_lhs]).union(set([insert_variables(
+                    p, a) for p in rhs_predicates for a in assignments])).union(set([insert_variables(p, a) for p in predicates for a in additional_assignments])))))
+
             i = i+1
+
+            # remove all lhs from assignments after printing phi and psi together at loc, only holds up until this entry
+            for a in a_lhs:
+                assignments.remove(a)
 
         while i < upper_bound:
             # the rest can be filled with completely random entries
@@ -241,8 +249,9 @@ while i < length:
 
         for idx in assignment_per_idx:
             t_eventually = re.findall(r'@\d+\s', log_start[idx])[0][1:-1]
+            additional_assignments = generate_assignments()
             log_start[idx] = "@" + str(t_eventually) + " " + " ".join(
-                list(set([insert_variables(p, a) for p in lhs_predicates for a in assignment_per_idx[idx]])))
+                list(set([insert_variables(p, a) for p in lhs_predicates for a in assignment_per_idx[idx]]).union(set([insert_variables(p, a) for p in predicates for a in additional_assignments]))))
 
         log = log + log_start
 

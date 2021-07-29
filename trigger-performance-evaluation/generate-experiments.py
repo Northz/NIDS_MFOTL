@@ -30,8 +30,12 @@ def lhs_to_s(lhs):
         return "lhs-0"
     elif lhs == "A(x)":
         return "lhs-1"
+    elif lhs == "(NOT A(x))":
+        return "lhs-1-neg"
     elif lhs == "A(x,y)":
         return "lhs-2"
+    elif lhs == "(NOT A(x,y))":
+        return "lhs-2-neg"
     else:
         raise ValueError(f'Unknown lhs: {lhs}')
 
@@ -50,21 +54,21 @@ def int_to_s(interval):
 
 
 # trigger
-for interval in ["[a,b]"]:
-    for lhs in ["FALSE", "A(x)", "A(x,y)"]:
+for interval in ["[a,*]"]:
+    for lhs in ["FALSE", "A(x)", "(NOT A(x))", "A(x,y)", "(NOT A(x,y))"]:
         for log_type in ["historically", "since", "once"]:
             # once is only allowed for a > 0
             if log_type == "once" and (interval != "[a,*]" and interval != "[a,b]"):
                 continue
 
-            # if 0 is not in the interval, the lhs has to be A(x, y) (same set of free variables)
+            # if 0 is not in the interval, the lhs has to be A(x, y) (same set of free variables and not negated)
             if (interval == "[a,*]" or interval == "[a,b]") and (lhs != "A(x,y)"):
                 continue
 
             if interval == "[a,b]":
                 orig_length = 2 * 10 ** 2
             elif interval == "[a,*]":
-                orig_length = 2 * 10 ** 3
+                orig_length = 5 * 10 ** 2
             else:
                 orig_length = 2 * 10 ** 3
 
@@ -85,23 +89,16 @@ for interval in ["[a,b]"]:
             signature_path = os.path.join(output, "signature.txt")
             log_path = os.path.join(output, f'log-baseline.txt')
 
-            # if 0 is not in the interval, we have to use a conjunction
-            if (interval == "[a,*]" or interval == "[a,b]"):
-                write_file(formula_path,
-                           f'(C(x,y)) AND (({lhs}) TRIGGER{gen_int(interval, orig_length, interval_size)} ({rhs}))')
-            else:
-                write_file(formula_path,
-                           f'({lhs}) TRIGGER{gen_int(interval, orig_length, interval_size)} ({rhs})')
+            write_file(
+                formula_path, f'(C(x,y)) AND (({lhs}) TRIGGER{gen_int(interval, orig_length, interval_size)} ({rhs}))')
 
-            if lhs == "A(x)":
-                write_file(signature_path,
-                           f'A(int)\nB(int,int)\nC(int,int)')
-            elif lhs == "A(x,y)":
+            if lhs == "A(x)" or lhs == "(NOT A(x))":
+                write_file(signature_path, f'A(int)\nB(int,int)\nC(int,int)')
+            elif lhs == "A(x,y)" or lhs == "(NOT A(x,y))":
                 write_file(signature_path,
                            f'A(int,int)\nB(int,int)\nC(int,int)')
             else:
-                write_file(signature_path,
-                           f'B(int,int)\nC(int,int)')
+                write_file(signature_path, f'B(int,int)\nC(int,int)')
 
             # to generate the log, execute the other script
             os.system(

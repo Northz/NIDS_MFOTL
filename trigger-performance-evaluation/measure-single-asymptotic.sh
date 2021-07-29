@@ -11,7 +11,7 @@ if [ "$4" == "rewritten" ];then
 	time_rewritten=$(time (../../../monpoly -formula ./formula-$3.txt -log ./log-$3.txt -sig ./signature.txt -no_rw -verified -no_trigger  > ./out-rewritten.txt) 2>&1)
 	rewritten_meval_time=$(cat ./out-rewritten.txt | grep meval | sed "s/meval: //" | awk '{n += $1}; END{print n}')
 	
-	rm ./out-rewritten.txt
+	#rm ./out-rewritten.txt
 
 	echo "$2;$3;$time_rewritten;$rewritten_meval_time"
 else
@@ -19,7 +19,7 @@ else
 	trigger_time=$(cat ./out-native.txt | grep mmtaux | sed "s/mmtaux: //" | awk '{n += $1}; END{print n}')
 	native_meval_time=$(cat ./out-native.txt | grep meval | sed "s/meval: //" | awk '{n += $1}; END{print n}')
 	
-	rm ./out-native.txt
+	#rm ./out-native.txt
 
 	echo "$2;$3;$time_native;$trigger_time;$native_meval_time"
 fi
