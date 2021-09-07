@@ -3,8 +3,6 @@ import random
 import os
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 
 asymptotic_order = ["l", "2l", "4l", "8l",
                     "n", "2n", "4n", "8n",
