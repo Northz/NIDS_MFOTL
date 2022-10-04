@@ -30,8 +30,8 @@ subsection \<open>Formulas and satisfiability\<close>
 qualified type_synonym name = string8
 qualified type_synonym event = "(name \<times> event_data list)"
 qualified type_synonym database = "(name, event_data list set list) mapping"
-qualified type_synonym prefix = "(name \<times> event_data list) prefix"
-qualified type_synonym trace = "(name \<times> event_data list) trace"
+qualified type_synonym prefix = "(name \<times> event_data list) set prefix"
+qualified type_synonym trace = "(name \<times> event_data list) set trace"
 
 qualified type_synonym env = "event_data list"
 

@@ -2093,7 +2093,7 @@ lemma Mapping_lookup_update: "Mapping.lookup (Mapping.update k v m) k' =
   by transfer auto
 
 lemma hd_le_set: "sorted xs \<Longrightarrow> xs \<noteq> [] \<Longrightarrow> x \<in> set xs \<Longrightarrow> hd xs \<le> x"
-  by (metis eq_iff list.sel(1) set_ConsD sorted.elims(2))
+  by (metis dual_order.refl list.sel(1) set_ConsD sorted_wrt.elims(2))
 
 lemma Mapping_lookup_combineE: "Mapping.lookup (Mapping.combine f m m') k = Some v \<Longrightarrow>
   (Mapping.lookup m k = Some v \<Longrightarrow> P) \<Longrightarrow>
@@ -5436,7 +5436,7 @@ using assms proof (induction "filter f xs" arbitrary: xs i j)
   case (Cons a as zs)
 
   obtain i' where i'_def: "i = Suc i'"
-    using Suc Cons(5)
+    using Cons(5)
     by (cases i) (auto)
 
   obtain n where zs'_props: "n\<le>length zs" "as = filter f (drop n zs)" "[a] = filter f (take n zs)"

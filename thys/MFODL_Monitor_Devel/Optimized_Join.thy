@@ -157,7 +157,7 @@ proof -
     unfolding Q_def Q_neg_def using assms(2) by simp
 qed
 
-lemmas restrict_nested = New_max.restrict_nested
+lemmas restrict_nested = restrict_restrict
 
 lemma list_all2_opt_True:
   assumes "list_all2 (\<lambda>A X. table n A X \<and> wf_set n A) ((A_zs @ A_x # A_xs @ A_y # A_ys) @ A_neg)

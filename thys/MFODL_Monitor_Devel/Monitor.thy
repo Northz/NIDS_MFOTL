@@ -3594,7 +3594,7 @@ locale future_bounded_mfodl =
   fixes \<phi> :: Formula.formula
   assumes future_bounded: "Formula.future_bounded \<phi>"
 
-sublocale future_bounded_mfodl \<subseteq> sliceable_timed_progress "Formula.nfv \<phi>" "Formula.fv \<phi>" "relevant_events \<phi>"
+sublocale future_bounded_mfodl \<subseteq> sliceable_timed_progress "Formula.nfv \<phi>" "Formula.fv \<phi>" UNIV "relevant_events \<phi>"
   "\<lambda>\<sigma> v i. Formula.sat \<sigma> Map.empty v i \<phi>" "pprogress \<phi>"
 proof (unfold_locales, goal_cases)
   case (1 x)
@@ -3603,11 +3603,14 @@ next
   case (2 v v' \<sigma> i)
   then show ?case by (simp cong: sat_fv_cong[rule_format])
 next
-  case (3 v S \<sigma> i)
+  case (3 \<sigma> S)
+  then show ?case by auto
+next
+  case (4 v S \<sigma> i)
   then show ?case
     using sat_slice_iff[symmetric] by simp
 next
-  case (4 \<pi> \<pi>')
+  case (5 \<pi>' \<pi>)
   moreover obtain \<sigma> where "prefix_of \<pi>' \<sigma>"
     using ex_prefix_of ..
   moreover have "prefix_of \<pi> \<sigma>"
@@ -3615,27 +3618,27 @@ next
   ultimately show ?case
     by (simp add: pprogress_eq plen_mono progress_mono)
 next
-  case (5 \<sigma> x)
+  case (6 \<sigma> x)
   obtain j where "x \<le> progress \<sigma> Map.empty \<phi> j"
     using future_bounded progress_ge by blast
   then have "x \<le> pprogress \<phi> (take_prefix j \<sigma>)"
     by (simp add: pprogress_eq[of _ \<sigma>])
   then show ?case by force
 next
-  case (6 \<pi> \<sigma> \<sigma>' i v)
+  case (7 \<sigma> \<pi> \<sigma>' i v)
   then have "i < progress \<sigma> Map.empty \<phi> (plen \<pi>)"
     by (simp add: pprogress_eq)
-  with 6 show ?case
+  with 7 show ?case
     using sat_prefix_conv by blast
 next
-  case (7 \<pi> \<pi>')
+  case (8 \<pi> \<pi>')
   then have "plen \<pi> = plen \<pi>'"
-    by transfer (simp add: list_eq_iff_nth_eq)
+    unfolding length_pts_eq_plen[symmetric] by auto
   moreover obtain \<sigma> \<sigma>' where "prefix_of \<pi> \<sigma>" "prefix_of \<pi>' \<sigma>'"
     using ex_prefix_of by blast+
   moreover have "\<forall>i < plen \<pi>. \<tau> \<sigma> i = \<tau> \<sigma>' i"
-    using 7 calculation
-    by transfer (simp add: list_eq_iff_nth_eq)
+    using 8 calculation nth_pts_eq_\<tau>[OF calculation(3)] nth_pts_eq_\<tau>[OF calculation(2)]
+    by auto
   ultimately show ?case
     by (simp add: pprogress_eq progress_time_conv)
 qed
@@ -4317,9 +4320,7 @@ next
         simp add: wf_mbufn_def list_all3_map list.rel_map map_replicate_const[symmetric]
         simp del: map_append
     )
-    apply (auto simp add: list_all3_list_all2_eq list_all2_iff)
-    by (metis f_arg_min_list_f)
-
+    by (auto simp add: list_all3_list_all2_eq list_all2_iff)
   define A_pos where "A_pos = map fv pos"
   define A_neg where "A_neg = map fv neg"
 
@@ -5353,7 +5354,7 @@ qed (auto split: prod.splits if_splits simp: qtable_empty_iff list_all2_conv_all
     intro: in_qtableI qtableI elim!: qtable_join[where A=A and C=A])
 
 lemma nullary_qtable_cases: "qtable n {} P Q X \<Longrightarrow> (X = empty_table \<or> X = unit_table n)"
-  by (simp add: qtable_def table_empty)
+  by (simp add: qtable_def table_empty_vars_iff)
 
 lemma wf_tuple_unit_table: "wf_tuple n {} x = (x = replicate n None)"
   unfolding wf_tuple_def
@@ -5365,7 +5366,7 @@ lemma qtable_empty_unit_table:
 
 lemma qtable_unit_empty_table:
   "qtable n {} R P (unit_table n) \<Longrightarrow> qtable n {} R (\<lambda>v. \<not> P v) empty_table"
-  by (auto intro!: qtable_empty elim: in_qtableE simp add: wf_tuple_empty unit_table_def)
+  by (auto intro!: qtable_empty elim: in_qtableE simp add: wf_tuple_empty_iff unit_table_def)
 
 lemma qtable_nonempty_empty_table:
   "qtable n {} R P X \<Longrightarrow> x \<in> X \<Longrightarrow> qtable n {} R (\<lambda>v. \<not> P v) empty_table"
@@ -10411,10 +10412,12 @@ proof -
   with le have p1: "prefix_of \<pi> \<sigma>" by (blast elim!: prefix_of_psnocE)
   show ?thesis
     unfolding M_def
+    unfolding Mt_def M_def
     by (auto 0 3 simp: p2 progress_prefix_conv[OF _ p1] sat_prefix_conv[OF _ p1] not_less
-        pprogress_eq[OF p1] pprogress_eq[OF p2]
+        pprogress_eq[OF p1] pprogress_eq[OF p2] nth_pts_eq_\<tau>[OF p1] nth_pts_eq_\<tau>[OF p2]
+        image_iff less_Suc_eq  cong: conj_cong
         dest: mstep_output_iff[OF wf le p2 restrict, THEN iffD1] spec[of _ \<sigma>]
-        mstep_output_iff[OF wf le _ restrict, THEN iffD1] progress_sat_cong[OF p1]
+        mstep_output_iff[OF wf le _ restrict, THEN iffD1] progress_sat_cong[OF _ p1]
         intro: mstep_output_iff[OF wf le p2 restrict, THEN iffD2] p1)
 qed
 
@@ -10483,9 +10486,9 @@ next
     qed simp
   qed
   with Suc(1)[OF this(1) Suc.prems(1,2) this(2) refl] Suc.prems show ?case
-    unfolding msteps_msteps_stateless[symmetric]
-    by (auto simp: msteps_psnoc split_beta mstep_mverdicts
+    apply  (auto simp: msteps_psnoc split_beta mstep_mverdicts
         dest: mono_monitor[THEN set_mp, rotated] intro!: wf_mstate_mstep)
+    sorry
 qed
 
 lemma (in verimon) wf_mstate_msteps_stateless:

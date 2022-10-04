@@ -751,8 +751,11 @@ lemma split: "split t x = (l,xin,r) \<Longrightarrow> rbt_sorted t \<Longrightar
   set (RBT_Impl.keys l) = {a \<in> set (RBT_Impl.keys t). a < x} \<and>
   set (RBT_Impl.keys r) = {a \<in> set (RBT_Impl.keys t). x < a} \<and>
   (xin = (x \<in> set (RBT_Impl.keys t))) \<and> rbt_sorted l \<and> rbt_sorted r"
-  by (induction t arbitrary: l xin r)
-     (force simp: Let_def set_rbt_join rbt_greater_prop rbt_less_prop
+  apply (induction t arbitrary: l xin r)
+  apply (force simp: Let_def set_rbt_join rbt_greater_prop rbt_less_prop
+      split: if_splits prod.splits intro!: rbt_sorted_rbt_join)
+  apply (intro conjI set_eqI; clarsimp split: prod.splits)
+  by (force simp: Let_def set_rbt_join rbt_greater_prop rbt_less_prop
       split: if_splits prod.splits intro!: rbt_sorted_rbt_join)+
 
 lemma keys_paint'[simp]: "RBT_Impl.keys (RBT_Impl.paint c t) = RBT_Impl.keys t"
@@ -1229,7 +1232,6 @@ lemma rbt_minus_code:
 typedef (overloaded) 'a sdlist = "{xs :: ('a :: ccompare) list.
   case ID CCOMPARE('a) of None \<Rightarrow> xs = [] | Some _ \<Rightarrow> linorder.sorted cless_eq xs \<and> distinct xs}"
   by (auto intro!: exI[of _ "[]"] split: option.splits)
-     (metis keys_eq_Nil_iff sorted_RBT_Set_keys)
 
 setup_lifting type_definition_sdlist
 
@@ -1296,7 +1298,7 @@ proof -
   have cl: "class.linorder (le_of_comp c) (lt_of_comp c)"
     by (auto simp: c_def ID_ccompare ID_Some ccompare_nat_def)
   show ?thesis
-    using linorder.sorted_sorted_wrt[OF cl] sorted_wrt_mono_rel[OF _ sorted_wrt_upt]
+    using sorted_wrt_mono_rel[OF _ sorted_wrt_upt]
     by (auto simp: c_def ord_defs(1))
 qed
 
