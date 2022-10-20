@@ -79,7 +79,6 @@ open Tuple
 open Relation
 open Table
 open Db
-open Log
 open Sliding
 open Helper
 
@@ -93,7 +92,6 @@ module Sk = Dllist
 module Sj = Dllist
 
 let resumefile = ref ""
-let dumpfile = ref ""
 let combine_files = ref ""
 let lastts = ref MFOTL.ts_invalid
 let slicer_heavy_unproc : (int * string list) array ref= ref [|(0, [])|]
@@ -130,74 +128,6 @@ let dllist_add_last auxrels tsq rel2 =
       Dllist.add_last (tsq, Relation.union rellast rel2) auxrels
     else
       Dllist.add_last (tsq,rel2) auxrels
-
-(* [saauxrels] consists of those relations that are outside of the
-   relevant time window *)
-let update_since_all intv tsq inf comp rel1 rel2 =
-  inf.sres <- comp inf.sres rel1;
-  let auxrels = inf.saauxrels in
-  let rec elim () =
-    if not (Mqueue.is_empty auxrels) then
-      let (tsj,relj) = Mqueue.top auxrels in
-      if MFOTL.in_right_ext (MFOTL.ts_minus tsq tsj) intv then
-        begin
-          ignore (Mqueue.pop auxrels);
-          inf.sres <- Relation.union inf.sres (comp relj rel1);
-          elim ()
-        end
-  in
-  elim ();
-
-  Mqueue.update_and_delete
-    (fun (tsj, relj) -> (tsj, comp relj rel1))
-    (fun (_,relj) -> Relation.is_empty relj) (* delete the current node if newrel is empty *)
-    auxrels;
-
-  if not (Relation.is_empty rel2) then
-    begin
-      if MFOTL.in_right_ext MFOTL.ts_null intv then
-        inf.sres <- Relation.union inf.sres rel2;
-      mqueue_add_last auxrels tsq rel2
-    end;
-
-  inf.sres
-
-
-
-let update_since intv tsq auxrels comp discard rel1 rel2 =
-  let rec elim_old_auxrels () =
-    (* remove old elements that felt out of the interval *)
-    if not (Mqueue.is_empty auxrels) then
-      let (tsj,relj) = Mqueue.top auxrels in
-      if not (MFOTL.in_left_ext (MFOTL.ts_minus tsq tsj) intv) then
-        begin
-          ignore(Mqueue.pop auxrels);
-          elim_old_auxrels()
-        end
-  in
-  elim_old_auxrels ();
-
-  let res = ref Relation.empty in
-  Mqueue.update_and_delete
-    (fun (tsj,relj) ->
-       let newrel = comp relj rel1 in
-       if (not discard) && MFOTL.in_right_ext (MFOTL.ts_minus tsq tsj) intv then
-         res := Relation.union !res newrel;
-       (tsj,newrel)
-    )
-    (* delete the current node if newrel is empty *)
-    (fun (_,relj) -> Relation.is_empty relj)
-    auxrels;
-
-  if not (Relation.is_empty rel2) then
-    begin
-      if (not discard) && MFOTL.in_right_ext MFOTL.ts_null intv then
-        res := Relation.union !res rel2;
-      mqueue_add_last auxrels tsq rel2
-    end;
-
-  !res
-
 
 let update_once_all intv tsq inf =
   let auxrels = inf.oaauxrels in
@@ -256,8 +186,8 @@ let update_once_zero intv q tsq inf rel2 discard =
     in
     if Misc.debugging Dbg_eval then
       begin
-        Printf.printf "[update_once_zero] lw = %d rw = %d " lw rw;
-        Misc.printnl_list "subseq = " print_auxel subseq;
+        Printf.eprintf "[update_once_zero] lw = %d rw = %d " lw rw;
+        Misc.prerrnl_list "subseq = " prerr_auxel subseq;
       end;
     let newt = Sliding.slide string_of_int Relation.union subseq (lw, rw) inf.oztree in
     inf.oztree <- newt;
@@ -306,10 +236,10 @@ let update_once intv tsq inf discard =
       in
       if Misc.debugging Dbg_eval then
         begin
-          Printf.printf "[update_once] lw = %s rw = %s "
+          Printf.eprintf "[update_once] lw = %s rw = %s "
             (MFOTL.string_of_ts lw)
             (MFOTL.string_of_ts rw);
-          Misc.printnl_list "subseq = " print_sauxel subseq;
+          Misc.prerrnl_list "subseq = " prerr_sauxel subseq;
         end;
       let newt = Sliding.slide MFOTL.string_of_ts Relation.union subseq (lw, rw) inf.otree in
       inf.otree <- newt;
@@ -339,15 +269,12 @@ let update_old_until q tsq i intv inf discard  =
       if k=q-1 then
         begin
           ignore(Sk.pop_first rels);
-          if not (Sk.is_empty rels) then
+          if not (Sk.is_empty rels) && fst (Sk.get_first rels) = q then
             let (k',relk') = Sk.pop_first rels in
-            assert(k'>=q && j>=q);
+            assert(k'=q && j>=q);
             let newrelk' = Relation.union relk relk' in
             Sk.add_first (k',newrelk') rels;
-            if k'=q then
-              newrelk'
-            else
-              relk
+            newrelk'
           else
           if (j>q-1) then
             begin
@@ -391,7 +318,7 @@ let update_old_until q tsq i intv inf discard  =
       if (not discard) && not (Relation.is_empty relq) then
         inf.ures <- Relation.union inf.ures relq;
       if Misc.debugging Dbg_eval then
-        Relation.print_reln "[update_aux] res: " inf.ures;
+        Relation.prerr_reln "[update_aux] res: " inf.ures;
   ) inf.raux;
 
   (* saux holds elements (k,relk) for the last seen index,
@@ -448,7 +375,7 @@ let get_relq q rels =
 
 let update_until q tsq i tsi intv rel1 rel2 inf comp discard =
   if Misc.debugging Dbg_eval then
-    print_uinf "[update_until] inf: " inf;
+    prerr_uinf "[update_until] inf: " inf;
   assert(i >= q);
   let nsaux = combine2 Relation.inter i inf.saux rel1 in
   if (MFOTL.in_right_ext (MFOTL.ts_minus tsi tsq) intv) &&
@@ -483,129 +410,52 @@ let elim_old_eventually q tsq intv inf =
   elim_old_eauxrels ()
 
 
-
-(* Instead of a single Dllist and a pointer, which says where in this
-   list end the current time window, we use two queues. One queue
-   stores the time window, the other ones stores the relations not
-   yet in the time window *)
-let comp_agg_once tsq intv state update_state_old update_state_new get_result rel discard =
-  let rec elim_old_from_timewindow () =
-    (* remove old elements that fell out of the interval *)
-    if not (Queue.is_empty state.tw_rels) then
-      let (tsj, arel) = Queue.top state.tw_rels in
-      if not (MFOTL.in_left_ext (MFOTL.ts_minus tsq tsj) intv) then
-        begin
-          ignore(Queue.pop state.tw_rels);
-          update_state_old state arel;
-          elim_old_from_timewindow ()
-        end
-  in
-
-  let rec consider_other_rels () =
-    if not (Queue.is_empty state.other_rels) then
-      begin
-        let (tsj, arel) = Queue.top state.other_rels in
-        let diff = MFOTL.ts_minus tsq tsj in
-        if not (MFOTL.in_left_ext diff intv) then
-          begin
-            (* current relation already too old for the new time window *)
-            ignore (Queue.pop state.other_rels);
-            consider_other_rels ()
-          end
-        else if MFOTL.in_interval diff intv then
-          (* current relation in the interval, so we process it *)
-          begin
-            ignore (Queue.pop state.other_rels);
-            let arel' = update_state_new state arel in
-            (* keep old tuples around if and only if the interval is bounded *)
-            if snd intv <> Inf then
-              Queue.push (tsj, arel') state.tw_rels;
-            consider_other_rels ()
-          end
-          (* else, that is, not (MFOTL.in_right_ext diff intv) *)
-          (* current relation too new, so we stop and consider it next time *)
-      end
-  in
-
-  elim_old_from_timewindow ();
-  if not (Relation.is_empty rel) then
-    Queue.push (tsq, rel) state.other_rels;
-  consider_other_rels ();
-  if not discard then
-    get_result state
-  else
-    Relation.empty
-
-
-
-let comp_aggMM_once tsq intv state update_state_old update_state_new get_result rel discard =
-  let rec consider_other_rels () =
-    if not (Queue.is_empty state.non_tw_rels) then
-      begin
-        let (tsj, arel) = Queue.top state.non_tw_rels in
-        let diff = MFOTL.ts_minus tsq tsj in
-        if not (MFOTL.in_left_ext diff intv) then
-          begin
-            (* current relation already too old for the new time window *)
-            ignore (Queue.pop state.non_tw_rels);
-            consider_other_rels ()
-          end
-        else if MFOTL.in_interval diff intv then
-          (* current relation in the interval, so we process it *)
-          begin
-            ignore (Queue.pop state.non_tw_rels);
-            update_state_new state tsj arel;
-            consider_other_rels ()
-          end
-          (* else, that is, not (MFOTL.in_right_ext diff intv) *)
-          (* current relation too new, so we stop and consider it next time *)
-      end
-  in
-
-  update_state_old state tsq;
-  if not (Relation.is_empty rel) then
-    Queue.push (tsq, rel) state.non_tw_rels;
-  consider_other_rels ();
-  if not discard then
-    get_result state
-  else
-    Relation.empty
-
+let warn_if_empty_aggreg {op; default} {Aggreg.empty_rel; Aggreg.rel} =
+  if empty_rel then
+    (match op with
+    | Avg | Med | Min | Max ->
+      let op_str = MFOTL.string_of_agg_op op in
+      let default_str = string_of_cst default in
+      let msg = Printf.sprintf "WARNING: %s applied on empty relation! \
+                                Resulting value is %s, by (our) convention.\n"
+        op_str default_str
+      in
+      prerr_string msg
+    | Cnt | Sum -> ());
+  rel
 
 
 let add_let_index f n rels =
   let rec update = function
-    | EPred (p, comp, inf) ->
-      if Predicate.get_name p = n then
+    | EPred ((p, a, _), comp, inf, _) ->
+      if (p, a) = n then
         List.iter (fun (i,tsi,rel) -> Queue.add (i,tsi, comp rel) inf) rels
       else ()
 
-    | ELet (p, comp, f1, f2, inf) ->
+    | ELet ((p, a, _), comp, f1, f2, inf, _) ->
       update f1;
-      if Predicate.get_name p = n then () else update f2
+      if (p, a) = n then () else update f2
 
     | ERel _ -> ()
 
-    | ENeg f1
-    | EExists (_,f1)
-    | EAggOnce (f1,_,_,_,_,_)
-    | EAggMMOnce (f1,_,_,_,_,_)
-    | EAggreg (_,f1)
-    | ENext (_,f1,_)
-    | EPrev (_,f1,_)
-    | EOnceA (_,f1,_)
-    | EOnceZ (_,f1,_)
-    | EOnce (_,f1,_)
-    | EEventuallyZ (_,f1,_)
-    | EEventually (_,f1,_) ->
+    | ENeg (f1,_)
+    | EExists (_,f1,_)
+    | EAggOnce (_,_,f1,_)
+    | EAggreg (_,_,f1,_)
+    | ENext (_,f1,_,_)
+    | EPrev (_,f1,_,_)
+    | EOnceA (_,f1,_,_)
+    | EOnceZ (_,f1,_,_)
+    | EOnce (_,f1,_,_)
+    | EEventuallyZ (_,f1,_,_)
+    | EEventually (_,f1,_,_) ->
       update f1
 
-    | EAnd (_,f1,f2,_)
-    | EOr (_,f1,f2,_)
-    | ESinceA (_,_,f1,f2,_)
-    | ESince (_,_,f1,f2,_)
-    | ENUntil (_,_,f1,f2,_)
-    | EUntil (_,_,f1,f2,_) ->
+    | EAnd (_,f1,f2,_,_)
+    | EOr (_,f1,f2,_,_)
+    | ESince (f1,f2,_,_)
+    | ENUntil (_,_,f1,f2,_,_)
+    | EUntil (_,_,f1,f2,_,_) ->
       update f1;
       update f2
   in
@@ -626,31 +476,31 @@ let rec eval f crt discard =
 
   if Misc.debugging Dbg_eval then
     begin
-      print_extf "\n[eval] evaluating formula\n" f;
-      Printf.printf "at (%d,%s) with discard=%b\n%!"
+      prerr_extf "\n[eval] evaluating formula\n" f;
+      Printf.eprintf "at (%d,%s) with discard=%b\n%!"
         q (MFOTL.string_of_ts tsq) discard
     end;
 
-  match f with
-  | ERel rel -> Some rel
+  let wrapper = function
+  | ERel (rel,loc) -> Some rel, loc
 
-  | EPred (p,_,inf) ->
+  | EPred (p,_,inf,loc) ->
     if Misc.debugging Dbg_eval then
       begin
-        print_string "[eval,Pred] ";
-        Predicate.print_predicate p;
-        print_predinf  ": " inf
+        prerr_string "[eval,Pred] ";
+        Predicate.prerr_predicate p;
+        prerr_predinf  ": " inf
       end;
 
-    if Queue.is_empty inf
+    (if Queue.is_empty inf
     then None
     else begin
       let (cq,ctsq,rel) = Queue.pop inf in
       assert (cq = q && ctsq = tsq);
       Some rel
-    end
+    end), loc
 
-  | ELet (p, comp, f1, f2, inf) ->
+  | ELet ((p, a, _), comp, f1, f2, inf, loc) ->
       let rec eval_f1 rels =
         if Neval.is_last inf.llast then
           rels
@@ -663,10 +513,10 @@ let rec eval f crt discard =
             eval_f1 ((i, tsi, comp rel) :: rels)
           | None -> rels
       in
-      add_let_index f2 (Predicate.get_name p) (List.rev (eval_f1 []));
-      eval f2 crt discard
+      add_let_index f2 (p, a) (List.rev (eval_f1 []));
+      eval f2 crt discard, loc
 
-  | ENeg f1 ->
+  | ENeg (f1,loc) ->
     (match eval f1 crt discard with
      | Some rel ->
        let res =
@@ -677,15 +527,19 @@ let rec eval f crt discard =
        in
        Some res
      | None -> None
-    )
+    ), loc
 
-  | EExists (comp,f1) ->
+  | EExists (comp,f1,loc) ->
     (match eval f1 crt discard with
-     | Some rel -> Some (comp rel)
+     | Some rel ->
+       Perf.profile_enter ~tp:q ~loc;
+       let result = comp rel in
+       Perf.profile_exit ~tp:q ~loc;
+       Some result
      | None -> None
-    )
+    ), loc
 
-  | EAnd (comp,f1,f2,inf) ->
+  | EAnd (comp,f1,f2,inf,loc) ->
     (* we have to store rel1, if f2 cannot be evaluated *)
     let eval_and rel1 =
       if Relation.is_empty rel1 then
@@ -701,7 +555,10 @@ let rec eval f crt discard =
         (match eval f2 crt discard with
          | Some rel2 ->
            inf.arel <- None;
-           Some (comp rel1 rel2)
+           Perf.profile_enter ~tp:q ~loc;
+           let result = comp rel1 rel2 in
+           Perf.profile_exit ~tp:q ~loc;
+           Some result
          | None ->
            inf.arel <- Some rel1;
            None
@@ -714,22 +571,32 @@ let rec eval f crt discard =
         | Some rel1 -> eval_and rel1
         | None -> None
        )
-    )
+    ), loc
 
-  | EAggreg (comp, f) ->
+  | EAggreg (inf, comp, f, loc) ->
     (match eval f crt discard with
-     | Some rel -> Some (comp rel)
+     | Some rel ->
+       Some (if discard then Relation.empty
+         else begin
+           Perf.profile_enter ~tp:q ~loc;
+           let result = comp rel in
+           Perf.profile_exit ~tp:q ~loc;
+           warn_if_empty_aggreg inf result
+         end)
      | None -> None
-    )
+    ), loc
 
-  | EOr (comp, f1, f2, inf) ->
+  | EOr (comp, f1, f2, inf, loc) ->
     (* we have to store rel1, if f2 cannot be evaluated *)
     (match inf.arel with
      | Some rel1 ->
        (match eval f2 crt discard with
         | Some rel2 ->
           inf.arel <- None;
-          Some (comp rel1 rel2)
+          Perf.profile_enter ~tp:q ~loc;
+          let result = comp rel1 rel2 in
+          Perf.profile_exit ~tp:q ~loc;
+          Some result
         | None -> None
        )
      | None ->
@@ -743,13 +610,13 @@ let rec eval f crt discard =
           )
         | None -> None
        )
-    )
+    ), loc
 
-  | EPrev (intv,f1,inf) ->
+  | EPrev (intv,f1,inf,loc) ->
     if Misc.debugging Dbg_eval then
-      Printf.printf "[eval,Prev] inf.plast=%s\n%!" (Neval.string_of_cell inf.plast);
+      Printf.eprintf "[eval,Prev] inf.plast=%s\n%!" (Neval.string_of_cell inf.plast);
 
-    if q = 0 then
+    (if q = 0 then
       Some Relation.empty
     else
       begin
@@ -764,11 +631,11 @@ let rec eval f crt discard =
           else
             Some Relation.empty
         | None -> None
-      end
+      end), loc
 
-  | ENext (intv,f1,inf) ->
+  | ENext (intv,f1,inf,loc) ->
     if Misc.debugging Dbg_eval then
-      Printf.printf "[eval,Next] inf.init=%b\n%!" inf.init;
+      Printf.eprintf "[eval,Next] inf.init=%b\n%!" inf.init;
 
     if inf.init then
       begin
@@ -777,7 +644,7 @@ let rec eval f crt discard =
         | _ -> ()
       end;
 
-    if Neval.is_last crt then
+    (if Neval.is_last crt || inf.init then
       None
     else
       begin
@@ -791,108 +658,76 @@ let rec eval f crt discard =
           else
             Some Relation.empty
         | None -> None
-      end
+      end), loc
 
-  | ESinceA (comp,intv,f1,f2,inf) ->
+  | ESince (f1,f2,inf,loc) ->
     if Misc.debugging Dbg_eval then
-      Printf.printf "[eval,SinceA] q=%d\n%!" q;
+      Printf.eprintf "[eval,Since] q=%d\n" q;
 
-    let eval_f1 rel2 comp2 =
-      (match eval f1 crt false with
-       | Some rel1 ->
-         inf.sarel2 <- None;
-         Some (comp2 rel1 rel2)
-       | None ->
-         inf.sarel2 <- Some rel2;
-         None
-      )
-    in
-
-    let update_sauxrels = update_since_all intv tsq inf comp in
-
-    (match inf.sarel2 with
-     | Some rel2 -> eval_f1 rel2 update_sauxrels
-     | None ->
-       (match eval f2 crt false with
-        | None -> None
-        | Some rel2 -> eval_f1 rel2 update_sauxrels
-       )
-    )
-
-  | ESince (comp,intv,f1,f2,inf) ->
-    if Misc.debugging Dbg_eval then
-      Printf.printf "[eval,Since] q=%d\n" q;
-
-    let eval_f1 rel2 comp2 =
+    let eval_f1 rel2 =
       (match eval f1 crt false with
        | Some rel1 ->
          inf.srel2 <- None;
-         Some (comp2 rel1 rel2)
+         Perf.profile_enter ~tp:q ~loc;
+         Optimized_mtl.add_new_ts_msaux tsq inf.saux;
+         Optimized_mtl.join_msaux rel1 inf.saux;
+         Optimized_mtl.add_new_table_msaux rel2 inf.saux;
+         Perf.profile_exit ~tp:q ~loc;
+         Some (Optimized_mtl.result_msaux inf.saux)
        | None ->
          inf.srel2 <- Some rel2;
          None
       )
     in
 
-    let update_sauxrels = update_since intv tsq inf.sauxrels comp discard in
-
     (match inf.srel2 with
-     | Some rel2 -> eval_f1 rel2 update_sauxrels
+     | Some rel2 -> eval_f1 rel2
      | None ->
        (match eval f2 crt false with
         | None -> None
-        | Some rel2 -> eval_f1 rel2 update_sauxrels
+        | Some rel2 -> eval_f1 rel2
        )
-    )
+    ), loc
 
 
-  | EOnceA ((c,_) as intv, f2, inf) ->
+  | EOnceA ((c,_) as intv, f2, inf, loc) ->
     (match eval f2 crt false with
      | None -> None
      | Some rel2 ->
        if Misc.debugging Dbg_eval then
-         Printf.printf "[eval,OnceA] q=%d\n" q;
+         Printf.eprintf "[eval,OnceA] q=%d\n" q;
 
-       if c = CBnd MFOTL.ts_null then
-         begin
-           inf.ores <- Relation.union inf.ores rel2;
-           Some inf.ores
-         end
-       else
-         begin
-           if not (Relation.is_empty rel2) then
-             mqueue_add_last inf.oaauxrels tsq rel2;
+       Perf.profile_enter ~tp:q ~loc;
+       let result =
+         if c = CBnd MFOTL.ts_null then
+           begin
+             inf.ores <- Relation.union inf.ores rel2;
+             Some inf.ores
+           end
+         else
+           begin
+             if not (Relation.is_empty rel2) then
+               mqueue_add_last inf.oaauxrels tsq rel2;
 
-           update_once_all intv tsq inf;
-           Some inf.ores
-         end
-    )
+             update_once_all intv tsq inf;
+             Some inf.ores
+           end
+       in
+       Perf.profile_exit ~tp:q ~loc;
+       result
+    ), loc
 
-  | EAggOnce (f, intv, state, update_old, update_new, get_result) ->
+  | EAggOnce (inf, state, f, loc) ->
     (match eval f crt false with
-     | Some rel -> Some (comp_agg_once
-                           tsq intv state
-                           update_old
-                           update_new
-                           get_result
-                           rel discard)
+     | Some rel ->
+       Perf.profile_enter ~tp:q ~loc;
+       state#update tsq rel;
+       let result = Some (if discard then Relation.empty
+         else warn_if_empty_aggreg inf state#get_result) in
+       Perf.profile_exit ~tp:q ~loc;
+       result
      | None -> None
-    )
-
-  | EAggMMOnce (f, intv, state, update_old, update_new, get_result) ->
-    (match eval f crt false with
-     | Some rel -> Some (comp_aggMM_once
-                           tsq intv state
-                           update_old
-                           update_new
-                           get_result
-                           rel discard)
-     | None -> None
-    )
-
-
-
-
+    ), loc
 
   (* We distinguish between whether the left margin of [intv] is
      zero or not, as we need to have two different ways of
@@ -900,30 +735,36 @@ let rec eval f crt discard =
      is not included we can use the timestamps and merge
      relations at equal timestamps; otherwise, when 0 is not
      included, we need to use the timepoints. *)
-  | EOnceZ (intv,f2,inf) ->
+  | EOnceZ (intv,f2,inf,loc) ->
     (match eval f2 crt false with
      | None -> None
      | Some rel2 ->
        if Misc.debugging Dbg_eval then
-         Printf.printf "[eval,OnceZ] q=%d\n" q;
+         Printf.eprintf "[eval,OnceZ] q=%d\n" q;
 
-       Some (update_once_zero intv q tsq inf rel2 discard)
-    )
+       Perf.profile_enter ~tp:q ~loc;
+       let result = update_once_zero intv q tsq inf rel2 discard in
+       Perf.profile_exit ~tp:q ~loc;
+       Some result
+    ), loc
 
-  | EOnce (intv,f2,inf) ->
+  | EOnce (intv,f2,inf,loc) ->
     (match eval f2 crt false with
      | None -> None
      | Some rel2 ->
        if Misc.debugging Dbg_eval then
-         Printf.printf "[eval,Once] q=%d\n" q;
+         Printf.eprintf "[eval,Once] q=%d\n" q;
 
+       Perf.profile_enter ~tp:q ~loc;
        if not (Relation.is_empty rel2) then
          dllist_add_last inf.oauxrels tsq rel2;
 
-       Some (update_once intv tsq inf discard)
-    )
+       let result = update_once intv tsq inf discard in
+       Perf.profile_exit ~tp:q ~loc;
+       Some result
+    ), loc
 
-  | EUntil (comp,intv,f1,f2,inf) ->
+  | EUntil (comp,intv,f1,f2,inf,loc) ->
     (* contents of inf:  (f = f1 UNTIL_intv f2)
        ulast:        last cell of neval for which both f1 and f2 are evaluated
        ufirst:       boolean flag indicating if we are at the first
@@ -938,16 +779,18 @@ let rec eval f crt discard =
     if Misc.debugging Dbg_eval then
       begin
         let str = Printf.sprintf "[eval,Until] q=%d inf: " q in
-        print_uinf str inf
+        prerr_uinf str inf
       end;
 
     if inf.ufirst then
       begin
+        Perf.profile_enter ~tp:q ~loc;
         inf.ufirst <- false;
         let (i,_) = Neval.get_data inf.ulast in
         update_old_until q tsq i intv inf discard;
         if Misc.debugging Dbg_eval then
-          print_uinf "[eval,Until,after_update] inf: " inf
+          prerr_uinf "[eval,Until,after_update] inf: " inf;
+        Perf.profile_exit ~tp:q ~loc
       end;
 
     (* we first evaluate f2, and then f1 *)
@@ -955,7 +798,9 @@ let rec eval f crt discard =
     let rec evalf1 i tsi rel2 ncrt =
       (match eval f1 ncrt false with
        | Some rel1 ->
+         Perf.profile_enter ~tp:q ~loc;
          update_until q tsq i tsi intv rel1 rel2 inf comp discard;
+         Perf.profile_exit ~tp:q ~loc;
          inf.urel2 <- None;
          inf.ulast <- ncrt;
          evalf2 ()
@@ -974,7 +819,7 @@ let rec eval f crt discard =
           (* we have the lookahead, we can compute the result *)
           begin
             if Misc.debugging Dbg_eval then
-              Printf.printf "[eval,Until] evaluation possible q=%d tsq=%s\n"
+              Printf.eprintf "[eval,Until] evaluation possible q=%d tsq=%s\n"
                 q (MFOTL.string_of_ts tsq);
             let res = inf.ures in
             inf.ures <- Relation.empty;
@@ -993,9 +838,9 @@ let rec eval f crt discard =
             )
           end
     in
-    evalf2()
+    evalf2(), loc
 
-  | ENUntil (comp,intv,f1,f2,inf) ->
+  | ENUntil (comp,intv,f1,f2,inf,loc) ->
     (* contents of inf:  (f = NOT f1 UNTIL_intv f2)
        ulast1:       last cell of neval for which f1 is evaluated
        ulast2:       last cell of neval for which f2 is evaluated
@@ -1042,6 +887,7 @@ let rec eval f crt discard =
 
         NOTE: we could evaluate earlier with respect to f1, also in Until *)
       begin
+        Perf.profile_enter ~tp:q ~loc;
         (* we iteratively compute the union of the relations [f1]_j
           with q <= j <= j0-1, where j0 is the first index which
           satisfies the temporal constraint relative to q *)
@@ -1076,21 +922,21 @@ let rec eval f crt discard =
           let j2,tsj2,rel2 = Dllist.get_data !crt2_j in
           if j2 < q || not (MFOTL.in_right_ext (MFOTL.ts_minus tsj2 tsq) intv) then
             begin (* clean up from previous evaluation *)
-              ignore(Dllist.pop_first inf.listrel2);
               if not (Dllist.is_last inf.listrel2 !crt2_j) then
                 begin
+                  ignore(Dllist.pop_first inf.listrel2);
                   crt2_j := Dllist.get_next inf.listrel2 !crt2_j;
                   iter2 ()
                 end
             end
           else
             begin
-              let j1,tsj1,rel1 = Dllist.get_data !crt1_j in
-              assert(j1 = j2);
               if MFOTL.in_left_ext (MFOTL.ts_minus tsj2 tsq) intv then
                 begin
                   let resj = comp rel2 !f1union in
                   res := Relation.union !res resj;
+                  let j1,tsj1,rel1 = Dllist.get_data !crt1_j in
+                  assert(j1 = j2);
                   f1union := Relation.union !f1union rel1;
                   let is_last1 = Dllist.is_last inf.listrel1 !crt1_j in
                   let is_last2 = Dllist.is_last inf.listrel2 !crt2_j in
@@ -1104,22 +950,23 @@ let rec eval f crt discard =
             end
         in
         iter2();
-        Some !res
+        Perf.profile_exit ~tp:q ~loc;
+        Some !res, loc
       end
     else
-      None
+      None, loc
 
 
 
 
 
-  | EEventuallyZ (intv,f2,inf) ->
+  | EEventuallyZ (intv,f2,inf,loc) ->
     (* contents of inf:
        elastev: Neval.cell  last cell of neval for which f2 is evaluated
        eauxrels: info       the auxiliary relations (up to elastev)
     *)
     if Misc.debugging Dbg_eval then
-      print_ezinf "[eval,EventuallyZ] inf: " inf;
+      prerr_ezinf "[eval,EventuallyZ] inf: " inf;
 
     let rec ez_update () =
       if Neval.is_last inf.ezlastev then
@@ -1127,15 +974,17 @@ let rec eval f crt discard =
       else
         let ncrt = Neval.get_next inf.ezlastev in
         let (i,tsi) = Neval.get_data ncrt in
-        (* Printf.printf "[eval,Eventually] e_update: ncrt.i = %d\n%!" i; *)
+        (* Printf.eprintf "[eval,Eventually] e_update: ncrt.i = %d\n%!" i; *)
         if not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv) then
           (* we have the lookahead, we can compute the result *)
           begin
+            Perf.profile_enter ~tp:q ~loc;
             if Misc.debugging Dbg_eval then
-              Printf.printf "[eval,EventuallyZ] evaluation possible q=%d tsq=%s tsi=%s\n%!"
+              Printf.eprintf "[eval,EventuallyZ] evaluation possible q=%d tsq=%s tsi=%s\n%!"
                 q (MFOTL.string_of_ts tsq) (MFOTL.string_of_ts tsi);
 
             let auxrels = inf.ezauxrels in
+            let result =
             if Dllist.is_empty auxrels then
               Some Relation.empty
             else if discard then
@@ -1176,8 +1025,8 @@ let rec eval f crt discard =
 
                 if Misc.debugging Dbg_eval then
                   begin
-                    Printf.printf "[eval,EventuallyZ] lw = %d rw = %d " lw rw;
-                    Misc.printnl_list "subseq = " print_auxel subseq;
+                    Printf.eprintf "[eval,EventuallyZ] lw = %d rw = %d " lw rw;
+                    Misc.prerrnl_list "subseq = " prerr_auxel subseq;
                   end;
 
                 let newt = Sliding.slide string_of_int Relation.union subseq (lw, rw) inf.eztree in
@@ -1192,6 +1041,9 @@ let rec eval f crt discard =
                 inf.eztree <- newt;
                 Some (Sliding.stree_res newt)
               end
+            in
+            Perf.profile_exit ~tp:q ~loc;
+            result
           end
         else (* we don't have the lookahead -> we cannot compute the result *)
           begin
@@ -1205,21 +1057,23 @@ let rec eval f crt discard =
               ez_update ()
           end
     in
-    ez_update ()
+    ez_update (), loc
 
 
-  | EEventually (intv,f2,inf) ->
+  | EEventually (intv,f2,inf,loc) ->
     (* contents of inf:
        elastev:  Neval.cell  last cell of neval for which f2 is evaluated
        eauxrels: info        the auxiliary relations (up to elastev)
     *)
     if Misc.debugging Dbg_eval then
-      print_einfn "[eval,Eventually] inf: " inf;
+      prerr_einfn "[eval,Eventually] inf: " inf;
 
     (* we could in principle do this update less often: that is, we
        can do after each evaluation, but we need to find out the
        value of ts_{q+1} *)
+    Perf.profile_enter ~tp:q ~loc;
     elim_old_eventually q tsq intv inf;
+    Perf.profile_exit ~tp:q ~loc;
 
     let rec e_update () =
       if Neval.is_last inf.elastev then
@@ -1227,15 +1081,17 @@ let rec eval f crt discard =
       else
         let ncrt = Neval.get_next inf.elastev in
         let (i,tsi) = Neval.get_data ncrt in
-        (* Printf.printf "[eval,Eventually] e_update: ncrt.i = %d\n%!" i; *)
+        (* Printf.eprintf "[eval,Eventually] e_update: ncrt.i = %d\n%!" i; *)
         if not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv) then
           (* we have the lookahead, we can compute the result *)
           begin
+            Perf.profile_enter ~tp:q ~loc;
             if Misc.debugging Dbg_eval then
-              Printf.printf "[eval,Eventually] evaluation possible q=%d tsq=%s tsi=%s\n%!"
+              Printf.eprintf "[eval,Eventually] evaluation possible q=%d tsq=%s tsi=%s\n%!"
                 q (MFOTL.string_of_ts tsq) (MFOTL.string_of_ts tsi);
 
             let auxrels = inf.eauxrels in
+            let result =
             if Dllist.is_empty auxrels || discard then
               Some Relation.empty
             else
@@ -1258,10 +1114,10 @@ let rec eval f crt discard =
                 in
                 if Misc.debugging Dbg_eval then
                   begin
-                    Printf.printf "[eval,Eventually] lw = %s rw = %s "
+                    Printf.eprintf "[eval,Eventually] lw = %s rw = %s "
                       (MFOTL.string_of_ts lw)
                       (MFOTL.string_of_ts rw);
-                    Misc.printnl_list "subseq = " print_sauxel subseq;
+                    Misc.prerrnl_list "subseq = " prerr_sauxel subseq;
                   end;
                 let newt = Sliding.slide MFOTL.string_of_ts Relation.union subseq (lw, rw) inf.etree in
                 inf.etree <- newt;
@@ -1276,6 +1132,9 @@ let rec eval f crt discard =
                   inf.elast <- Dllist.void;
                   Some Relation.empty
                 end
+            in
+            Perf.profile_exit ~tp:q ~loc;
+            result
           end
         else
           begin
@@ -1290,218 +1149,94 @@ let rec eval f crt discard =
               e_update ()
           end
     in
-    e_update ()
+    e_update (), loc
+  in
+  let result, loc = wrapper f in
+  if !Perf.profile_enabled then
+    begin
+      match result with
+      | None -> ()
+      | Some rel -> Perf.profile_int ~tag:Perf.tag_eval_result ~tp:q ~loc
+          (Relation.cardinal rel)
+    end;
+  result
 
 let add_index f i tsi db =
   let rec update lets = function
-    | EPred (p, comp, inf) ->
-      if List.mem (Predicate.get_name p) lets
+    | EPred (p, comp, inf, _) ->
+      let name = Predicate.get_name p in
+      if List.mem name lets
       then ()
       else
         let rel =
-          (try
-             let t = Db.get_table db p in
-             Table.get_relation t
+          (try Hashtbl.find db name
            with Not_found ->
-           match Predicate.get_name p with
-           | "tp" -> Relation.singleton (Tuple.make_tuple [Int i])
-           | "ts" -> Relation.singleton (Tuple.make_tuple [Float tsi])
+           match name with
+           | "tp" -> Relation.singleton (Tuple.make_tuple [Int (Z.of_int i)])
+           | "ts" -> Relation.singleton (Tuple.make_tuple [Int tsi])
            | "tpts" ->
-             Relation.singleton (Tuple.make_tuple [Int i; Float tsi])
+             Relation.singleton (Tuple.make_tuple [Int (Z.of_int i); Int tsi])
            | _ -> Relation.empty
           )
         in
         let rel = comp rel in
         Queue.add (i,tsi,rel) inf
 
-    | ELet (p, comp, f1, f2, inf) ->
+    | ELet (p, comp, f1, f2, inf, _) ->
       update lets f1;
       update (Predicate.get_name p :: lets) f2
 
     | ERel _ -> ()
 
-    | ENeg f1
-    | EExists (_,f1)
-    | EAggOnce (f1,_,_,_,_,_)
-    | EAggMMOnce (f1,_,_,_,_,_)
-    | EAggreg (_,f1)
-    | ENext (_,f1,_)
-    | EPrev (_,f1,_)
-    | EOnceA (_,f1,_)
-    | EOnceZ (_,f1,_)
-    | EOnce (_,f1,_)
-    | EEventuallyZ (_,f1,_)
-    | EEventually (_,f1,_) ->
+    | ENeg (f1,_)
+    | EExists (_,f1,_)
+    | EAggOnce (_,_,f1,_)
+    | EAggreg (_,_,f1,_)
+    | ENext (_,f1,_,_)
+    | EPrev (_,f1,_,_)
+    | EOnceA (_,f1,_,_)
+    | EOnceZ (_,f1,_,_)
+    | EOnce (_,f1,_,_)
+    | EEventuallyZ (_,f1,_,_)
+    | EEventually (_,f1,_,_) ->
       update lets f1
 
-    | EAnd (_,f1,f2,_)
-    | EOr (_,f1,f2,_)
-    | ESinceA (_,_,f1,f2,_)
-    | ESince (_,_,f1,f2,_)
-    | ENUntil (_,_,f1,f2,_)
-    | EUntil (_,_,f1,f2,_) ->
+    | EAnd (_,f1,f2,_,_)
+    | EOr (_,f1,f2,_,_)
+    | ESince (f1,f2,_,_)
+    | ENUntil (_,_,f1,f2,_,_)
+    | EUntil (_,_,f1,f2,_,_) ->
       update lets f1;
       update lets f2
   in
   update [] f
 
-let process_index ff closed last i =
-  if !Misc.verbose then
-    Printf.printf "At time point %d:\n%!" i;
-
-  let rec eval_loop () =
-    let crt = Neval.get_next !last in
-    let (q, tsq) = Neval.get_data crt in
-    if tsq < MFOTL.ts_max then
-      match eval ff crt false with
-      | Some rel ->
-        show_results closed i q tsq rel;
-        last := crt;
-        if !Misc.stop_at_first_viol && not (Relation.is_empty rel) then false
-        else if Neval.is_last crt then true
-        else eval_loop ()
-      | None -> true
-    else false
-  in
-  eval_loop ()
-
-module Tuple_map = Map.Make (
-  struct type t = tuple
-    let compare = Tuple.compare
-  end)
-
-
-let comp_aggreg init_value update posx posG rel =
-  let map = ref Tuple_map.empty in
-  Relation.iter
-    (fun tuple ->
-       let gtuple = Tuple.projections posG tuple in
-       let crt_value = Tuple.get_at_pos tuple posx in
-       (*   match Tuple.get_at_pos tuple posx with *)
-       (*     | Int v -> v *)
-       (*     | _ -> failwith "[comp_aggreg] internal error" *)
-       (* in *)
-       try
-         let old_agg_value = Tuple_map.find gtuple !map in
-         let new_agg_value = update old_agg_value crt_value in
-         map := Tuple_map.add gtuple new_agg_value !map
-       with
-       | Not_found ->
-         map := Tuple_map.add gtuple (init_value crt_value) !map;
-    )
-    rel;
-  !map
-
-let comp_aggreg init_value update posx posG rel =
-  let map = Hashtbl.create 1000 in
-  Relation.iter
-    (fun tuple ->
-       let gtuple = Tuple.projections posG tuple in
-       let crt_value = Tuple.get_at_pos tuple posx in
-       (*   match Tuple.get_at_pos tuple posx with *)
-       (*     | Int v -> v *)
-       (*     | _ -> failwith "[comp_aggreg] internal error" *)
-       (* in *)
-       try
-         let old_agg_value = Hashtbl.find map gtuple in
-         let new_agg_value = update old_agg_value crt_value in
-         Hashtbl.replace map gtuple new_agg_value;
-       with
-       | Not_found ->
-         Hashtbl.add map gtuple (init_value crt_value);
-    )
-    rel;
-  map
-
-exception Break
-
-
-let size xlist =
-  let s = ref 0 in
-  Intmap.iter (fun _ m ->
-      assert(m > 0);
-      s := !s + m;
-    ) xlist;
-  !s
-
-
-(* The following assumptionn should hold: [len] is the sum of all
-   bindings [m] in [xlist] *)
-let median xlist len fmed =
-  assert (len <> 0);
-  assert (len = size xlist);
-  let mid = if len mod 2 = 0 then (len / 2) - 1 else len / 2 in
-  let flag = ref false in
-  let crt = ref 0 in
-  let med = ref (fst (Intmap.choose xlist)) in
-  let prev = ref !med in
-  try
-    Intmap.iter (fun c m ->
-        if !flag then
-          begin med := fmed !prev c; raise Break end
-        else
-        if mid < !crt + m then (* c is the (left) median *)
-          if len mod 2 = 0 then
-            if mid = !crt + m - 1 then
-              begin flag := true;  prev := c end
-            else
-              begin med := fmed c c; raise Break end
-          else begin med := fmed c c; raise Break end
-        else
-          crt := !crt + m
-      ) xlist;
-    failwith "[median] internal error"
-  with Break -> !med
-
-
-
-
-let aggreg_empty_rel op glist t =
-  let op_str = MFOTL.string_of_agg_op op in
-  let default_value = MFOTL.aggreg_default_value op t in
-  if glist = [] then
-    begin
-      (match op with
-       | Avg | Med | Min | Max ->
-         let err_msg = Printf.sprintf "WARNING: %s applied on empty relation \
-                                       at time point %d, timestamp %s! \
-                                       Resulting value is %s, by (our) convention.\n"
-             op_str !crt_tp (MFOTL.string_of_ts !crt_ts) (string_of_cst true default_value)
-         in
-         prerr_string err_msg
-
-       | Cnt | Sum -> ()
-      );
-
-      Relation.singleton (Tuple.make_tuple [default_value])
-    end
-  else
-    Relation.empty
-
-
-
 let add_ext neval f =
   let neval0 = Neval.get_last neval in
+  let loc = ref 0 in
+  let next_loc () = incr loc; !loc in
   let rec add_ext = function
   | Pred p ->
-    EPred (p, Relation.eval_pred p, Queue.create())
+    EPred (p, Relation.eval_pred p, Queue.create(), next_loc())
 
   | Let (p, f1, f2) ->
     let attr1 = MFOTL.free_vars f1 in
     let attrp = Predicate.pvars p in
     let new_pos = List.map snd (Table.get_matches attr1 attrp) in
     let comp = Relation.reorder new_pos in
-    ELet (p, comp, add_ext f1, add_ext f2, {llast = neval0})
+    ELet (p, comp, add_ext f1, add_ext f2, {llast = neval0}, next_loc())
+
+  | LetPast _ -> failwith "LETPAST is not supported except in -verified mode"
 
   | Equal (t1, t2) ->
     let rel = Relation.eval_equal t1 t2 in
-    ERel rel
+    ERel (rel, next_loc())
 
   | Neg (Equal (t1, t2)) ->
     let rel = Relation.eval_not_equal t1 t2 in
-    ERel rel
+    ERel (rel, next_loc())
 
-  | Neg f -> ENeg (add_ext f)
+  | Neg f -> ENeg (add_ext f, next_loc())
 
   | Exists (vl, f1) ->
     let ff1 = add_ext f1 in
@@ -1509,7 +1244,7 @@ let add_ext neval f =
     let pos = List.map (fun v -> Misc.get_pos v attr1) vl in
     let pos = List.sort Stdlib.compare pos in
     let comp = Relation.project_away pos in
-    EExists (comp,ff1)
+    EExists (comp,ff1,next_loc())
 
   | Or (f1, f2) ->
     let ff1 = add_ext f1 in
@@ -1528,15 +1263,15 @@ let add_ext neval f =
            Relation.union rel1 rel2'
         )
     in
-    EOr (comp, ff1, ff2, {arel = None})
+    EOr (comp, ff1, ff2, {arel = None}, next_loc())
 
   | And (f1, f2) ->
     let attr1 = MFOTL.free_vars f1 in
     let attr2 = MFOTL.free_vars f2 in
     let ff1 = add_ext f1 in
-    let f2_is_special = Rewriting.is_special_case attr1 attr2 f2 in
+    let f2_is_special = Rewriting.is_special_case attr1 f2 in
     let ff2 =
-      if f2_is_special then ERel Relation.empty
+      if f2_is_special then ERel (Relation.empty, next_loc())
       else match f2 with
         | Neg f2' -> add_ext f2'
         | _ -> add_ext f2
@@ -1550,7 +1285,10 @@ let add_ext neval f =
           let process_tuple = Tuple.get_tf attr1 f2 in
           fun rel1 _ ->
             Relation.fold
-              (fun t res -> Relation.add (process_tuple t) res)
+              (fun t res ->
+                match process_tuple t with
+                | None -> res
+                | Some t' -> Relation.add t' res)
               rel1 Relation.empty
       else
         match f2 with
@@ -1574,420 +1312,71 @@ let add_ext neval f =
           else if Misc.subset attr2 attr1 then
             fun rel1 rel2 -> Relation.natural_join_sc2 matches1 rel1 rel2
           else
-            fun rel1 rel2 -> Relation.natural_join matches1 matches2 rel1 rel2
+            fun rel1 rel2 -> Relation.natural_join matches1 rel1 rel2
     in
-    EAnd (comp, ff1, ff2, {arel = None})
+    EAnd (comp, ff1, ff2, {arel = None}, next_loc())
 
-  | Aggreg (t_y, y, (Avg as op), x, glist, Once (intv, f))
-  | Aggreg (t_y, y, (Sum as op), x, glist, Once (intv, f))
-  | Aggreg (t_y, y, (Cnt as op), x, glist, Once (intv, f))
-  | Aggreg (t_y, y, (Med as op), x, glist, Once (intv, f)) ->
-
+  | Aggreg (t_y, y, op, x, glist, Once (intv, f)) ->
     let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
+    let default = MFOTL.aggreg_default_value op t_y in
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
-
-    let init_agg_val op cst =
+    let state =
       match op with
-      | Med -> Med_aux (1, Intmap.singleton cst 1)
-      | Cnt -> C_aux (1)
-      | _ -> SA_aux (1, cst)
+      | Cnt -> Aggreg.cnt_once default intv 0 posG
+      | Min -> Aggreg.min_once default intv 0 posx posG
+      | Max -> Aggreg.max_once default intv 0 posx posG
+      | Sum -> Aggreg.sum_once default intv 0 posx posG
+      | Avg -> Aggreg.avg_once default intv 0 posx posG
+      | Med -> Aggreg.med_once default intv 0 posx posG
     in
-
-    let init_agg_values = init_agg_val op in
-
-    let add c xlist =
-      try
-        let m = Intmap.find c xlist in
-        Intmap.add c (m+1) (Intmap.remove c xlist)
-      with Not_found -> Intmap.add c 1 xlist
-    in
-
-    let remove c xlist =
-      let m = Intmap.find c xlist in
-      if m = 1 then
-        Intmap.remove c xlist
-      else
-        Intmap.add c (m-1) (Intmap.remove c xlist)
-    in
-
-    let update_agg_values add_flag prev_values cst =
-      match prev_values with
-      | C_aux (c) -> 
-        if add_flag
-        then true, C_aux (c+1)
-        else c = 1, C_aux (c-1)
-      | SA_aux (c, s) ->
-        if add_flag
-        then true, SA_aux (c + 1, Predicate.plus s cst)
-        else c = 1, SA_aux (c - 1, Predicate.minus s cst)
-      | Med_aux (len, xlist) ->
-        if add_flag
-        then true, Med_aux (len + 1, add cst xlist)
-        else len = 1, Med_aux (len - 1, remove cst xlist)
-    in
-
-    let update_state_new_mset state rel =
-      let new_rel = ref [] in
-      Relation.iter
-        (fun tuple ->
-           let gtuple = Tuple.projections posG tuple in
-           let cst = Tuple.get_at_pos tuple posx in
-           new_rel := (tuple, gtuple, cst) :: !new_rel;
-           try
-             let m = Hashtbl.find state.mset tuple in
-             Hashtbl.replace state.mset tuple (m+1);
-             assert (m > 0);
-             assert (Hashtbl.mem state.hres gtuple)
-           with Not_found ->
-             Hashtbl.add state.mset tuple 1;
-             try
-               let agg_values = Hashtbl.find state.hres gtuple in
-               let _, new_values = update_agg_values true agg_values cst in
-               Hashtbl.replace state.hres gtuple new_values
-             with Not_found ->
-               Hashtbl.add state.hres gtuple (init_agg_values cst)
-        ) rel;
-      !new_rel
-    in
-
-    (* optimized implementation for unbounded intervals *)
-    let update_state_new_all state rel =
-      Relation.iter
-        (fun tuple ->
-           let gtuple = Tuple.projections posG tuple in
-           let cst = Tuple.get_at_pos tuple posx in
-           try
-             let agg_values = Hashtbl.find state.hres gtuple in
-             let _, new_values = update_agg_values true agg_values cst in
-             Hashtbl.replace state.hres gtuple new_values
-           with Not_found ->
-             Hashtbl.add state.hres gtuple (init_agg_values cst)
-        ) rel;
-      []
-    in
-
-    let update_state_new =
-      if snd intv = Inf
-      then update_state_new_all
-      else update_state_new_mset
-    in
-
-    let update_state_old state rel =
-      List.iter (fun (tuple, gtuple, cst) ->
-          let m = Hashtbl.find state.mset tuple in
-          assert (m > 0);
-          if m = 1 then
-            begin
-              Hashtbl.remove state.mset tuple;
-              let agg_values = Hashtbl.find state.hres gtuple in
-              let remove, new_values = update_agg_values false agg_values cst in
-              if remove then
-                Hashtbl.remove state.hres gtuple
-              else
-                Hashtbl.replace state.hres gtuple new_values
-            end
-          else
-            Hashtbl.replace state.mset tuple (m-1)
-        ) rel
-    in
-
-    let get_val_func = function
-      | Cnt ->
-        (fun x -> match x with
-           | C_aux c -> Int c
-           | _ -> failwith "internal error"
-        )
-      | Sum ->
-        (fun x -> match x with
-           | SA_aux (_, s) -> s
-           | _ -> failwith "internal error"
-        )
-      | Avg ->
-        (fun x -> match x with
-           | SA_aux (c,s) -> (match s with
-               | Int s -> Float ((float_of_int s) /. (float_of_int c))
-               | Float s -> Float (s /. (float_of_int c))
-               | _ -> failwith "internal error")
-           | _ -> failwith "internal error"
-        )
-      | Med ->
-        (fun x -> match x with
-           | Med_aux (len, xlist) -> median xlist len Predicate.avg
-           | _ -> failwith "internal error"
-        )
-
-      | _ -> failwith "[add_ext, AggOnce] internal error"
-    in
-
-    let get_val = get_val_func op in
-
-    let get_result state =
-      if Hashtbl.length state.hres = 0 then
-        aggreg_empty_rel op glist t_y
-      else
-        let res = ref Relation.empty in
-        Hashtbl.iter
-          (fun gtuple agg_values ->
-             res := Relation.add (Tuple.add_first gtuple (get_val agg_values)) !res
-          )
-          state.hres;
-        !res
-    in
-
-    let init_state = {
-      tw_rels = Queue.create ();
-      other_rels = Queue.create ();
-      mset = Hashtbl.create 1000;
-      hres = Hashtbl.create 100;
-    }
-    in
-
-    EAggOnce ((add_ext f), intv, init_state, update_state_old, update_state_new, get_result)
-
-
-  | Aggreg (t_y, y, (Min as op), x, glist, Once (intv, f))
-  | Aggreg (t_y, y, (Max as op), x, glist, Once (intv, f)) ->
-
-    let get_comp_func = function
-      | Min -> (fun x y -> - (Stdlib.compare x y))
-      | Max -> (fun x y -> Stdlib.compare x y)
-      | _ -> failwith "[add_ext, AggMMOnce] internal error"
-    in
-
-    (* returns 1 if x better than y, 0 if they are equal, and -1 otherwise *)
-    (* for Min: x is better than y iff x < y *)
-    (* for Max: x is better than y iff x > y *)
-    let is_better = get_comp_func op in
-
-    let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
-    let attr = MFOTL.free_vars f in
-    let posx = Misc.get_pos x attr in
-    let posG = List.map (fun z -> Misc.get_pos z attr) glist in
-
-    (* The invariant is:
-       if (tsq,v) is before (tsq',v')
-       then tsq >= tsq', v' is better or equal than v, and
-       we don't have equality in both cases;
-
-       The first condition is ensured by default, as timestamps are
-       non-decreasing. We have to enforce the second and third
-       consitions. *)
-    let rec update_list_new tsq cst dllist =
-      if not (Dllist.is_empty dllist) then
-        begin
-          let (tsq',m) = Dllist.get_first dllist in
-          let comp = is_better cst m in
-          if comp > 0 then
-            begin
-              ignore(Dllist.pop_first dllist);
-              update_list_new tsq cst dllist
-            end
-          else if comp = 0 then
-            begin
-              if tsq <> tsq' then
-                begin
-                  ignore(Dllist.pop_first dllist);
-                  Dllist.add_first (tsq, cst) dllist
-                end
-                (* else: same element appears previously, no need to
-                   update *)
-            end
-          else
-            Dllist.add_first (tsq, cst) dllist
-        end
-      else
-        Dllist.add_first (tsq, cst) dllist
-    in
-
-    let update_state_new state tsq rel =
-      Relation.iter
-        (fun tuple ->
-           let gtuple = Tuple.projections posG tuple in
-           let cst = Tuple.get_at_pos tuple posx in
-           try
-             let dllist = Hashtbl.find state.tbl gtuple in
-             update_list_new tsq cst dllist
-           with Not_found ->
-             let dllist = Dllist.singleton (tsq, cst) in
-             Hashtbl.add state.tbl gtuple dllist;
-        ) rel
-    in
-
-    let rec update_list_old tsq dllist =
-      if not (Dllist.is_empty dllist) then
-        let tsj,_ = Dllist.get_last dllist in
-        if not (MFOTL.in_left_ext (MFOTL.ts_minus tsq tsj) intv) then
-          begin
-            ignore(Dllist.pop_last dllist);
-            update_list_old tsq dllist
-          end
-    in
-
-    let update_state_old state tsq =
-      Hashtbl.filter_map_inplace (fun _ dllist ->
-          update_list_old tsq dllist;
-          if Dllist.is_empty dllist then None else Some dllist
-        ) state.tbl
-    in
-
-    let get_result state =
-      if Hashtbl.length state.tbl = 0 then
-        aggreg_empty_rel op glist t_y
-      else
-        let res = ref Relation.empty in
-        Hashtbl.iter
-          (fun gtuple dllist ->
-             let _, agg_val = Dllist.get_last dllist in
-             res := Relation.add (Tuple.add_first gtuple agg_val) !res
-          )
-          state.tbl;
-        !res
-    in
-
-    let init_state = {
-      non_tw_rels = Queue.create ();
-      tbl = Hashtbl.create 100;
-    }
-    in
-
-    EAggMMOnce ((add_ext f), intv, init_state, update_state_old, update_state_new, get_result)
-
-
-
-  | Aggreg (t_y, y, Avg, x, glist, f) ->
-    let attr = MFOTL.free_vars f in
-    let posx = Misc.get_pos x attr in
-    let posG = List.map (fun z -> Misc.get_pos z attr) glist in
-    let init_value = fun v -> (v,1) in
-    let update =
-      fun (os,oc) nv ->
-        match os, nv with
-        | Int s, Int v -> (Int (s + v), oc + 1)
-        | Float s, Float v -> (Float (s +. v), oc + 1)
-        | _ -> failwith "[Aggreg.Avg, update] internal error"
-    in
-    let comp_map = comp_aggreg init_value update posx posG in
-    let comp rel =
-      if Relation.is_empty rel then
-        aggreg_empty_rel Avg glist TFloat 
-      else
-        let map = comp_map rel in
-        let new_rel = ref Relation.empty in
-        Hashtbl.iter (fun tuple (s,c) ->
-            let s' = match s with
-              | Float x -> x
-              | Int x -> float_of_int x
-              | _ -> failwith "[Aggreg.Avg, comp] internal error"
-            in
-            new_rel := Relation.add
-                (Tuple.add_first tuple (Float (s' /. (float_of_int c)))) !new_rel;
-          ) map;
-        !new_rel
-    in
-    EAggreg (comp, add_ext f)
-
-  | Aggreg (t_y, y, Med, x, glist, f) ->
-    let attr = MFOTL.free_vars f in
-    let posx = Misc.get_pos x attr in
-    let posG = List.map (fun z -> Misc.get_pos z attr) glist in
-    let init_value = fun v -> (1, [v]) in
-    let update = fun (len, old_list) nv -> (len+1, nv::old_list) in
-    let comp_map = comp_aggreg init_value update posx posG in
-    let fmed a b =
-      match a, b with
-      | Int x, Int y -> Float (((float_of_int x) +. (float_of_int y)) /. 2.)
-      | Float x, Float y -> Float ((x+.y)/.2.)
-      | _ -> failwith "[add_ext] type error"
-    in
-    let comp rel =
-      if Relation.is_empty rel then
-        aggreg_empty_rel Med glist TFloat
-      else
-        let map = comp_map rel in
-        let new_rel = ref Relation.empty in
-        Hashtbl.iter (fun tuple (len, vlist) ->
-            let vlist = List.sort Stdlib.compare vlist in
-            let med = Misc.median vlist len fmed in
-            new_rel := Relation.add (Tuple.add_first tuple med) !new_rel;
-          ) map;
-        !new_rel
-    in
-    EAggreg (comp, add_ext f)
+    EAggOnce ({op; default}, state, add_ext f, next_loc())
 
   | Aggreg (t_y, y, op, x, glist, f)  ->
     let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
+    let default = MFOTL.aggreg_default_value op t_y in
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
-    let init_value, update =
+    let comp =
       match op with
-      | Cnt -> (fun v -> Int 1),
-               (fun ov _ -> match ov with
-                  | Int ov -> Int (ov + 1)
-                  | _ -> failwith "[add_ext, Aggreg] internal error")
-      | Min -> (fun v -> v), (fun ov nv -> min ov nv)
-      | Max -> (fun v -> v), (fun ov nv -> max ov nv)
-      | Sum -> (fun v -> v), (fun ov nv -> match ov, nv with
-          | (Int ov), (Int nv) -> Int (ov + nv)
-          | (Float ov), (Float nv) -> Float (ov +. nv)
-          | _ -> failwith "[add_ext, Aggreg] internal error")
-      | Avg | Med -> failwith "[add_ext, Aggreg] internal error"
+      | Cnt -> Aggreg.cnt default 0 posG
+      | Sum -> Aggreg.sum default 0 posx posG
+      | Min -> Aggreg.min default 0 posx posG
+      | Max -> Aggreg.max default 0 posx posG
+      | Avg -> Aggreg.avg default 0 posx posG
+      | Med -> Aggreg.med default 0 posx posG
     in
-    let comp_map = comp_aggreg init_value update posx posG in
-    let comp rel =
-      if Relation.is_empty rel then
-        aggreg_empty_rel op glist t_y
-      else
-        let map = comp_map rel in
-        let new_rel = ref Relation.empty in
-        Hashtbl.iter (fun tuple v ->
-            new_rel := Relation.add (Tuple.add_first tuple v) !new_rel;
-          ) map;
-        !new_rel
-    in
-    EAggreg (comp, add_ext f)
+    EAggreg ({op; default}, comp, add_ext f, next_loc())
 
   | Prev (intv, f) ->
     let ff = add_ext f in
-    EPrev (intv, ff, {plast = neval0})
+    EPrev (intv, ff, {plast = neval0}, next_loc())
 
   | Next (intv, f) ->
     let ff = add_ext f in
-    ENext (intv, ff, {init = true})
+    ENext (intv, ff, {init = true}, next_loc())
 
   | Since (intv,f1,f2) ->
     let attr1 = MFOTL.free_vars f1 in
     let attr2 = MFOTL.free_vars f2 in
-    let ef1, neg =
+    let ef1, pos =
       (match f1 with
-       | Neg f1' -> f1',true
-       | _ -> f1,false
+       | Neg f1' -> f1', false
+       | _ -> f1, true
       )
-    in
-    let comp =
-      if neg then
-        let posl = List.map (fun v -> Misc.get_pos v attr2) attr1 in
-        assert(Misc.subset attr1 attr2);
-        fun relj rel1 -> Relation.minus posl relj rel1
-      else
-        let matches2 = Table.get_matches attr2 attr1 in
-        fun relj rel1 -> Relation.natural_join_sc2 matches2 relj rel1
     in
     let ff1 = add_ext ef1 in
     let ff2 = add_ext f2 in
-    if snd intv = Inf then
-      let inf = {sres = Relation.empty; sarel2 = None; saauxrels = Mqueue.create()} in
-      ESinceA (comp,intv,ff1,ff2,inf)
-    else
-      let inf = {srel2 = None; sauxrels = Mqueue.create()} in
-      ESince (comp,intv,ff1,ff2,inf)
+    let saux = Optimized_mtl.init_msaux pos intv attr1 attr2 in
+    let inf = {srel2 = None; saux} in
+    ESince (ff1,ff2,inf, next_loc())
 
   | Once ((_, Inf) as intv, f) ->
     let ff = add_ext f in
     EOnceA (intv,ff,{ores = Relation.empty;
-                     oaauxrels = Mqueue.create()})
+                     oaauxrels = Mqueue.create()}, next_loc())
 
   | Once (intv,f) ->
     let ff = add_ext f in
@@ -1996,13 +1385,13 @@ let add_ext neval f =
                                        r = -1;
                                        res = Some (Relation.empty)};
                        ozlast = Dllist.void;
-                       ozauxrels = Dllist.empty()})
+                       ozauxrels = Dllist.empty()}, next_loc())
     else
       EOnce (intv,ff,{otree = LNode {l = MFOTL.ts_invalid;
                                      r = MFOTL.ts_invalid;
                                      res = Some (Relation.empty)};
                       olast = Dllist.void;
-                      oauxrels = Dllist.empty()})
+                      oauxrels = Dllist.empty()}, next_loc())
 
   | Until (intv,f1,f2) ->
     let attr1 = MFOTL.free_vars f1 in
@@ -2027,7 +1416,7 @@ let add_ext neval f =
         listrel1 = Dllist.empty();
         listrel2 = Dllist.empty()}
       in
-      ENUntil (comp,intv,ff1,ff2,inf)
+      ENUntil (comp,intv,ff1,ff2,inf, next_loc())
     else
       let comp =
         let matches2 = Table.get_matches attr2 attr1 in
@@ -2040,7 +1429,7 @@ let add_ext neval f =
                  raux = Sj.empty();
                  saux = Sk.empty()}
       in
-      EUntil (comp,intv,ff1,ff2,inf)
+      EUntil (comp,intv,ff1,ff2,inf, next_loc())
 
 
   | Eventually (intv,f) ->
@@ -2051,25 +1440,49 @@ let add_ext neval f =
                                              res = Some (Relation.empty)};
                              ezlast = Dllist.void;
                              ezlastev = neval0;
-                             ezauxrels = Dllist.empty()})
+                             ezauxrels = Dllist.empty()}, next_loc())
     else
       EEventually (intv,ff,{etree = LNode {l = MFOTL.ts_invalid;
                                            r = MFOTL.ts_invalid;
                                            res = Some (Relation.empty)};
                             elast = Dllist.void;
                             elastev = neval0;
-                            eauxrels = Dllist.empty()})
+                            eauxrels = Dllist.empty()}, next_loc())
 
   | _ -> failwith "[add_ext] internal error"
   in
-  add_ext f, ref neval0
+  add_ext f, neval0
+
+
+type 'a state = {
+  s_posl: int list; (** variable position list for output tuples *)
+  s_extf: 'a; (** extended formula *)
+  s_neval: Neval.queue; (** NEval queue *)
+  mutable s_log_tp: int; (** most recent time-point in log *)
+  mutable s_log_ts: MFOTL.timestamp; (** most recent time-stamp in log *)
+  mutable s_skip: bool; (** whether the current time-point should be skipped *)
+  mutable s_db: (string, relation) Hashtbl.t; (** db being parsed *)
+  mutable s_in_tp: int; (** most recent time-point after filtering *)
+  mutable s_last: Neval.cell; (** most recently evaluated time-point *)
+}
+
+let map_state f s = {
+  s_posl = s.s_posl;
+  s_extf = f s.s_extf;
+  s_neval = s.s_neval;
+  s_log_tp = s.s_log_tp;
+  s_log_ts = s.s_log_ts;
+  s_skip = s.s_skip;
+  s_db = s.s_db;
+  s_in_tp = s.s_in_tp;
+  s_last = s.s_last;
+}
 
 (*
   STATE MANAGEMENT CALLS
   - (Un-)Marshalling, Splitting, Merging
  *)
 
-let split_state_msg = "Split state"
 let saved_state_msg = "Saved state"
 let slicing_parameters_updated_msg = "Slicing parameters updated"
 let restored_state_msg = "Loaded state"
@@ -2087,67 +1500,57 @@ let dump_to_file dumpfile value =
 
 (*
   Helper function used in "unmarshal" and "merge_formulas" functions.
-  Reads state from specified dumpfile and converts neval array to dllist
+  Reads state from specified dumpfile.
 *)
 let read_m_from_file file =
   let ch = open_in_bin file in
-  let value = (Marshal.from_channel ch : state) in
+  let value = (Marshal.from_channel ch : mformula state) in
   close_in ch;
   value
 
+let empty_db: (string, relation) Hashtbl.t = Hashtbl.create 1
+
+let prepare_state_for_marshalling state =
+  state.s_skip <- false;
+  Hashtbl.reset state.s_db;
+  let rec eval_loop () =
+    let crt = Neval.get_next state.s_last in
+    match eval state.s_extf crt false with
+    | Some rel ->
+      let (q, tsq) = Neval.get_data crt in
+      show_results state.s_posl state.s_in_tp q tsq rel;
+      state.s_last <- crt;
+      if Neval.is_last crt then () else eval_loop ()
+    | None -> ()
+  in
+  if (state.s_in_tp < state.s_log_tp) then
+    begin
+      state.s_in_tp <- state.s_log_tp;
+      ignore (Neval.append (state.s_log_tp, state.s_log_ts) state.s_neval);
+      add_index state.s_extf state.s_log_tp state.s_log_ts empty_db;
+      eval_loop ()
+    end
 
 (* Converts extformula to mformula form used for storage. Saves formula + state in specified dumpfile. *)
-let marshal dumpfile ff closed neval lastev =
-  let mf = Marshalling.ext_to_m ff in
-  let value : state = (!Log.last_ts,closed,mf,neval,!lastev,!Log.tp,!Log.last) in
-  (*Printf.printf "Log TP to restore: %d \n" !Log.tp;*)
-  dump_to_file dumpfile value
+let marshal dumpfile state =
+  prepare_state_for_marshalling state;
+  dump_to_file dumpfile (map_state Marshalling.ext_to_m state)
 
 (*
   Reads mformula + state from specified dumpfile and restores it to extformula form with full state
   information using m_to_ext function.
 *)
 let unmarshal resumefile =
-  let (last_ts,closed,mf,neval,lastev,tp,last) = read_m_from_file resumefile in
-  let ff = Marshalling.m_to_ext mf in
-  (last_ts,closed,ff,neval,ref lastev,tp,last)
+  map_state Marshalling.m_to_ext (read_m_from_file resumefile)
 
-
-let create_empty_db =
-  Db.make_db []
-
-let add_empty_db ff neval =
-  crt_tp := !Log.tp -1;
-  lastts := !Log.last_ts;
-  ignore (Neval.append (!crt_tp, !lastts) neval);
-  add_index ff !crt_tp !lastts create_empty_db
-
-let catch_up_on_filtered_tp closed i ff neval last =
-  let rec eval_loop () =
-    let crt = Neval.get_next !last in
-    match eval ff crt false with
-    | Some rel ->
-      let (q, tsq) = Neval.get_data crt in
-      show_results closed i q tsq rel;
-      last := crt;
-      if Neval.is_last crt then () else eval_loop ()
-    | None -> ()
-  in
-  (*print_extf "Before catching up \n" ff;*)
-  if (!crt_tp < (!Log.tp-1) && (!Log.tp) > 0) then begin
-    add_empty_db ff neval;
-    eval_loop ()
-  end
-  (*print_extf "After catching up \n" ff*)
-
-let split_save filename ff closed i neval last =
+let split_save filename state =
   let heavy_unproc = !slicer_heavy_unproc in
   let shares = !slicer_shares in
   let seeds = !slicer_seeds in
 
-  catch_up_on_filtered_tp closed i ff neval last;
+  prepare_state_for_marshalling state;
 
-  let mf = Marshalling.ext_to_m ff in
+  let mf = Marshalling.ext_to_m state.s_extf in
   let heavy = Hypercube_slicer.convert_heavy mf heavy_unproc in
   let slicer = Hypercube_slicer.create_slicer mf heavy shares seeds in
   let result = Splitting.split_with_slicer (Hypercube_slicer.add_slices_of_valuation slicer) slicer.degree mf in
@@ -2157,24 +1560,9 @@ let split_save filename ff closed i neval last =
   in
 
   Array.iteri (fun index mf ->
-    let value : state = (!Log.last_ts,closed,mf,neval,!last,!Log.tp,!Log.last) in
-    dump_to_file (format_filename index) value
+    let mstate = map_state (fun _ -> mf) state in
+    dump_to_file (format_filename index) mstate
   ) result;
-  Printf.printf "%s\n%!" saved_state_msg
-  (*Printf.printf "%s to file with substr: %s \n%!" saved_state_msg filename*)
-
-(*
-   Split formula according to split constraints (sconsts). Resulting splits will be stored to files
-   with names of index prepended with dumpfile variable.
-*)
-let split_and_save  sconsts dumpfile closed i ff neval last =
-  catch_up_on_filtered_tp closed i ff neval last;
-  let mf = Marshalling.ext_to_m ff in
-  let result = Splitting.split_formula sconsts mf in
-
-  Array.iteri (fun index mf ->
-  let value : state = (!Log.last_ts,closed,mf,neval,!last,!Log.tp,!Log.last) in
-  dump_to_file (dumpfile ^ (string_of_int index)) value) result;
   Printf.printf "%s\n%!" saved_state_msg
 
 (* Convert comma separated filenames to list of strings *)
@@ -2188,319 +1576,227 @@ let files_to_list f =
   being the accumulator which is initialized as the first element of the list. The rest of the list
   is then folded over.
  *)
-let merge_formulas files =
+let merge_states files =
   if List.length files == 1 then unmarshal (List.hd files)
   else
-    let (last_ts, closed, mf, neval, lastev, tp, last) =
-      List.fold_right (fun s (last_ts1,closed,mf1,neval,lastev,tp1,last) ->
-        let (last_ts,_,mf2,_,_,tp,_) = read_m_from_file s in
-
-        if (MFOTL.ts_minus last_ts1 last_ts) = 0. then failwith "[merge_formulas] last_ts mismatch";
-        if tp1 <> tp then failwith "[merge_formulas] tp mismatch";
-
-        let comb_mf = Splitting.comb_m lastev mf1 mf2 in
-        (last_ts,closed, comb_mf, neval, lastev, tp,last)
+    let mstate =
+      List.fold_right (fun filename mstate ->
+        let mstate' = read_m_from_file filename in
+        assert (mstate.s_log_tp = mstate'.s_log_tp);
+        assert (mstate.s_log_ts = mstate'.s_log_ts);
+        assert (mstate.s_in_tp = mstate'.s_in_tp);
+        assert (fst (Neval.get_data mstate.s_last) =
+          fst (Neval.get_data mstate'.s_last));
+        map_state (fun mf ->
+          Splitting.comb_m mstate.s_last mf mstate'.s_extf) mstate
       ) (List.tl files) (read_m_from_file (List.hd files))
     in
-    let ff = Marshalling.m_to_ext mf in
-    (last_ts, closed, ff, neval, ref lastev, tp, last)
+    map_state Marshalling.m_to_ext mstate
+
 
 (* MONITORING FUNCTION *)
 
-(* Checks if the parameter for the exit command is set *)
-let checkExitParam p = match p with
-  | Argument str ->
-    dumpfile := str;
-    true
-  | _ -> false
+let process_index state =
+  if !Misc.verbose then
+    Printf.printf "At time point %d:\n%!" state.s_in_tp;
 
-(* Checks if the parameters for the split command are set *)
-let checkSplitParam p = match p with
-  | SplitParameters sp ->
-    dumpfile := "partition-";
-    true
-  | _ -> false
-
-(* The arguments are:
-   lexbuf - the lexer buffer (holds current state of the scanner)
-   ff - the extended MFOTL formula
-   closed - true iff [ff] is a ground formula
-   neval - the queue of no-yet evaluted indexes/entries
-   i - the index of current entry in the log file
-   ([i] may be different from the current time point when
-   filter_empty_tp is enabled)
-*)
-
-let set_slicer_parameters c p =
-  match p with
-  | SplitSave sp ->
-    let heavy, shares, seeds = sp in
-    slicer_heavy_unproc := heavy;
-    slicer_shares := shares;
-    slicer_seeds := seeds;
-    Printf.printf "%s\n%!" slicing_parameters_updated_msg
-  | _ ->  Printf.printf "%s: Wrong parameters specified, continuing at timepoint %d\n%!" c !tp
-
-let rec check_log lexbuf ff closed neval i last =
-  let finish () =
-    if Misc.debugging Dbg_perf then
-      Perf.check_log_end i !lastts
+  let rec eval_loop () =
+    let crt = Neval.get_next state.s_last in
+    let (q, tsq) = Neval.get_data crt in
+    if tsq < MFOTL.ts_max then
+      begin
+        Perf.profile_enter ~tp:q ~loc:Perf.loc_eval_root;
+        let result = eval state.s_extf crt false in
+        Perf.profile_exit ~tp:q ~loc:Perf.loc_eval_root;
+        match result with
+        | Some rel ->
+          show_results state.s_posl state.s_in_tp q tsq rel;
+          state.s_last <- crt;
+          if !Misc.stop_at_first_viol && not (Relation.is_empty rel) then false
+          else if Neval.is_last crt then true
+          else eval_loop ()
+        | None -> true
+      end
+    else false
   in
-  let rec loop ffl i =
-    if Misc.debugging Dbg_perf then
-      Perf.check_log i !lastts;
+  eval_loop ()
 
-    let get_constraints_split_state p = match p with
-      (* Other case already handled by check split param *)
-      | SplitParameters sp -> sp
-      | _ -> raise (Type_error ("Unsupported parameter to get_constraints"))
-    in
-    match Log.get_next_entry lexbuf with
-    | MonpolyCommand {c; parameters} ->
-        let process_command = function
-            | "print" ->
-               print_extf "Current extended formula:\n" ff;
-               print_newline ();
-               loop ffl i
-            | "terminate" ->
-               Printf.printf "Terminated at timepoint: %d \n%!" !tp
-            | "print_and_exit" ->
-               print_extf "Current extended formula:\n" ff;
-               print_newline ();
-               Printf.printf "Terminated at timepoint: %d \n%!" !tp
-            | "get_pos"   ->
-               Printf.printf "Current timepoint: %d \n%!" !tp;
-               loop ffl i
-            | "save_state" ->
-              (match parameters with
-              | Some (Argument filename) ->
-                catch_up_on_filtered_tp closed !crt_tp ff neval last;
-                marshal filename ff closed neval last;
-                Printf.printf "%s\n%!" saved_state_msg;
-                loop ffl i
-              | None ->
-                Printf.printf "%s: No filename specified\n%!" c;
-                loop ffl i
-              | _ ->
-                print_endline "Unsupported parameters to save_state";
-                loop ffl i
-              )
-            | "set_slicer" ->
-              (match parameters with
-              | Some p -> set_slicer_parameters c p
-              | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp
-              );
-              loop ffl i
-            | "split_save" ->
-              (match parameters with
-              | Some p ->
-                if checkExitParam p then begin
-                  split_save !dumpfile ff closed !crt_tp neval last;
-                  loop ffl i
-                end else begin
-                  Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
-                  loop ffl i
-                end
-              | None ->
-                Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
-                loop ffl i
-              )
-            | "save_and_exit" ->
-              (match parameters with
-              | Some p ->
-                if checkExitParam p then begin
-                  catch_up_on_filtered_tp closed !crt_tp ff neval last;
-                  marshal !dumpfile ff closed neval last;
-                  Printf.printf "%s\n%!" saved_state_msg
-                end
-                else Printf.printf "%s: Invalid parameters supplied at index %d\n%!" c i
-              | None -> Printf.printf "%s: No filename specified at timepoint %d\n%!" c !tp
-              )
-            | "split_state" ->
-              (match parameters with
-              | Some p ->
-                if checkSplitParam p then
-                  split_and_save (get_constraints_split_state p)
-                    !dumpfile closed !crt_tp ff neval last
-                else
-                  Printf.printf "%s: Invalid parameters supplied at index %d\n%!" c i
-              | None -> Printf.printf "%s: No parameters specified at timepoint %d\n%!" c !tp
-              )
-            | _ ->
-                Printf.printf "UNRECOGNIZED COMMAND: %s\n%!" c;
-                loop ffl i
-        in
-        process_command c;
-    | MonpolyData {tp; ts; db} ->
-      if ts >= !lastts then
-        begin
-          crt_tp := tp;
-          crt_ts := ts;
-          add_index ff tp ts db;
-          ignore (Neval.append (tp, ts) neval);
-          let cont = process_index ff closed last tp in
-          lastts := ts;
-          if cont then
-            loop ffl (i + 1)
-          else
-            finish ()
-        end
-      else
+let set_slicer_parameters (heavy, shares, seeds) =
+  slicer_heavy_unproc := heavy;
+  slicer_shares := shares;
+  slicer_seeds := seeds;
+  Printf.printf "%s\n%!" slicing_parameters_updated_msg
+
+module Monitor = struct
+  type t = extformula state
+
+  let begin_tp ctxt ts =
+    ctxt.s_log_tp <- ctxt.s_log_tp + 1;
+    if ts >= ctxt.s_log_ts then
+      ctxt.s_log_ts <- ts
+    else
       if !Misc.stop_at_out_of_order_ts then
-        let msg = Printf.sprintf "[Algorithm.check_log] Error: OUT OF ORDER TIMESTAMP: %s \
-                                  (last_ts: %s)" (MFOTL.string_of_ts ts) (MFOTL.string_of_ts !lastts) in
-        failwith msg
+        begin
+          Printf.eprintf "ERROR: Out of order timestamp %s (previous: %s)\n"
+            (MFOTL.string_of_ts ts) (MFOTL.string_of_ts ctxt.s_log_ts);
+          exit 1
+        end
       else
         begin
-          Printf.eprintf "[Algorithm.check_log] skipping OUT OF ORDER TIMESTAMP: %s \
-                          (last_ts: %s)\n%!"
-            (MFOTL.string_of_ts ts) (MFOTL.string_of_ts !lastts);
-          loop ffl i
-        end
-    | MonpolyTestTuple st -> finish ()
-    | MonpolyError s -> finish ()
-  in
-  loop ff i
+          Printf.eprintf "WARNING: Skipping out of order timestamp %s\
+            \ (previous: %s)\n"
+            (MFOTL.string_of_ts ts) (MFOTL.string_of_ts ctxt.s_log_ts);
+          ctxt.s_log_tp <- ctxt.s_log_tp - 1;
+          ctxt.s_skip <- true
+        end;
+    if Misc.debugging Dbg_perf then
+      Perf.check_log ctxt.s_log_tp ctxt.s_log_ts
 
+  let tuple ctxt (name, tl) sl =
+    if not ctxt.s_skip && (not !Filter_rel.enabled || Filter_rel.rel_OK name)
+    then
+      let tuple =
+        try Tuple.make_tuple2 sl tl with
+        | Invalid_argument _ ->
+          Printf.eprintf "ERROR: Wrong tuple length for predicate %s\
+            \ (expected: %d, actual: %d)\n"
+            name (List.length tl) (List.length sl);
+          exit 1
+        | Type_error msg ->
+          Printf.eprintf "ERROR: Wrong type for predicate %s: %s\n"
+            name msg;
+          exit 1
+      in
+      if not !Filter_rel.enabled || Filter_rel.tuple_OK name tuple then
+        try
+          let rel = Hashtbl.find ctxt.s_db name in
+          Hashtbl.replace ctxt.s_db name (Relation.add tuple rel)
+        with Not_found -> Hashtbl.add ctxt.s_db name (Relation.singleton tuple)
 
-let monitor_lexbuf lexbuf f =
+  let eval_tp ctxt =
+    ctxt.s_in_tp <- ctxt.s_log_tp;
+    ignore (Neval.append (ctxt.s_log_tp, ctxt.s_log_ts) ctxt.s_neval);
+    add_index ctxt.s_extf ctxt.s_log_tp ctxt.s_log_ts ctxt.s_db;
+    Hashtbl.clear ctxt.s_db;
+    if not (process_index ctxt) then
+      raise Log_parser.Stop_parser
+
+  let end_tp ctxt =
+    if ctxt.s_skip then
+      ctxt.s_skip <- false
+    else if !Filter_empty_tp.enabled && Hashtbl.length ctxt.s_db = 0 then
+      Hashtbl.clear ctxt.s_db
+    else
+      eval_tp ctxt;
+    Perf.profile_exit ~tp:ctxt.s_log_tp ~loc:Perf.loc_read_tp
+
+  let command ctxt name params =
+    match name with
+    | "print" ->
+        (* TODO: Should be printed to stdout. *)
+        prerr_extf "Current extended formula:\n" ctxt.s_extf;
+        prerr_newline ()
+    | "terminate" ->
+        Printf.printf "Terminated at timepoint: %d\n%!" ctxt.s_log_tp;
+        raise Log_parser.Stop_parser
+    | "print_and_exit" ->
+        (* TODO: Should be printed to stdout. *)
+        prerr_extf "Current extended formula:\n" ctxt.s_extf;
+        prerr_newline ();
+        Printf.printf "Terminated at timepoint: %d\n%!" ctxt.s_log_tp;
+        raise Log_parser.Stop_parser
+    | "get_pos" ->
+        Printf.printf "Current timepoint: %d\n%!" ctxt.s_log_tp;
+    | "save_state" ->
+        (match params with
+        | Some (Argument filename) ->
+            marshal filename ctxt;
+            Printf.printf "%s\n%!" saved_state_msg
+        | _ ->
+            prerr_endline "ERROR: Bad arguments for save_state command";
+            if not !Misc.ignore_parse_errors then exit 1)
+    | "save_and_exit" ->
+        (match params with
+        | Some (Argument filename) ->
+            marshal filename ctxt;
+            Printf.printf "%s\n%!" saved_state_msg;
+            raise Log_parser.Stop_parser
+        | _ ->
+            prerr_endline "ERROR: Bad arguments for save_and_exit command";
+            exit 1)
+    | "set_slicer" ->
+        (match params with
+        | Some (SplitSave sp) -> set_slicer_parameters sp
+        | _ ->
+            prerr_endline "ERROR: Bad arguments for set_slicer command";
+            if not !Misc.ignore_parse_errors then exit 1)
+    | "split_save" ->
+        (match params with
+        | Some (Argument filename) -> split_save filename ctxt
+        | _ ->
+            prerr_endline "ERROR: Bad arguments for split_save command";
+            if not !Misc.ignore_parse_errors then exit 1)
+    | _ ->
+        Printf.eprintf "ERROR: Unrecognized command: %s\n" name;
+        if not !Misc.ignore_parse_errors then exit 1
+
+  let end_log ctxt =
+    if !Misc.new_last_ts then
+      begin
+        begin_tp ctxt MFOTL.ts_max;
+        eval_tp ctxt (* skip empty tp filter *)
+      end;
+    if Misc.debugging Dbg_perf then
+      Perf.check_log_end ctxt.s_log_tp ctxt.s_log_ts
+
+  let parse_error ctxt pos msg =
+    prerr_endline "ERROR while parsing log:";
+    prerr_endline (Log_parser.string_of_position pos ^ ": " ^ msg);
+    if not !Misc.ignore_parse_errors then exit 1
+
+end
+
+module Parser = Log_parser.Make (Monitor)
+
+let init_monitor_state dbschema fv f =
+  (* compute permutation for output tuples *)
+  let fv_pos = List.map snd (Table.get_matches (MFOTL.free_vars f) fv) in
+  assert (List.length fv_pos = List.length fv);
   let neval = Neval.create () in
   let extf, last = add_ext neval f in
-  check_log lexbuf extf (MFOTL.free_vars f = []) neval 0 last
+  Perf.profile_string ~tag:Perf.tag_extformula (extf_structure extf);
+  { s_posl = fv_pos;
+    s_extf = extf;
+    s_neval = neval;
+    s_log_tp = -1;
+    s_log_ts = MFOTL.ts_invalid;
+    s_skip = false;
+    s_db = Hashtbl.create (List.length dbschema);
+    s_in_tp = -1;
+    s_last = last; }
 
-let monitor_string log f =
-  (let lexbuf = Lexing.from_string log in
-   lastts := MFOTL.ts_invalid;
-   crt_tp := -1;
-   crt_ts := MFOTL.ts_invalid;
-   Log.tp := 0;
-   Log.skipped_tps := 0;
-   Log.last := false;
-   monitor_lexbuf lexbuf f;
-   Lexing.flush_input lexbuf;)
+let monitor_string dbschema log fv f =
+  let lexbuf = Lexing.from_string log in
+  let ctxt = init_monitor_state dbschema fv f in
+  ignore (Parser.parse dbschema lexbuf ctxt)
 
-let monitor logfile =
-  let lexbuf = Log.log_open logfile in
-  monitor_lexbuf lexbuf
+let monitor dbschema logfile fv f =
+  let ctxt = init_monitor_state dbschema fv f in
+  Perf.profile_enter ~tp:(-1) ~loc:Perf.loc_main_loop;
+  ignore (Parser.parse_file dbschema logfile ctxt);
+  Perf.profile_exit ~tp:(-1) ~loc:Perf.loc_main_loop
 
-
-let test_filter logfile f =
-  let lexbuf = Log.log_open logfile in
-  let rec loop f i =
-    match Log.get_next_entry lexbuf with
-    | MonpolyData {tp;ts;db;} ->
-      loop f tp
-    | MonpolyError s ->
-      Printf.printf "%s, processed %d time points\n" s (i - 1)
-    | MonpolyCommand {c} ->
-          let process_command c = match c with
-              | "terminate" ->
-                Printf.printf "Command: %s, processed %d time points\n" c (i - 1)
-              | "get_pos"   ->
-                Printf.printf "%s %d \n" get_index_prefix_msg !tp;
-                loop f i
-              | _ ->
-                Printf.printf "UNREGONIZED COMMAND: %s\n" c;
-                loop f i
-          in
-          process_command c;
-      | _ ->
-        Printf.printf "%s, processed %d time points\n" "Unrecognized type" (i - 1)
-  in
-  loop f 0
-
-(* Unmarshals formula & state from resume file and then starts processing logfile.
-   Note: The whole logfile is read from the start, with old timestamps being skipped  *)
-let resume logfile =
-  let (last_ts,closed,ff,neval,lastev,tp,last) = unmarshal !resumefile in
-
-  (*print_neval "Neval \n" neval;
-  print_extf "State \n" ff;*)
-  lastts := last_ts;
-  Log.tp := tp;
-  Log.skipped_tps := 0;
-  Log.last := last;
-  let lexbuf = Log.log_open logfile in
+(* Unmarshals formula & state from resume file and then starts processing
+   logfile. *)
+let resume dbschema logfile =
+  let ctxt = unmarshal !resumefile in
   Printf.printf "%s\n%!" restored_state_msg;
-  check_log lexbuf ff closed neval 0 lastev
+  ignore (Parser.parse_file dbschema logfile ctxt)
 
 (* Combines states from files which are marshalled from an identical extformula. Same as resume
    the log file then processed from the beginning *)
-let combine logfile =
+let combine dbschema logfile =
   let files = files_to_list !combine_files in
-  let (last_ts,closed,ff,neval,lastev,tp,last) = merge_formulas files in
-
-  (*print_neval "Combined neval \n" neval;
-  print_extf "Combined formula \n" ff;*)
-
-  lastts := last_ts;
-  Log.tp := tp;
-  Log.skipped_tps := 0;
-  Log.last := last;
-
-  let lexbuf = Log.log_open logfile in
+  let ctxt = merge_states files in
   Printf.printf "%s\n%!" combined_state_msg;
-  check_log lexbuf ff closed neval 0 lastev
-
-
-(* Testing slicer *)
-let test_tuple_split slicer size tuple dest =
-  let parts = slicer tuple in
-  Array.iter2 (fun i1 i2 ->
-   Printf.printf "%d, %d\n" i1 i2;
-     if i1 <> i2 then failwith "Mismatch between slicing result and groundtruth"
-   ) parts dest
-
-let test_slicer ff evaluation  =
-  let heavy_unproc = !slicer_heavy_unproc in
-  let shares = !slicer_shares in
-  let seeds = !slicer_seeds in
-
-  let mf = Marshalling.ext_to_m ff in
-  let heavy = Hypercube_slicer.convert_heavy mf heavy_unproc in
-  let slicer = Hypercube_slicer.create_slicer mf heavy shares seeds in
-
-  let rec test_entries i =
-    if Dllist.is_empty evaluation <> true then
-      let elem = Dllist.pop_first evaluation in
-      let tuple = convert_slicing_tuple slicer elem.vars elem.tuple in
-      let () = test_tuple_split (Hypercube_slicer.return_shares slicer) slicer.degree tuple elem.output in
-      test_entries i
-    else
-      print_endline "All entries tested"
-  in
-    test_entries 0
-
-let rec test_log lexbuf ff evaluation =
-  let rec loop ffl =
-    let set_slicer c params = match params with
-      | Some p -> set_slicer_parameters c p
-      | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
-    in
-    match Log.get_next_entry lexbuf with
-    | MonpolyCommand {c; parameters} ->
-        let process_command = function
-            | "set_slicer" ->
-                set_slicer c parameters;
-                loop ffl
-            | "test_slicer" -> test_slicer ff evaluation;
-                loop ffl
-            | _ ->
-                Printf.printf "UNRECOGNIZED COMMAND: %s\n%!" c;
-                loop ffl
-        in
-        process_command c;
-    | MonpolyTestTuple st ->
-          Dllist.add_last st evaluation;
-          loop ffl
-    | _ -> ()
-  in
-  loop ff
-
-
-let run_test testfile formula =
-  let lexbuf = Log.log_open testfile in
-  let neval = Neval.create () in
-  let extf, _ = add_ext neval formula in
-  Printf.printf "Testing slicing configurations\n";
-  test_log lexbuf extf (Dllist.empty())
+  ignore (Parser.parse_file dbschema logfile ctxt)

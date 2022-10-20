@@ -50,20 +50,19 @@ open Predicate
 open MFOTL
 open Db
 
+type expand_mode = ExpandAll | ExpandNonshared
 
+val no_rw: bool ref
+val unfold_let: expand_mode option ref
+  (** Flags corresponding to the command-line options -no_rw and -unfold_let. *)
 
-val normalize: formula -> formula
-  (** This function normalizes a formula by eliminating synactic
-      sugar, pushing down negations, and eliminating double
-      negation. *)
-
-val is_special_case: (var list) -> (var list) -> formula -> bool
+val is_special_case: (var list) -> formula -> bool
 (** Returns [true] if the formula does not need to be evaluated
     independently. *)
 
 val is_monitorable: formula -> bool * (formula * string) option
 
-val check_formula: (formula -> bool * (formula * string) option) -> schema -> formula -> bool * formula * (var * tcst) list
+val check_formula: schema -> formula -> bool * formula * (var * tcst) list
 (** Returns [true, pf, vtypes] if the formula is monitorable by our
     implementation, where [pf] is a formula equivalent with input
     formula and [vtypes] is the list of free variables of [pf]
@@ -73,5 +72,7 @@ val check_syntax: schema -> formula -> ((var * tcst) list  * formula)
 
 val check_let: formula -> bool
 
-type expand_mode = ExpandAll | ExpandNonshared
 val expand_let: expand_mode -> formula -> formula
+
+val is_future: formula -> bool
+(** Returns [true] if formula contains future operators *)

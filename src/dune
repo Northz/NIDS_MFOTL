@@ -1,10 +1,15 @@
+(ocamllex formula_lexer log_lexer)
+(ocamlyacc formula_parser)
+
+(library
+  (name libmonpoly)
+  (public_name libmonpoly)
+  (libraries str unix zarith)
+  (modules (:standard \ Main)))
+
 (executable
   (name main)
   (public_name monpoly)
-  (package monpoly-dev)
-  (libraries str unix zarith dune-build-info)
-  (modules (:standard \ Main_js))
-  (flags (:standard -warn-error -A -w -27-32..39)))
-
-(ocamllex formula_lexer log_lexer)
-(ocamlyacc formula_parser log_parser)
+  (package monpoly)
+  (libraries libmonpoly dune-build-info)
+  (modules Main))

@@ -13,7 +13,9 @@ typedef string8 = "UNIV :: char list set" ..
 
 setup_lifting type_definition_string8
 
+lift_definition empty_string :: string8 is "[]" .
 lift_definition string8_literal :: "String.literal \<Rightarrow> string8" is String.explode .
+lift_definition literal_string8:: "string8 \<Rightarrow> String.literal" is String.Abs_literal .
 declare [[coercion string8_literal]]
 
 instantiation string8 :: "{equal, linorder}"
@@ -31,7 +33,7 @@ end
 
 lifting_forget string8.lifting
 
-declare [[code drop: string8_literal "HOL.equal :: string8 \<Rightarrow> _"
+declare [[code drop: literal_string8 string8_literal  "HOL.equal :: string8 \<Rightarrow> _"
       "(\<le>) :: string8 \<Rightarrow> _" "(<) :: string8 \<Rightarrow> _"
       "Code_Evaluation.term_of :: string8 \<Rightarrow> _"]]
 
@@ -40,6 +42,24 @@ code_printing
   | constant "HOL.equal :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Stdlib.(=)"
   | constant "(\<le>) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Stdlib.(<=)"
   | constant "(<) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Stdlib.(<)"
+  | constant "empty_string :: string8" \<rightharpoonup> (OCaml) "\"\""
+  | constant "string8_literal :: String.literal \<Rightarrow> string8" \<rightharpoonup> (OCaml) "id"
+  | constant "literal_string8 :: string8 \<Rightarrow> String.literal" \<rightharpoonup> (OCaml) "id"
+
+ML \<open>
+structure String8 =
+struct
+  fun to_term x = @{term Abs_string8} $ HOLogic.mk_string x;
+end;
+\<close>
+
+code_printing
+  type_constructor string8 \<rightharpoonup> (Eval) "string"
+  | constant "string8_literal :: String.literal \<Rightarrow> string8" \<rightharpoonup> (Eval) "_"
+  | constant "HOL.equal :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (Eval) infixl 6 "="
+  | constant "(\<le>) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (Eval) infixl 6 "<="
+  | constant "(<) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (Eval) infixl 6 "<"
+  | constant "Code_Evaluation.term_of :: string8 \<Rightarrow> term" \<rightharpoonup> (Eval) "String8.to'_term"
 
 ML \<open>
 structure String8 =
@@ -86,67 +106,78 @@ begin
 
 fun less_eq_event_data where
   "EInt x \<le> EInt y \<longleftrightarrow> x \<le> y"
-| "EInt x \<le> EFloat y \<longleftrightarrow> double_of_integer x \<le> y"
-| "EInt _ \<le> EString _ \<longleftrightarrow> False"
-| "EFloat x \<le> EInt y \<longleftrightarrow> x \<le> double_of_integer y"
 | "EFloat x \<le> EFloat y \<longleftrightarrow> x \<le> y"
-| "EFloat _ \<le> EString _ \<longleftrightarrow> False"
 | "EString x \<le> EString y \<longleftrightarrow> x \<le> y"
-| "EString _ \<le> _ \<longleftrightarrow> False"
+| "(_::event_data) \<le> _ \<longleftrightarrow> undefined"
 
 definition less_event_data :: "event_data \<Rightarrow> event_data \<Rightarrow> bool"  where
   "less_event_data x y \<longleftrightarrow> x \<le> y \<and> \<not> y \<le> x"
 
 fun plus_event_data where
   "EInt x + EInt y = EInt (x + y)"
-| "EInt x + EFloat y = EFloat (double_of_integer x + y)"
-| "EFloat x + EInt y = EFloat (x + double_of_integer y)"
 | "EFloat x + EFloat y = EFloat (x + y)"
-| "(_::event_data) + _ = EFloat nan"
+| "(_::event_data) + _ = undefined"
 
 fun minus_event_data where
   "EInt x - EInt y = EInt (x - y)"
-| "EInt x - EFloat y = EFloat (double_of_integer x - y)"
-| "EFloat x - EInt y = EFloat (x - double_of_integer y)"
 | "EFloat x - EFloat y = EFloat (x - y)"
-| "(_::event_data) - _ = EFloat nan"
+| "(_::event_data) - _ = undefined"
 
 fun uminus_event_data where
   "- EInt x = EInt (- x)"
 | "- EFloat x = EFloat (- x)"
-| "- (_::event_data) = EFloat nan"
+| "- (_::event_data) = undefined"
 
 fun times_event_data where
   "EInt x * EInt y = EInt (x * y)"
-| "EInt x * EFloat y = EFloat (double_of_integer x * y)"
-| "EFloat x * EInt y = EFloat (x * double_of_integer y)"
 | "EFloat x * EFloat y = EFloat (x * y)"
-| "(_::event_data) * _ = EFloat nan"
+| "(_::event_data) * _ = undefined"
 
 fun divide_event_data where
   "EInt x div EInt y = EInt (div_to_zero x y)"
-| "EInt x div EFloat y = EFloat (double_of_integer x div y)"
-| "EFloat x div EInt y = EFloat (x div double_of_integer y)"
 | "EFloat x div EFloat y = EFloat (x div y)"
-| "(_::event_data) div _ = EFloat nan"
+| "(_::event_data) div _ = undefined"
 
 fun modulo_event_data where
   "EInt x mod EInt y = EInt (mod_to_zero x y)"
-| "(_::event_data) mod _ = EFloat nan"
+| "(_::event_data) mod _ = undefined"
 
 instance ..
 
 end
 
+lemma infinite_UNIV_event_data:
+  "\<not>finite (UNIV :: event_data set)"
+proof -
+  define f where "f = (\<lambda>k. EInt k)"
+  have inj: "inj_on f (UNIV :: integer set)"
+    unfolding f_def by (meson event_data.inject(1) injI)
+  show ?thesis using finite_imageD[OF _ inj] 
+    by (meson infinite_UNIV_char_0 infinite_iff_countable_subset top_greatest)
+qed
+
+instantiation event_data :: card_UNIV begin
+definition "finite_UNIV = Phantom(event_data) False"
+definition "card_UNIV = Phantom(event_data) 0"
+instance by intro_classes (simp_all add: finite_UNIV_event_data_def card_UNIV_event_data_def infinite_UNIV_event_data)
+end
+
 primrec integer_of_event_data :: "event_data \<Rightarrow> integer" where
-  "integer_of_event_data (EInt x) = x"
+  "integer_of_event_data (EInt _) = undefined"
 | "integer_of_event_data (EFloat x) = integer_of_double x"
-| "integer_of_event_data (EString _) = 0"
+| "integer_of_event_data (EString _) = undefined"
 
 primrec double_of_event_data :: "event_data \<Rightarrow> double" where
   "double_of_event_data (EInt x) = double_of_integer x"
-| "double_of_event_data (EFloat x) = x"
-| "double_of_event_data (EString _) = nan"
+| "double_of_event_data (EFloat _) = undefined"
+| "double_of_event_data (EString _) = undefined"
+
+
+primrec double_of_event_data_agg :: "event_data \<Rightarrow> double" where
+  "double_of_event_data_agg (EInt x) = double_of_integer x"
+| "double_of_event_data_agg (EFloat x) = x"
+| "double_of_event_data_agg (EString _) = undefined"
+
 
 (*<*)
 end

@@ -42,7 +42,7 @@
 open Unix
 open Predicate
 
-type timestamp = float
+type timestamp = Z.t
 type tsdiff = timestamp
 type bound = OBnd of tsdiff | CBnd of tsdiff | Inf
 type interval = bound * bound
@@ -54,8 +54,11 @@ type formula =
   | Equal of (term * term)
   | Less of (term * term)
   | LessEq of (term * term)
+  | Substring of (term * term)
+  | Matches of (term * term * term option list)
   | Pred of predicate
   | Let of (predicate * formula * formula)
+  | LetPast of (predicate * formula * formula)
   | Neg of formula
   | And of (formula * formula)
   | Or of (formula * formula)
@@ -87,51 +90,18 @@ and regex =
 
 let unixts = ref false
 
-let ts_of_string err_place str =
+let ts_of_string str =
   try
-    float_of_string str
+    Z.of_string str
   with Failure _ ->
-    let msg = Printf.sprintf "[%s, MFOTL.ts_of_string] Cannot convert %s into a timestamp" err_place str in
+    let msg = Printf.sprintf "[MFOTL.ts_of_string] Cannot convert %s into a timestamp" str in
     failwith msg
 
-let ts_of_cst c =
-  match c with
-  | ZInt _
-  | Int _ -> failwith "[MFOTL.ts_of_cst] conversion not possible"
-  | Str s -> float_of_string s
-  | Float f -> f
-let cst_of_ts t = Str (string_of_float t)
-let tsdiff_of_cst = ts_of_cst
-let cst_of_tsdiff = cst_of_ts
-
-let ts_plus t1 t2 = t1 +. t2
-let ts_minus t1 t2 = t1 -. t2
-let ts_invalid = -1.
-let ts_null = 0.
-let ts_max = max_float
-
-
-let ts_of_string2 err_place str =
-  try
-    int_of_string str
-  with Failure _ ->
-    (* a way of avoiding the problem of too big integers *)
-    let lens = String.length str in
-    let lenm = String.length (string_of_int max_int) in
-    let str =
-      if lens >= lenm then
-        let d = lens-lenm+1 in
-        String.sub str d (lens-d)
-      else
-        str
-    in
-    try
-      int_of_string str
-    with Failure _ ->
-      let msg = Printf.sprintf "[%s, MFOTL.ts_of_string] Cannot convert %s into a timestamp" err_place str in
-      failwith msg
-
-
+let ts_plus t1 t2 = Z.add t1 t2
+let ts_minus t1 t2 = Z.sub t1 t2
+let ts_invalid = Z.minus_one
+let ts_null = Z.zero
+let ts_max = Z.pow (Z.of_int 2) 64
 
 (* TODO: these function names are not intuitive, because one usually
    does not think in terms of the interval I labelling a temporal
@@ -157,14 +127,17 @@ let in_left_ext v intv =
 let in_interval v intv =
   in_right_ext v intv && in_left_ext v intv
 
-let init_interval (_, b) = (CBnd 0., b)
+let infinite_interval (_, b) = (b = Inf)
+
+let init_interval (_, b) = (CBnd Z.zero, b)
 
 let aggreg_default_value op t = match op, t with
   | Min, TFloat -> Float infinity
   | Max, TFloat -> Float neg_infinity
   | _, TFloat -> Float 0.
-  | _, TInt -> Int 0
+  | _, TInt -> Int Z.zero
   | _, TStr -> Str ""
+  | _, TRegexp -> Regexp ("", Str.regexp "")
 
 
 let map mapf mapr =
@@ -172,11 +145,17 @@ let rec formula_map = function
   | Equal (_,_)
   | Less (_,_)
   | LessEq (_,_) 
+  | Matches (_,_,_)
+  | Substring (_,_) 
   | Pred _ as f -> mapf f
   | Let (p,f1,f2) -> 
     let f1 = formula_map f1 in
     let f2 = formula_map f2 in
     mapf (Let (p,f1,f2))
+  | LetPast (p,f1,f2) -> 
+    let f1 = formula_map f1 in
+    let f2 = formula_map f2 in
+    mapf (LetPast (p,f1,f2))
   | Neg f -> mapf (Neg (formula_map f))
   | And (f1,f2) ->
     let f1 = formula_map f1 in
@@ -242,8 +221,11 @@ let rec direct_subformulas = function
   | Equal (t1,t2) -> []
   | Less (t1,t2) -> []
   | LessEq (t1,t2) -> []
+  | Matches (t1,t2,tl) -> []
+  | Substring (t1, t2) -> []
   | Pred p -> []
-  | Let (p,f1,f2) -> direct_subformulas f2
+  | Let (p,f1,f2) -> [f1;f2]
+  | LetPast (p,f1,f2) -> [f1;f2]
   | Neg f -> [f]
   | And (f1,f2) -> [f1;f2]
   | Or (f1,f2) -> [f1;f2]
@@ -327,9 +309,12 @@ let is_regular = function
 let rec is_mfodl = function 
   | Equal (t1,t2) 
   | Less (t1,t2) 
-  | LessEq (t1,t2) -> false
+  | LessEq (t1,t2) 
+  | Substring (t1,t2)
+  | Matches (t1,t2,_) -> false
   | Pred p -> false
   | Let (_,f1,f2) -> is_mfodl f1 || is_mfodl f2
+  | LetPast (_,f1,f2) -> is_mfodl f1 || is_mfodl f2
   | Neg f -> is_mfodl f
   | And (f1,f2) 
   | Or (f1,f2) 
@@ -356,10 +341,18 @@ let rec is_mfodl = function
 let rec free_vars = function
   | Equal (t1,t2)
   | Less (t1,t2)
-  | LessEq (t1,t2) ->
+  | LessEq (t1,t2)
+  | Substring (t1,t2) ->
     Misc.union (Predicate.tvars t1) (Predicate.tvars t2)
+  | Matches (t1,t2,tl) ->
+    let fv = Misc.union (Predicate.tvars t1) (Predicate.tvars t2) in
+    List.fold_left (fun s t ->
+      match t with
+      | None -> s
+      | Some t -> Misc.union s (Predicate.tvars t)) fv tl
   | Pred p -> Predicate.pvars p
   | Let (_,_,f) -> free_vars f
+  | LetPast (_,_,f) -> free_vars f
   | Neg f -> free_vars f
   | And (f1,f2) 
   | Or (f1,f2) 
@@ -413,12 +406,18 @@ let rec substitute_vars m =
   | Equal (t1, t2) -> Equal (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
   | Less  (t1, t2) -> Less (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
   | LessEq (t1, t2) -> LessEq (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
+  | Matches (t1, t2, tl) -> Matches
+      (Predicate.substitute_vars m t1,
+      Predicate.substitute_vars m t2,
+      List.map (Option.map (Predicate.substitute_vars m)) tl)
+  | Substring (t1, t2) -> Substring (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
 
   | Pred (p) -> 
     let (n,a,ts) = Predicate.get_info p in
     Pred (Predicate.make_predicate (n,List.map (Predicate.substitute_vars m) ts))
     
   | Let (p, f1, f2) -> Let (p, f1, substitute_vars m f2)
+  | LetPast (p, f1, f2) -> LetPast (p, f1, substitute_vars m f2)
 
   | Neg f -> Neg (substitute_vars m f)
   | Exists (v, f) -> 
@@ -450,15 +449,43 @@ let rec substitute_vars m =
       let no_bv = (List.filter (fun (x,_) -> not (List.mem x bvars)) m) in
       let m' = no_bv @ List.map (fun (a, b) -> (a, Var b)) fresh_var_map in
 
+      (* Temporaries for substitution of y and/or g by non-variables *)
+      let avoid_vars = Misc.union (y :: g) tvars in
+      let tmp_y = fresh_var avoid_vars in
+      let (_, tmp_gm) = fresh_var_mapping (tmp_y :: avoid_vars) g in
+
+      (* Note: We could continue the substitution with the original m' and
+         instead remove the variables that are replaced by constants from g.
+         However, if g was nonempty but becomes empty after the substitution,
+         the semantics changes! To prevent this we must add a fake grouping
+         variable, which must occur in f, etc. Possible, but not simpler. *)
+      let m'' = List.map (fun (v, t) ->
+        match t with
+        | Var _ -> (v, t)
+        | _ ->
+            (match List.assoc_opt v tmp_gm with
+            | None -> (v, t)
+            | Some tmp -> (v, Var tmp))
+        ) m' in
+
       let subst m v = try List.assoc v m with Not_found -> Var v in
-      let unvar = function
-        | Var x -> x
-        | _ -> failwith "[MFOTL.substitute_vars] not implemented"
+      let unvar tmp = function
+        | Var x -> (x, [])
+        | t -> (tmp, [(tmp, t)])
       in
-      let y = unvar (subst m y) in
+      let (y, y_constrs) = unvar tmp_y (subst m y) in
       let x = try List.assoc x fresh_var_map with Not_found -> x in
-      let g = List.map (fun x -> unvar (subst m' x)) g in
-      Aggreg (rty, y,op,x,g, substitute_vars m' f)
+      let (g, g_constrss) = List.split
+        (List.map (fun (x, tmp) -> unvar tmp (subst m' x)) tmp_gm) in
+      let f_agg = Aggreg (rty, y,op,x,g, substitute_vars m'' f) in
+
+      let constrs = y_constrs @ List.flatten g_constrss in
+      let f_agg = List.fold_left (fun f (v, t) ->
+        And (f, Equal (Var v, t))) f_agg constrs in
+      if constrs = [] then
+        f_agg
+      else
+        Exists (List.map fst constrs, f_agg)
   | Prev (i, f) -> Prev (i,substitute_vars m f)
   | Next (i, f) -> Next (i,substitute_vars m f)
   | Once (i, f) -> Once (i, substitute_vars m f)
@@ -484,18 +511,27 @@ and substitute_re_vars m = function
   | Plus (r1,r2) -> Plus (substitute_re_vars m r1, (substitute_re_vars m r2))
   | Star r -> Star (substitute_re_vars m r) 
 
+let same_pred p1 p2 =
+  let (n1, a1, _) = get_info p1 in
+  let (n2, a2, _) = get_info p2 in
+  n1 = n2 && a1 = a2
+
 let count_pred_uses pred f =
   let rec go = function
     | Equal _
     | Less _
-    | LessEq _ -> 0
+    | LessEq _
+    | Matches _
+    | Substring _ -> 0
 
-    | Pred p -> if Predicate.get_name p = pred then 1 else 0
+    | Pred p -> if same_pred p pred then 1 else 0
 
     | Let (p, f1, f2) ->
         let c1 = go f1 in
-        let c2 = if Predicate.get_name p = pred then 0 else go f2 in
+        let c2 = if same_pred p pred then 0 else go f2 in
         c1 + c2
+    | LetPast (p, f1, f2) ->
+        if same_pred p pred then 0 else go f1 + go f2
 
     | Neg f
     | Exists (_, f)
@@ -532,7 +568,7 @@ let count_pred_uses pred f =
 
 let string_of_ts ts =
   if !unixts then
-    let tm = Unix.gmtime ts in
+    let tm = Unix.gmtime (Z.to_float ts) in
     Printf.sprintf "%d-%d-%d %d:%d:%d"
       tm.tm_year tm.tm_mon tm.tm_mday
       tm.tm_hour tm.tm_min tm.tm_sec
@@ -540,24 +576,24 @@ let string_of_ts ts =
     if ts = ts_max then
       "MaxTS"
     else
-      Printf.sprintf "%F" ts
+      Z.to_string ts
 
-let print_ts ts =
-  print_string (string_of_ts ts)
+let print_ts ts = print_string (string_of_ts ts)
+let prerr_ts ts = prerr_string (string_of_ts ts)
 
 let string_of_interval (a,b) =
   (match a with
-    | OBnd a -> Printf.sprintf "(%.0f," a
-    | CBnd a -> Printf.sprintf "[%.0f," a
+    | OBnd a -> Printf.sprintf "(%s," (Z.to_string a)
+    | CBnd a -> Printf.sprintf "[%s," (Z.to_string a)
     | Inf -> Printf.sprintf "(*,") 
   ^
   (match b with
-  | OBnd b -> Printf.sprintf "%.0f)" b
-  | CBnd b -> Printf.sprintf "%.0f]" b
+  | OBnd b -> Printf.sprintf "%s)" (Z.to_string b)
+  | CBnd b -> Printf.sprintf "%s]" (Z.to_string b)
   | Inf -> Printf.sprintf "*)")
 
-let print_interval (a,b) =
-  Printf.printf "%s" (string_of_interval (a,b))
+let print_interval (a,b) = Printf.printf "%s" (string_of_interval (a,b))
+let prerr_interval (a,b) = Printf.eprintf "%s" (string_of_interval (a,b))
 
 let string_of_agg_op = function
   | Cnt -> "CNT"
@@ -572,8 +608,11 @@ let rec type_of_fma = function
   | Equal (t1,t2) -> "Eq"
   | Less (t1,t2) -> "Less"
   | LessEq (t1,t2) -> "LessEq"
+  | Substring (t1, t2) -> "Substring"
+  | Matches (t1, t2, tl) -> "Matches"
   | Pred p -> "Pred"
   | Let (p,f1,f2) -> "Let"
+  | LetPast (p,f1,f2) -> "LetPast"
   | Neg f -> "Neg"
   | And (f1,f2) -> "And"
   | Or (f1,f2) -> "Or"
@@ -595,6 +634,10 @@ let rec type_of_fma = function
   | Frex (intv,f1) -> "Frex"
   | Prex (intv,f1) -> "Prex"
 
+let string_of_opt_term = function
+  | None -> "_"
+  | Some t -> Predicate.string_of_term t
+
 (* we always put parantheses for binary operators like "(f1 AND f2)", and around unary
 ones only if they occur on the left-hand side of a binary operator: like "((NOT f1) AND f2)"*)
 let string_of_formula str g =
@@ -608,6 +651,13 @@ let string_of_formula str g =
         Predicate.string_of_term t1 ^ " < " ^ Predicate.string_of_term t2
       | LessEq (t1,t2) ->
         Predicate.string_of_term t1 ^ " <= " ^ Predicate.string_of_term t2
+      | Substring (t1,t2) ->
+        Predicate.string_of_term t1 ^ " SUBSTRING " ^ Predicate.string_of_term t2
+      | Matches (t1,t2,tl) ->
+        Predicate.string_of_term t1 ^ " MATCHES " ^ Predicate.string_of_term t2
+        ^
+        (if tl = [] then ""
+          else Misc.string_of_list_ext " (" ")" ", " string_of_opt_term tl)
       | Pred p -> Predicate.string_of_predicate p
       | _ ->
         (if par && not top then "(" else "")
@@ -776,6 +826,27 @@ let string_of_formula str g =
               ^
               (string_f_rec false false f2)  
 
+            | LetPast (p,f1,f2) ->
+              "LETPAST"
+              ^
+              " "
+              ^
+              (string_f_rec false true (Pred p))
+              ^
+              " = "
+              ^
+              (string_f_rec false true f1)
+              ^
+              "\n"
+              ^ 
+              padding
+              ^
+              "IN"
+              ^
+              " "
+              ^
+              (string_f_rec false false f2)  
+
             | Since (intv,f1,f2) ->
               (string_f_rec false true f1)
               ^ 
@@ -871,257 +942,267 @@ let string_of_formula str g =
   in
   str ^ (string_f_rec true false g)
 
-  (* Fully parenthesize an MFOTL formula *)
-  let string_of_parenthesized_formula str g =
-    let pps = String.split_on_char '\n' str in
-    let padding = if pps==[] then "" else String.map (fun s -> ' ') (List.nth pps ((List.length pps)-1)) in
-    let rec string_f_rec top par h =
-      (match h with
-        | Equal (t1,t2) ->
-          "(" ^ (Predicate.string_of_term t1) ^ " = " ^ (Predicate.string_of_term t2) ^ ")"
-        | Less (t1,t2) ->
-          "(" ^ (Predicate.string_of_term t1) ^ " < " ^ (Predicate.string_of_term t2) ^ ")"
-        | LessEq (t1,t2) ->
-          "(" ^ (Predicate.string_of_term t1) ^ " <= " ^ (Predicate.string_of_term t2) ^ ")"
-        | Pred p -> Predicate.string_of_predicate p
+(* Fully parenthesize an MFOTL formula *)
+let string_of_parenthesized_formula str g =
+  let pps = String.split_on_char '\n' str in
+  let padding = if pps==[] then "" else String.map (fun s -> ' ') (List.nth pps ((List.length pps)-1)) in
+  let rec string_f_rec top par h =
+    (match h with
+      | Equal (t1,t2) ->
+        "(" ^ (Predicate.string_of_term t1) ^ " = " ^ (Predicate.string_of_term t2) ^ ")"
+      | Less (t1,t2) ->
+        "(" ^ (Predicate.string_of_term t1) ^ " < " ^ (Predicate.string_of_term t2) ^ ")"
+      | LessEq (t1,t2) ->
+        "(" ^ (Predicate.string_of_term t1) ^ " <= " ^ (Predicate.string_of_term t2) ^ ")"
+      | Substring (t1,t2) ->
+        "(" ^ (Predicate.string_of_term t1) ^ " SUBSTRING " ^ (Predicate.string_of_term t2) ^ ")"
+      | Matches (t1,t2,tl) ->
+        "(" ^ (Predicate.string_of_term t1) ^ " MATCHES " ^ (Predicate.string_of_term t2)
+        ^
+        (if tl = [] then ""
+          else Misc.string_of_list_ext " (" ")" ", " string_of_opt_term tl)
+        ^ ")"
+      | Pred p -> Predicate.string_of_predicate p
+      | _ ->
+         
+        (match h with
+        | Neg f ->
+          "(" ^
+          "NOT " ^ (string_f_rec false false f)
+          ^ ")"
+
+        | Exists (vl,f) ->
+          "(" ^
+          "EXISTS " 
+          ^ 
+          (Misc.string_of_list_ext "" "" ", " Predicate.string_of_term (List.map (fun v -> Var v) vl) )
+          ^
+          ". "
+          ^
+          (string_f_rec false false f)
+          ^ ")"
+
+        | ForAll (vl,f) ->
+          "(" ^
+          "FORALL "
+          ^
+          (Misc.string_of_list_ext "" "" ", " Predicate.string_of_term (List.map (fun v -> Var v) vl))
+          ^
+          ". "
+          ^
+          (string_f_rec false false f)
+          ^ ")"
+
+        | Aggreg (rty,y,op,x,glist,f) ->
+          "(" ^
+          (Predicate.string_of_term (Var y))
+          ^
+          " <- "
+          ^
+          (string_of_agg_op op)
+          ^
+          " "
+          ^
+          (Predicate.string_of_term (Var x))
+          ^
+          (if glist <> [] then
+              "; "
+              ^
+              (Misc.string_of_list_ext "" "" "," (fun z -> Predicate.string_of_term (Var z)) glist)
+          else "")
+          ^
+          " "
+          ^
+          (string_f_rec false false f)
+          ^ ")"
+
+        | Prev (intv,f) ->
+          "(" ^
+          "PREVIOUS"
+          ^
+          (string_of_interval intv)
+          ^
+          " "
+          ^
+          (string_f_rec false false f)
+          ^ ")"
+
+        | Next (intv,f) ->
+          "(" ^
+          "NEXT"
+          ^
+          (string_of_interval intv)
+          ^
+          " "
+          ^
+          (string_f_rec false false f)
+          ^ ")"
+
+        | Eventually (intv,f) ->
+          "(" ^
+          "EVENTUALLY"
+          ^
+          (string_of_interval intv)
+          ^
+          " "
+          ^
+          (string_f_rec false false f)
+          ^ ")"
+
+        | Once (intv,f) ->
+          "(" ^
+          "ONCE"
+          ^
+          (string_of_interval intv)
+          ^
+          " "
+          ^
+          (string_f_rec false false f)
+          ^ ")"
+
+        | Always (intv,f) ->
+          "(" ^
+          "ALWAYS"
+          ^
+          (string_of_interval intv)
+          ^
+          " "
+          ^
+          (string_f_rec false false f)
+          ^ ")"
+
+        | PastAlways (intv,f) ->
+          "(" ^
+          "PAST_ALWAYS"
+          ^
+          (string_of_interval intv)
+          ^
+          " "
+          ^
+          (string_f_rec false false f)
+          ^ ")"
+
+        | Frex (intv, r) -> 
+          "(" ^
+          "|>"
+          ^
+          (string_of_interval intv)
+          ^
+          (string_r_rec false false r)
+          ^ ")"
+
+        | Prex (intv, r) -> 
+          "(" ^
+          "<|"
+          ^
+          (string_of_interval intv)
+          ^
+          (string_r_rec false false r)
+          ^ ")"
+          
         | _ ->
-           
+
           (match h with
-          | Neg f ->
-            "(" ^
-            "NOT " ^ (string_f_rec false false f)
-            ^ ")"
-  
-          | Exists (vl,f) ->
-            "(" ^
-            "EXISTS " 
-            ^ 
-            (Misc.string_of_list_ext "" "" ", " Predicate.string_of_term (List.map (fun v -> Var v) vl) )
-            ^
-            ". "
-            ^
-            (string_f_rec false false f)
-            ^ ")"
-  
-          | ForAll (vl,f) ->
-            "(" ^
-            "FORALL "
-            ^
-            (Misc.string_of_list_ext "" "" ", " Predicate.string_of_term (List.map (fun v -> Var v) vl))
-            ^
-            ". "
-            ^
-            (string_f_rec false false f)
-            ^ ")"
-  
-          | Aggreg (rty,y,op,x,glist,f) ->
-            "(" ^
-            (Predicate.string_of_term (Var y))
-            ^
-            " <- "
-            ^
-            (string_of_agg_op op)
-            ^
-            " "
-            ^
-            (Predicate.string_of_term (Var x))
-            ^
-            (if glist <> [] then
-                "; "
-                ^
-                (Misc.string_of_list_ext "" "" "," (fun z -> Predicate.string_of_term (Var z)) glist)
-            else "")
-            ^
-            " "
-            ^
-            (string_f_rec false false f)
-            ^ ")"
-  
-          | Prev (intv,f) ->
-            "(" ^
-            "PREVIOUS"
-            ^
-            (string_of_interval intv)
-            ^
-            " "
-            ^
-            (string_f_rec false false f)
-            ^ ")"
-  
-          | Next (intv,f) ->
-            "(" ^
-            "NEXT"
-            ^
-            (string_of_interval intv)
-            ^
-            " "
-            ^
-            (string_f_rec false false f)
-            ^ ")"
-  
-          | Eventually (intv,f) ->
-            "(" ^
-            "EVENTUALLY"
-            ^
-            (string_of_interval intv)
-            ^
-            " "
-            ^
-            (string_f_rec false false f)
-            ^ ")"
-  
-          | Once (intv,f) ->
-            "(" ^
-            "ONCE"
-            ^
-            (string_of_interval intv)
-            ^
-            " "
-            ^
-            (string_f_rec false false f)
-            ^ ")"
-  
-          | Always (intv,f) ->
-            "(" ^
-            "ALWAYS"
-            ^
-            (string_of_interval intv)
-            ^
-            " "
-            ^
-            (string_f_rec false false f)
-            ^ ")"
-  
-          | PastAlways (intv,f) ->
-            "(" ^
-            "PAST_ALWAYS"
-            ^
-            (string_of_interval intv)
-            ^
-            " "
-            ^
-            (string_f_rec false false f)
-            ^ ")"
+            | And (f1,f2) ->
+              "(" ^
+              (string_f_rec false true f1)
+              ^
+              " AND " 
+              ^
+              (string_f_rec false true f2)
+              ^ ")"
 
-          | Frex (intv, r) -> 
-            "(" ^
-            "|>"
-            ^
-            (string_of_interval intv)
-            ^
-            (string_r_rec false false r)
-            ^ ")"
+            | Or (f1,f2) ->
+              "(" ^
+              (string_f_rec false true f1)
+              ^
+              " OR "
+              ^
+              (string_f_rec false false f2)
+              ^ ")"
 
-          | Prex (intv, r) -> 
-            "(" ^
-            "<|"
-            ^
-            (string_of_interval intv)
-            ^
-            (string_r_rec false false r)
-            ^ ")"
+            | Implies (f1,f2) ->
+              "(" ^
+              (string_f_rec false true f1)
+              ^
+              " IMPLIES "
+              ^
+              (string_f_rec false false f2)
+              ^ ")"
+
+            | Equiv (f1,f2) ->
+              "(" ^
+              (string_f_rec false true f1)
+              ^
+              " EQUIV "
+              ^
+              (string_f_rec false false f2)
+              ^ ")"
+
+            | Let (p,f1,f2) ->
+              "("
+              ^
+              "LET"
+              ^
+              " "
+              ^
+              (string_f_rec false true (Pred p))
+              ^
+              " = "
+              ^
+              (string_f_rec false true f1)
+              ^
+              "\n"
+              ^
+              padding
+              ^ 
+              "IN"
+              ^
+              " "
+              ^
+              (string_f_rec false false f2)
+              ^ ")"
+
+            | Since (intv,f1,f2) ->
+              "(" ^
+              (string_f_rec false true f1)
+              ^ 
+              " SINCE"
+              ^
+              (string_of_interval intv)
+              ^
+              " "
+              ^
+              (string_f_rec false false f2)
+              ^ ")"
             
-          | _ ->
- 
-            (match h with
-              | And (f1,f2) ->
-                "(" ^
-                (string_f_rec false true f1)
-                ^
-                " AND " 
-                ^
-                (string_f_rec false true f2)
-                ^ ")"
-  
-              | Or (f1,f2) ->
-                "(" ^
-                (string_f_rec false true f1)
-                ^
-                " OR "
-                ^
-                (string_f_rec false false f2)
-                ^ ")"
-  
-              | Implies (f1,f2) ->
-                "(" ^
-                (string_f_rec false true f1)
-                ^
-                " IMPLIES "
-                ^
-                (string_f_rec false false f2)
-                ^ ")"
-  
-              | Equiv (f1,f2) ->
-                "(" ^
-                (string_f_rec false true f1)
-                ^
-                " EQUIV "
-                ^
-                (string_f_rec false false f2)
-                ^ ")"
+            | Trigger (intv,f1,f2) ->
+              "(" ^
+              (string_f_rec false true f1)
+              ^ 
+              " TRIGGER"
+              ^
+              (string_of_interval intv)
+              ^
+              " "
+              ^
+              (string_f_rec false false f2)
+              ^ ")"
 
-                | Let (p,f1,f2) ->
-                "("
-                ^
-                "LET"
-                ^
-                " "
-                ^
-                (string_f_rec false true (Pred p))
-                ^
-                " = "
-                ^
-                (string_f_rec false true f1)
-                ^
-                "\n"
-                ^
-                padding
-                ^ 
-                "IN"
-                ^
-                " "
-                ^
-                (string_f_rec false false f2)
-                ^ ")"
-
-              | Since (intv,f1,f2) ->
-                "(" ^
-                (string_f_rec false true f1)
-                ^ 
-                " SINCE"
-                ^
-                (string_of_interval intv)
-                ^
-                " "
-                ^
-                (string_f_rec false false f2)
-                ^ ")"
-              | Trigger (intv,f1,f2) ->
-                "(" ^
-                (string_f_rec false true f1)
-                ^ 
-                " TRIGGER"
-                ^
-                (string_of_interval intv)
-                ^
-                " "
-                ^
-                (string_f_rec false false f2)
-                ^ ")"
-  
-              | Until (intv,f1,f2) ->
-                "(" ^
-                (string_f_rec false true f1)
-                ^
-                " UNTIL"
-                ^
-                (string_of_interval intv)
-                ^
-                " "
-                ^
-                (string_f_rec false false f2)
-                ^ ")"
-              | Release (intv,f1,f2) ->
+            | Until (intv,f1,f2) ->
+              "(" ^
+              (string_f_rec false true f1)
+              ^
+              " UNTIL"
+              ^
+              (string_of_interval intv)
+              ^
+              " "
+              ^
+              (string_f_rec false false f2)
+              ^ ")"
+            
+            | Release (intv,f1,f2) ->
                 "(" ^
                 (string_f_rec false true f1)
                 ^
@@ -1133,60 +1214,65 @@ let string_of_formula str g =
                 ^
                 (string_f_rec false false f2)
                 ^ ")"
-              | _ -> failwith "[print_formula] impossible"
-            )
-            
-          ) 
-      )
-      and string_r_rec top par h = 
-      (match h with
-        | Wild -> "(" ^ "." ^ ")"
-        | _ ->
-            (match h with
-              | Test f -> 
-                "(" ^
-                (string_f_rec false false f)
-                ^
-                "?"
-                ^ ")"
-
-              | Star r -> 
-                "(" ^
-                (string_r_rec false false r)
-                ^
-                "*"
-                ^ ")"
-    
-              | _ -> 
-                (match h with
-                  | Concat (r1,r2) -> 
-                    "(" ^
-                    (string_r_rec false true r1)
-                    ^
-                    " "
-                    ^
-                    (string_r_rec false false r2)
-                    ^ ")"
-    
-                  | Plus (r1,r2) -> 
-                    "(" ^
-                    (string_r_rec false true r1)
-                    ^
-                    " + "
-                    ^
-                    (string_r_rec false false r2)
-                    ^ ")"
-    
-                  | _ -> failwith "[print_formula] impossible"
-                )
+            | _ -> failwith "[print_formula] impossible"
           )
-      )
-      in
-    str ^ (string_f_rec true false g)
+          
+        ) 
+    )
+  
+    and string_r_rec top par h = 
+    (match h with
+      | Wild -> "(" ^ "." ^ ")"
+      | _ ->
+          (match h with
+            | Test f -> 
+              "(" ^
+              (string_f_rec false false f)
+              ^
+              "?"
+              ^ ")"
 
-let print_formula str f =
-  print_string (string_of_formula str f)
+            | Star r -> 
+              "(" ^
+              (string_r_rec false false r)
+              ^
+              "*"
+              ^ ")"
+  
+            | _ -> 
+              (match h with
+                | Concat (r1,r2) -> 
+                  "(" ^
+                  (string_r_rec false true r1)
+                  ^
+                  " "
+                  ^
+                  (string_r_rec false false r2)
+                  ^ ")"
+  
+                | Plus (r1,r2) -> 
+                  "(" ^
+                  (string_r_rec false true r1)
+                  ^
+                  " + "
+                  ^
+                  (string_r_rec false false r2)
+                  ^ ")"
+  
+                | _ -> failwith "[print_formula] impossible"
+              )
+        )
+    )
+    in
+  str ^ (string_f_rec true false g)
+
+let print_formula str f = print_string (string_of_formula str f)
+let prerr_formula str f = prerr_string (string_of_formula str f)
 
 let printnl_formula str f =
   print_formula str f;
   print_newline()
+
+let prerrnl_formula str f =
+  prerr_formula str f;
+  prerr_newline()

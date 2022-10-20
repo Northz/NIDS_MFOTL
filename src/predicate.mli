@@ -46,13 +46,13 @@ type var = string
 
 (** Constants are nonnegative integers or strings. *)
 type cst =
-  | Int of int
+  | Int of Z.t
   | Str of string
   | Float of float
-  | ZInt of Z.t
+  | Regexp of (string * Str.regexp)
 
 (** Three (constant) types are supported: integers, strings and floats *)
-type tcst = TInt | TStr | TFloat
+type tcst = TInt | TStr | TFloat | TRegexp
 
 (** Two type classes exists: Numeric and Any*) 
 type tcl = TNum | TAny 
@@ -66,6 +66,16 @@ type 'a eterm =
   | Cst of cst
   | F2i of 'a eterm
   | I2f of 'a eterm
+  | I2s of 'a eterm
+  | S2i of 'a eterm
+  | F2s of 'a eterm
+  | S2f of 'a eterm
+  | DayOfMonth of 'a eterm
+  | Month of 'a eterm
+  | Year of 'a eterm
+  | FormatDate of 'a eterm
+  | R2s of 'a eterm
+  | S2r of 'a eterm
   | Plus of 'a eterm * 'a eterm
   | Minus of 'a eterm * 'a eterm
   | UMinus of 'a eterm
@@ -81,11 +91,13 @@ val eval_eterm: ('a -> cst) -> 'a eterm -> cst
 val eval_term: (var * cst) list -> term -> cst
 val eval_gterm: term -> cst
 
-val avg: cst -> cst -> cst
 val plus: cst -> cst -> cst
 val minus: cst -> cst -> cst
+val average: cst -> cst -> cst
 
 val cst_eq: cst -> cst -> bool
+
+val float_of_cst: cst -> float
 
 (** A predicate consists of a name and a list of term arguments. It is
     thus an atomic formula. *)
@@ -138,11 +150,13 @@ val int_of_cst: cst -> int
 val print_var: var -> unit
 val print_tcst: tcst -> unit
 val string_of_var: var -> string
-val string_of_cst: bool -> cst -> string
-val print_cst: bool -> cst -> unit
+val string_of_cst: cst -> string
+val print_cst: cst -> unit
+val prerr_cst: cst -> unit
 (* val output_cst: out_channel -> cst -> unit *)
 val string_of_term: term -> string
 val print_term: term -> unit
 val string_of_predicate: predicate -> string
 val print_predicate: predicate -> unit
+val prerr_predicate: predicate -> unit
 val print_vartypes_list: (var * tcst) list -> unit

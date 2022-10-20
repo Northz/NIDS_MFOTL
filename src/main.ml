@@ -38,28 +38,26 @@
  *)
 
 
-
+open Libmonpoly
 open Misc
 open Predicate
 open MFOTL
 open Formula_parser
 open Lexing
 open Algorithm
-open Log
 open Rewriting
-
-
-(********** testing *************)
-
 
 let usage_string =
   "Usage: monpoly -sig <file> -formula <file> [-negate] [-log <file>]
                [-help] [-version] [-debug <unit>] [-verbose] [-no_rw]
                [-check] [-sigout] [-unix] [-mem] [-nonewlastts] [-verified]
-               [-no_mw] [-nofilterrel] [-nofilteremptytp] [-testfilter] [-stats]
+               [-no_mw] [-nofilterrel] [-nofilteremptytp] [-stats]
                [-ignore_parse_errors] [-stop_at_out_of_order_ts]
                [-stop_at_first_viol] [-load <file>]"
 
+let print_usage_and_exit () =
+  prerr_endline usage_string;
+  exit 2
 
 
 let formulafile = ref ""
@@ -69,9 +67,9 @@ let analyze_formulafile () =
   try
     let f = Formula_parser.formula Formula_lexer.token (Lexing.from_channel ic) in
     if Misc.debugging Dbg_all then
-      Printf.eprintf "[Main.main] The formula file was parsed correctly.\n";
+      Printf.eprintf "[Main.main] The formula file was parsed correctly.\n%!";
     f
-  with e -> Printf.eprintf "[Main.main] Failed to parse formula file\n"; raise e
+  with e -> Printf.eprintf "[Main.main] Failed to parse formula file\n%!"; raise e
 
 
 
@@ -81,19 +79,14 @@ let logfile = ref ""
 let sigfile = ref ""
 let debug = ref ""
 
-let slicer_file = ref ""
-
 let negate = ref false
 let inc = ref false
 let memarg = ref false
 let sigout = ref false
 let statsarg = ref false
 
-let testfilteropt = ref false
 let nofilteremptytpopt = ref false
 let nofilterrelopt = ref false
-let verified = ref false
-let unfold_let: Rewriting.expand_mode option ref = ref None
 
 (* Printexc.record_backtrace true;; *)
 
@@ -103,7 +96,7 @@ let starttime = Unix.time()
 let sigusr1_handler =
   (Sys.Signal_handle
      (fun _ ->
-        print_endline "SIGUSR1 handler: exiting...";
+        prerr_endline "SIGUSR1 handler: exiting...";
         exit 0))
 
 let sigusr2_handler =
@@ -135,57 +128,50 @@ let main () =
   if !displayver then
     print_banner ()
   else if !formulafile = "" then
-    print_endline usage_string
+    print_usage_and_exit ()
   else
     (* read formula file *)
     let f = analyze_formulafile () in
     let f = if !negate then Neg f else f in
     if !sigfile = "" then
-      print_endline usage_string
+      print_usage_and_exit ()
     else
       begin
         (* read signature file *)
-        let _ = if is_mfodl f then verified := true else () in
-        let sign = Log.get_signature !sigfile in
+        let sign = Log_parser.parse_signature_file !sigfile in
+        let _ = if is_mfodl f then Misc.verified := true else () in
 
-        let f = match !unfold_let with
-          | Some mode -> expand_let mode f
-          | None -> ignore(check_let f); f
-        in
-        let check_mon = if !verified then Verified_adapter.is_monitorable sign
-                        else is_monitorable in
-        let is_mon, pf, vartypes = check_formula check_mon sign f in
+        let is_mon, pf, vartypes = check_formula sign f in
+        let fv = List.map fst vartypes in
         if !sigout then
           Predicate.print_vartypes_list vartypes
         else if is_mon && not !Misc.checkf then
           begin
+            (* By default, that is without user specification (see option
+              -nonewlastts), we add a new maximal timestamp for future formulas;
+              that is, we assume that no more events will happen in the
+              future. For past-only formulas we never add such a timestamp. *)
+            if not (Rewriting.is_future pf) then
+              Misc.new_last_ts := false;
             if not !nofilterrelopt then
               Filter_rel.enable pf;
-            if not !nofilteremptytpopt && not !verified then
+            if not !nofilteremptytpopt && not !Misc.verified then
               Filter_empty_tp.enable pf;
-            if !testfilteropt then
-              Algorithm.test_filter !logfile pf
+            if !Algorithm.resumefile <> "" then
+              Algorithm.resume sign !logfile
+            else if !Algorithm.combine_files <> "" then
+              Algorithm.combine sign !logfile
+            else if !Misc.verified then
+              Algorithm_verified.monitor sign !logfile fv pf
             else
-              let _ = Log.get_signature !sigfile in
-              (* Test Slicing implementation *)
-              if !slicer_file <> "" then
-                Algorithm.run_test !slicer_file pf
-              (* start monitoring *)
-              else if !Algorithm.resumefile <> "" then
-                Algorithm.resume !logfile
-              else if !Algorithm.combine_files <> "" then
-                Algorithm.combine !logfile
-              else if !verified then
-                Algorithm_verified.monitor sign !logfile pf
-              else
-                Algorithm.monitor !logfile pf
+              Algorithm.monitor sign !logfile fv pf
           end
       end
 
 let set_unfold_let = function
-  | "no" -> unfold_let := None
-  | "full" -> unfold_let := Some (Rewriting.ExpandAll)
-  | "smart" -> unfold_let := Some (Rewriting.ExpandNonshared)
+  | "no" -> Rewriting.unfold_let := None
+  | "full" -> Rewriting.unfold_let := Some (Rewriting.ExpandAll)
+  | "smart" -> Rewriting.unfold_let := Some (Rewriting.ExpandNonshared)
   | _ -> ()  (* impossible *)
 
 let _ =
@@ -195,35 +181,36 @@ let _ =
     "-negate", Arg.Set negate, "\tAnalyze the negation of the input formula";
     "-log", Arg.Set_string logfile, "\t\tChoose the log file";
     "-version", Arg.Set displayver, "\tDisplay the version (and exit)";
-    "-debug", Arg.Set_string debug, "\tChoose unit to debug, among 'eval', 'perf', 'log', 'formula', 'monitorable', 'filter'";
+    "-debug", Arg.Set_string debug, "\tChoose aspect to debug, among 'eval', 'perf', 'log', 'parsing', 'typing' 'monitorable', 'filter' (select multple using commas)";
     "-verbose", Arg.Set Misc.verbose, "\tTurn on verbose mode";
     "-check", Arg.Set Misc.checkf, "\tCheck if formula is monitorable (and exit)";
-    "-no_rw", Arg.Set Misc.no_rw, "\tNo formula rewrite";
-	"-no_trigger", Arg.Set Misc.no_trigger, "\tTop level trigger is rewritten";
+    "-no_rw", Arg.Set Rewriting.no_rw, "\tNo formula rewrite";
+    "-no_trigger", Arg.Set Misc.no_trigger, "\tTop level trigger is rewritten";
     "-sigout", Arg.Set sigout, "\tShow the output signature (and exit)";
     "-unix", Arg.Set MFOTL.unixts, "\tTimestamps represent Unix time";
     "-mem", Arg.Set memarg, "\t\tShow maximum memory usage on stderr";
     "-nonewlastts", Arg.Clear Misc.new_last_ts, "\tDo not add a last maximal timestamp";
     "-nofilterrel", Arg.Set nofilterrelopt, "\tDisable filter_rel module";
     "-nofilteremptytp", Arg.Set nofilteremptytpopt, "\tDisable filter_empty_tp module";
-    "-testfilter", Arg.Set testfilteropt, "\tTest filter on the log without evaluating the formula";
     "-stats", Arg.Set statsarg, "\t\tShow stats at the end of stdout";
     "-ignore_parse_errors", Arg.Set Misc.ignore_parse_errors, "\tIgnore log parse errors";
     "-stop_at_out_of_order_ts", Arg.Set Misc.stop_at_out_of_order_ts, "\tStop monitoring when out-of-order timestamps encountered, otherwise issue warning";
     "-stop_at_first_viol", Arg.Set Misc.stop_at_first_viol, "\tStop at first encountered violation";
     "-load", Arg.Set_string Algorithm.resumefile, "\tLoad monitor state from file";
     "-combine", Arg.Set_string Algorithm.combine_files, "\tComma separated partition files to combine";
-    "-slicer", Arg.Set_string slicer_file, "\tFile used to test slicer";
-    "-verified", Arg.Set verified, "\tRun the Monpoly's verified kernel";
+    "-verified", Arg.Set Misc.verified, "\tRun the Monpoly's verified kernel";
     "-no_mw", Arg.Set Algorithm_verified.no_mw, "\tNo multi-way join (only with the verified kernel)";
     "-unfold_let", Arg.Symbol (["no"; "full"; "smart"], set_unfold_let),
       "\tWhether and how LET expressions in the formula should be unfolded (default 'no')";
+    "-strcache", Arg.Set Misc.str_cache, "\tUse string cache to reduce memory usage";
+    "-profile", Arg.String Perf.enable_profile, "\tWrite profile events to the given file";
   ]
-    (fun _ -> ())
+    (fun _ -> print_usage_and_exit ())
     usage_string;
   if Misc.debugging Dbg_perf then
     ignore(Unix.alarm 600);
   main ();
+  Perf.finalize_profile ();
   if !memarg then
     prerr_endline (Misc.mem_max ());
   if !statsarg then

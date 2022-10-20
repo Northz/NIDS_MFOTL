@@ -28,11 +28,6 @@ definition rwf_query :: "nat \<Rightarrow> vertices \<Rightarrow> 'a query \<Rig
   "rwf_query n V Qp Qn \<longleftrightarrow> wf_query n V Qp Qn \<and> covering V Qp \<and> included V Qp \<and> included V Qn
                          \<and> non_empty_query Qp \<and> non_empty_query Qn"
 
-lemma wf_tuple_empty: "wf_tuple n {} v \<longleftrightarrow> v = replicate n None"
-  by (auto intro!: replicate_eqI simp add: wf_tuple_def in_set_conv_nth)
-
-lemma table_empty: "table n {} X \<longleftrightarrow> (X = empty_table \<or> X = unit_table n)"
-  by (auto simp add: wf_tuple_empty unit_table_def table_def)
 
 context getIJ begin
 
@@ -1124,14 +1119,6 @@ proof -
   ultimately show ?thesis by (simp add: list_eq_iff_nth_eq)
 qed
 
-lemma restrict_nested:
-  "restrict A (restrict B x) = restrict (A \<inter> B) x" (is "?lhs = ?rhs")
-proof -
-  have "\<And>i. i < length x \<Longrightarrow> ?lhs!i = ?rhs!i"
-    by (metis Int_iff length_restrict restrict_index_in simple_restrict_none)
-  then show ?thesis by (simp add: simple_list_index_equality)
-qed
-
 lemma newQuery_equi_dev:
   "newQuery V Q (I, t) = Set.image (projectTable V) (Set.image (\<lambda>tab. semiJoin tab (I, t)) Q)"
   by (metis newQuery_equiv_def projectQuery.elims)
@@ -1253,7 +1240,7 @@ proof -
         using \<open>isSameIntersection zI (A \<inter> I) zz\<close> assms(7) assms(9) calculation(2) calculation(3) by blast
     qed
     then show ?thesis
-      by (simp add: restrict_nested assms(1))
+      by (simp add: restrict_restrict assms(1))
   qed
   then have "zz = restrict A z"
   proof -
@@ -1281,7 +1268,7 @@ proof -
           have "zz!i = (restrict (A \<inter> J) zJ)!i"
             by (metis False True UnE \<open>i < n\<close> \<open>zAJ = restrict J zz\<close> assms(7) calculation(1)
                 restrict_index_in subsetD zAJ_def)
-          then have "... = (restrict A zJ)!i" by (simp add: assms(2) restrict_nested)
+          then have "... = (restrict A zJ)!i" by (simp add: assms(2) restrict_restrict)
           then show ?thesis
             by (metis False True UnE \<open>i < n\<close> \<open>zz ! i = restrict (A \<inter> J) zJ ! i\<close> assms(2) assms(7)
                 calculation(2) length_restrict restrict_index_in subsetD)
@@ -1399,7 +1386,7 @@ proof -
         then have "zA \<in> XX" using \<open>(A, XX) = semiJoin (A, X) (I, t)\<close> calculation by auto
         then have "restrict J zA \<in> XXX" using \<open>(AJ, XXX) = projectTable J (A, XX)\<close> by auto
         moreover have "restrict AJ xx = restrict J zA"
-          by (metis AJ_def restrict_nested \<open>restrict J z = xx\<close> inf.right_idem inf_commute zA_def)
+          by (metis AJ_def restrict_restrict \<open>restrict J z = xx\<close> inf.right_idem inf_commute zA_def)
         then show "False" using \<open>restrict AJ xx \<notin> XXX\<close> calculation(2) by auto
       qed
       then show ?thesis using zA_def by auto
@@ -1524,7 +1511,7 @@ proof -
         obtain zz where "restrict A z = restrict J zz" "zz \<in> X"
           using \<open>restrict A z \<in> restrict J ` X\<close> by blast
         then have "restrict A z = restrict A zz"
-          by (metis Int_absorb2 \<open>A \<subseteq> J\<close> restrict_nested subset_refl)
+          by (metis Int_absorb2 \<open>A \<subseteq> J\<close> restrict_restrict subset_refl)
         moreover have "restrict A zz = zz"
         proof -
           have "(A, X) \<in> Q" by (simp add: \<open>(A, X) \<in> Q\<close>)
@@ -1615,7 +1602,7 @@ proof -
     moreover have "(restrict AA z) \<in> XX" using assms(15) calculation(2) by blast
     then have "restrict I (restrict AA z) \<in> X" by (simp add: calculation(1))
     then show "restrict A zI \<in> X"
-      by (metis calculation(3) inf.right_idem inf_commute restrict_nested zI_def)
+      by (metis calculation(3) inf.right_idem inf_commute restrict_restrict zI_def)
   qed
   moreover have "\<And>A X. ((A, X)\<in>Q_I_neg \<Longrightarrow> restrict A zI \<notin> X)"
   proof -
@@ -1659,7 +1646,7 @@ proof -
       using \<open>(A, X) = projectTable J (semiJoin (AA, XX) (I, zI))\<close> by auto
     then show "restrict A zJ \<in> X"
       by (metis \<open>(A, X) = projectTable J (semiJoin (AA, XX) (I, zI))\<close> fst_conv inf.idem inf_commute
-          projectTable.simps restrict_nested semiJoin.simps zJ_def)
+          projectTable.simps restrict_restrict semiJoin.simps zJ_def)
   qed
   moreover have "\<forall>y. (y \<in> genericJoin J (newQuery J Q_J_pos (I, zI)) (newQuery J Q_J_neg (I, zI)) \<longleftrightarrow> wf_tuple n J y \<and>
   (\<forall>(A, X)\<in>newQuery J Q_J_pos (I, zI). restrict A y \<in> X) \<and> (\<forall>(A, X)\<in>newQuery J Q_J_neg (I, zI). restrict A y \<notin> X))"
@@ -1689,11 +1676,11 @@ proof -
       then obtain zz where "restrict A zJ = restrict J zz" and "zz \<in> (Set.filter (isSameIntersection zI (I \<inter> AA)) XX)"
         by blast
       moreover have "restrict A zJ = restrict AA zJ"
-        by (simp add: restrict_nested \<open>A = AA \<inter> J\<close> zJ_def)
+        by (simp add: restrict_restrict \<open>A = AA \<inter> J\<close> zJ_def)
       then have "restrict AA z = zz"
       proof -
         have "restrict J (restrict AA zz) = restrict J (restrict AA z)"
-          by (metis (no_types, lifting) restrict_nested \<open>restrict A zJ = restrict AA zJ\<close>
+          by (metis (no_types, lifting) restrict_restrict \<open>restrict A zJ = restrict AA zJ\<close>
               calculation(1) inf_commute inf_left_idem zJ_def)
         moreover have "isSameIntersection zI (I \<inter> AA) zz"
           using \<open>zz \<in> Set.filter (isSameIntersection zI (I \<inter> AA)) XX\<close> by auto
@@ -1717,13 +1704,13 @@ proof -
           by (metis (mono_tags, lifting) isSame_equi_dev \<open>wf_tuple n I zI\<close> assms(1)
               calculation(2) calculation(3) calculation(5) calculation(6) inf_le1 inf_le2 sup_ge1)
         then have "restrict I (restrict AA zz) = restrict I (restrict AA z)"
-          by (metis (mono_tags, lifting) restrict_nested inf_le1 nested_include_restrict zI_def)
+          by (metis (mono_tags, lifting) restrict_restrict inf_le1 nested_include_restrict zI_def)
         then have "restrict (I \<union> J) (restrict AA z) = restrict (I \<union> J) (restrict AA zz)"
           using union_restrict calculation(1) by fastforce
         moreover have "AA \<subseteq> I \<union> J"
           by (metis \<open>(AA, XX) \<in> Qn\<close> assms(1) assms(16) case_prodD included_def rwf_query_def)
         then show ?thesis
-          by (metis restrict_nested calculation(4) calculation(7) inf.absorb_iff2)
+          by (metis restrict_restrict calculation(4) calculation(7) inf.absorb_iff2)
       qed
       then show "False" using \<open>restrict AA z \<notin> XX\<close> calculation(2) by auto
     qed
@@ -1928,12 +1915,12 @@ proof (cases "(\<exists>(A, X)\<in>Q_pos. Set.is_empty X) \<or> (\<exists>(A, X)
       then have "\<exists>(A, X)\<in>Q_neg. Set.is_empty A \<and> \<not> Set.is_empty X" using True by blast
       then obtain A X where "(A, X) \<in> Q_neg" "Set.is_empty A" "\<not> Set.is_empty X" by auto
       then have "table n A X" using assms(2) by auto
-      then have "X \<subseteq> {?v}" using \<open>Set.is_empty A\<close> table_empty unit_table_def
+      then have "X \<subseteq> {?v}" using \<open>Set.is_empty A\<close> table_empty_vars_iff unit_table_def
         by (metis Set.is_empty_def \<open>\<not> Set.is_empty X\<close> empty_table_def set_eq_subset)
       then show ?thesis using \<open>(A, X) \<in> Q_neg\<close> \<open>Set.is_empty A\<close> \<open>\<not> Set.is_empty X\<close>
           \<open>wf_tuple n (\<Union>(A, X)\<in>Q_pos. A) z \<and> (\<forall>(A, X)\<in>Q_pos. restrict A z \<in> X) \<and> (\<forall>(A, X)\<in>Q_neg. restrict A z \<notin> X)\<close>
         by (metis (no_types, lifting) Set.is_empty_def \<open>table n A X\<close> case_prod_beta' empty_table_def
-            in_unit_table inf_le1 inf_le2 prod.sel(1) snd_conv subset_empty table_empty wf_tuple_restrict_simple)
+            in_unit_table inf_le1 inf_le2 prod.sel(1) snd_conv subset_empty table_empty_vars_iff wf_tuple_restrict_simple)
     qed
   qed
   then show ?thesis using \<open>?r = {}\<close> by simp
@@ -1959,7 +1946,7 @@ next
         have "(A, X) \<notin> Q" by (simp add: True)
         then show ?thesis by (simp add: Q_def Set.is_empty_def \<open>(A, X) \<in> Q_pos\<close>)
       qed
-      then show "X \<subseteq> {replicate n None}" using \<open>A = {}\<close> \<open>table n A X\<close> table_empty unit_table_def by fastforce
+      then show "X \<subseteq> {replicate n None}" using \<open>A = {}\<close> \<open>table n A X\<close> table_empty_vars_iff unit_table_def by fastforce
     qed
     have "?r \<subseteq> {replicate n None}"
     proof (rule subsetI)
@@ -1990,7 +1977,7 @@ next
       proof (rule notI)
         assume "wf_tuple n (\<Union>(A, X)\<in>Q_pos. A) z \<and> (\<forall>(A, X)\<in>Q_pos. restrict A z \<in> X) \<and> (\<forall>(A, X)\<in>Q_neg. restrict A z \<notin> X)"
         have "z = ?v"
-          using \<open>wf_tuple n (\<Union>(A, X)\<in>Q_pos. A) z \<and> (\<forall>(A, X)\<in>Q_pos. restrict A z \<in> X) \<and> (\<forall>(A, X)\<in>Q_neg. restrict A z \<notin> X)\<close> empty_u wf_tuple_empty by auto
+          using \<open>wf_tuple n (\<Union>(A, X)\<in>Q_pos. A) z \<and> (\<forall>(A, X)\<in>Q_pos. restrict A z \<in> X) \<and> (\<forall>(A, X)\<in>Q_neg. restrict A z \<notin> X)\<close> empty_u wf_tuple_empty_iff by auto
         then have "\<And>A. restrict A z = z"
           by (metis getIJ.restrict_index_out getIJ_axioms length_replicate length_restrict nth_replicate nth_restrict simple_list_index_equality)
         then have "(\<exists>(A, X)\<in>Q_pos. z \<notin> X) \<or> (\<exists>(A, X)\<in>Q_neg. z \<in> X)" using disj using \<open>z = replicate n None\<close> by auto
@@ -2014,10 +2001,10 @@ next
           then have "\<And>A. restrict A z = z"
             by (metis getIJ.restrict_index_out getIJ_axioms length_replicate length_restrict nth_replicate nth_restrict simple_list_index_equality)
           then show "?b" using \<open>\<forall>(A, X)\<in>Q_neg. replicate n None \<notin> X\<close> \<open>\<forall>(A, X)\<in>Q_pos. X = {replicate n None}\<close>
-              \<open>z = replicate n None\<close> empty_u wf_tuple_empty by fastforce
+              \<open>z = replicate n None\<close> empty_u wf_tuple_empty_iff by fastforce
         qed
         moreover have "?b \<Longrightarrow> ?a"
-          using \<open>wrapperGenericJoin Q_pos Q_neg = {replicate n None}\<close> empty_u wf_tuple_empty by auto
+          using \<open>wrapperGenericJoin Q_pos Q_neg = {replicate n None}\<close> empty_u wf_tuple_empty_iff by auto
         ultimately show ?thesis by blast
       qed
     qed
@@ -2119,11 +2106,11 @@ next
         moreover have "Set.is_empty A"
           by (metis (no_types, lifting) DiffD1 DiffD2 Q_def \<open>(A, X) \<in> Q_pos - Q\<close> case_prod_beta' member_filter prod.sel(1))
         moreover have "\<not> Set.is_empty X" using forall using \<open>(A, X) \<in> Q_pos - Q\<close> by blast
-        ultimately have "X = {replicate n None}" by (simp add: Set.is_empty_def empty_table_def table_empty unit_table_def)
+        ultimately have "X = {replicate n None}" by (simp add: Set.is_empty_def empty_table_def table_empty_vars_iff unit_table_def)
         moreover have "wf_tuple n V z"
           using \<open>(z \<in> genericJoin V Q Qn) = (wf_tuple n V z \<and> (\<forall>(A, X)\<in>Q. restrict A z \<in> X) \<and> (\<forall>(A, X)\<in>Qn. restrict A z \<notin> X))\<close> \<open>z \<in> genericJoin V Q Qn\<close> by linarith
         then have "restrict A z = replicate n None"
-          using \<open>Set.is_empty A\<close> wf_tuple_empty wf_tuple_restrict_simple
+          using \<open>Set.is_empty A\<close> wf_tuple_empty_iff wf_tuple_restrict_simple
           by (metis Diff_Int2 Diff_Int_distrib2 Diff_eq_empty_iff Set.is_empty_def inf_le2)
         then show "restrict A z \<in> X" by (simp add: calculation)
       qed

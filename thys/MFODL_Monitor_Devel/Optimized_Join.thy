@@ -134,7 +134,7 @@ proof -
     unfolding Q_def Q_neg_def by (simp del: New_max.wrapperGenericJoin.simps)
   moreover have "card Q \<ge> 1"
     unfolding Q_def using assms(1,2)
-    by (auto simp: Suc_le_eq card_gt_0_iff zip_eq_Nil_iff)
+    by (auto simp: Suc_le_eq card_gt_0_iff)
   moreover have "\<forall>(A, X)\<in>(Q \<union> Q_neg). table n A X \<and> wf_set n A"
     unfolding Q_alt Q_neg_def using assms(2) by (simp add: zip_append1 list_all2_iff)
   ultimately have "z \<in> ?r \<longleftrightarrow> wf_tuple n (\<Union>(A, X)\<in>Q. A) z \<and>
@@ -202,7 +202,7 @@ proof -
     restrict (A_x \<union> A_y) z \<in> join x True y \<longleftrightarrow> restrict A_x z \<in> x \<and> restrict A_y z \<in> y"
     using join_restrict[of x n A_x y A_y True] wf_tuple_restrict_simple[of n _ _ "A_x \<union> A_y"]
       assms_dest(1,2)
-    by (auto simp add: table_def restrict_nested Int_absorb2)
+    by (auto simp add: table_def restrict_restrict Int_absorb2)
   show ?thesis
   proof (rule set_eqI, rule iffI)
     fix z
@@ -286,7 +286,7 @@ proof -
         list_all2_Cons1 list_all2_Cons2 dest: list_all2_lengthD) fastforce
   have res: "\<And>z. restrict A_x z \<in> join x False y \<longleftrightarrow> restrict A_x z \<in> x \<and> restrict A_y z \<notin> y"
     using join_restrict[of x n A_x y A_y False, OF _ _ assms(6)] assms_dest(1,2) assms(6)
-    by (auto simp add: table_def restrict_nested Int_absorb2 Un_absorb2)
+    by (auto simp add: table_def restrict_restrict Int_absorb2 Un_absorb2)
   show ?thesis
   proof (rule set_eqI, rule iffI)
     fix z

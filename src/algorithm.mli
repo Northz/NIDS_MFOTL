@@ -41,29 +41,24 @@
 
 (** This module implements the monitoring algorithm. *)
 
+open Predicate
 open MFOTL
 
 val combine_files: string ref
 val resumefile: string ref
-val dumpfile: string ref
 (** The names of the files used for state saving and state loading. *)
 
-val resume: string -> unit
-val combine: string -> unit
+val resume: Db.schema -> string -> unit
+val combine: Db.schema -> string -> unit
 
-(* val resume: string -> unit *)
-(** [resume log] loads the monitor state from file [resumefile] and
-    then monitors the log [log]. *)
-
-val monitor_string: string -> formula -> unit
-(** [monitor log f] monitors the log string [log] with regard to the
+val monitor_string: Db.schema -> string -> var list -> formula -> unit
+(** [monitor log fv f] monitors the log string [log] with regard to the
     formula [f]. For each time point, it outputs, as soon as possible,
-    the tuples satisfying formula [f]. *)
+    the tuples satisfying formula [f]. The tuples are sorted according to
+    the variable list [fv]. *)
 
-val monitor: string -> formula -> unit
+val monitor: Db.schema -> string -> var list -> formula -> unit
 (** [monitor log f] monitors the log [log] with regard to the
     formula [f]. For each time point, it outputs, as soon as possible,
-    the tuples satisfying formula [f]. *)
-
-val test_filter: string -> formula -> unit
-val run_test: string -> formula -> unit
+    the tuples satisfying formula [f]. The tuples are sorted according to
+    the variable list [fv]. *)

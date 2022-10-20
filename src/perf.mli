@@ -46,3 +46,26 @@ val show_results: int -> MFOTL.timestamp -> unit
 val check_log: int -> MFOTL.timestamp -> unit
 val check_log_end: int -> MFOTL.timestamp -> unit
 val dump_stats: float -> unit
+
+val add_profile_group: int -> string -> unit
+val begin_profile: unit -> unit
+val profile_enter: int -> unit
+val profile_exit: int -> 'a -> 'a
+val end_profile: unit -> unit
+
+(* New profiling infrastructure *)
+
+val loc_main_loop: int
+val loc_read_tp: int
+val loc_eval_root: int
+
+val tag_eval_result: int
+val tag_extformula: int
+
+val profile_enabled: bool ref
+val enable_profile: string -> unit
+val finalize_profile: unit -> unit
+val profile_int: tag:int -> tp:int -> loc:int -> int -> unit
+val profile_enter: tp:int -> loc:int -> unit
+val profile_exit: tp:int -> loc:int -> unit
+val profile_string: tag:int -> string -> unit

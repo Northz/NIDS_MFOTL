@@ -52,9 +52,10 @@ type dbg =
   | Dbg_eval
   | Dbg_monitorable
   | Dbg_log
-  | Dbg_formula
   | Dbg_perf
   | Dbg_filter
+  | Dbg_parsing
+  | Dbg_typing
 
 val usr2: bool ref
 val alrm: bool ref
@@ -62,6 +63,7 @@ val alrm: bool ref
 
 val verbose: bool ref
 val checkf: bool ref
+val verified: bool ref
 val new_last_ts: bool ref
 val ignore_parse_errors: bool ref
 val stop_at_out_of_order_ts: bool ref
@@ -70,9 +72,12 @@ val stop_at_out_of_order_ts: bool ref
 val no_rw: bool ref
 val no_trigger: bool ref
 val stop_at_first_viol: bool ref
-(** Flags corresponding to the command-line options -verbose,
-    -check, -no_new_last_ts, -no_rw, and -stop_at_last_viol. *)
+  (** Flags corresponding to the command-line options: -verbose, -check,
+      -verified, -no_new_last_ts, -ignore_errors, -stop_at_out_of_order_ts,
+      -stop_at_last_viol. *)
 
+val str_cache: bool ref
+  (** Flag corresponding to the -strcache option. *)
 
 val split_debug: string -> unit
 (** [split_debug str] parses the string [str] into a list of debugging
@@ -194,10 +199,13 @@ val print_list2: ('a -> unit) -> 'a list -> unit
 val print_list3: ('a -> unit) -> 'a list -> unit
 val print_list4: ('a -> unit) -> 'a list -> unit
 val printnl_list: string -> ('a -> unit) -> 'a list -> unit
+val prerr_list: ('a -> unit) -> 'a list -> unit
+val prerrnl_list: string -> ('a -> unit) -> 'a list -> unit
 
 val print_queue: ('a -> unit) -> 'a Queue.t -> unit
 val print_mqueue: ('a -> unit) -> 'a Mqueue.t -> unit
-val print_dllist: ('a -> unit) -> 'a dllist -> unit
+val prerr_queue: ('a -> unit) -> 'a Queue.t -> unit
+val prerr_mqueue: ('a -> unit) -> 'a Mqueue.t -> unit
 
 
 (** Functions for reporting memory consumption: *)

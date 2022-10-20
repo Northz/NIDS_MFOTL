@@ -1,12 +1,16 @@
 *.o
 _build
-/monpoly.install
+/monpoly*.install
 
 *~
 \#*\#
 
 /thys/*/*.ocaml
+.DS_Store
+.vscode
+libmonpoly.install
 
+# trigger and release ignored files
 trigger-performance-evaluation/experiments*/
 trigger-performance-evaluation/asymptotic-experiments*/
 trigger-performance-evaluation/asymptotic-experiments-rewritten/

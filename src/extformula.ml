@@ -16,26 +16,7 @@ type ninfo = {mutable init: bool}
 type oainfo = {mutable ores: relation;
          oaauxrels: (timestamp * relation) Mqueue.t}
 
-
-type int_map = Intmap.int_map 
-
-
-type t_agg =
-  | C_aux of int 
-  | SA_aux of int * cst
-  | Med_aux of (int * int_map)
-
-type agg_once_state = {
-  tw_rels: (timestamp * (tuple * tuple * cst) list) Queue.t;
-  other_rels: (timestamp * relation) Queue.t;
-  mutable mset: (tuple, int) Hashtbl.t;
-  mutable hres: (tuple, t_agg) Hashtbl.t;
-}
-
-type aggMM_once_state = {
-  non_tw_rels: (timestamp * relation) Queue.t;
-  mutable tbl: (tuple, (timestamp * cst) Dllist.dllist) Hashtbl.t;
-}
+type agg_info = {op: agg_op; default: cst}
 
 type ozinfo = {mutable oztree: (int, relation) Sliding.stree;
                mutable ozlast: (int * timestamp * relation) Dllist.cell;
@@ -43,11 +24,8 @@ type ozinfo = {mutable oztree: (int, relation) Sliding.stree;
 type oinfo = {mutable otree: (timestamp, relation) Sliding.stree;
               mutable olast: (timestamp * relation) Dllist.cell;
               oauxrels: (timestamp * relation) Dllist.dllist}
-type sainfo = {mutable sres: relation;
-               mutable sarel2: relation option;
-               saauxrels: (timestamp * relation) Mqueue.t}
 type sinfo = {mutable srel2: relation option;
-              sauxrels: (timestamp * relation) Mqueue.t}
+              saux: Optimized_mtl.msaux}
 type ezinfo = {mutable ezlastev: Neval.cell;
                mutable eztree: (int, relation) Sliding.stree;
                mutable ezlast: (int * timestamp * relation) Dllist.cell;
@@ -71,343 +49,390 @@ type comp_one = relation -> relation
 type comp_two = relation -> relation -> relation
 
 type extformula =
-  | ERel of relation
-  | EPred of predicate * comp_one * info
-  | ELet of predicate * comp_one * extformula * extformula * linfo
-  | ENeg of extformula
-  | EAnd of comp_two * extformula * extformula * ainfo
-  | EOr of comp_two * extformula * extformula * ainfo
-  | EExists of comp_one * extformula
-  | EAggreg of comp_one * extformula
-  | EAggOnce of extformula * interval * agg_once_state *
-                (agg_once_state -> (tuple * tuple * cst) list -> unit) *
-                (agg_once_state -> relation -> (tuple * tuple * cst) list) *
-                (agg_once_state -> relation)
-  | EAggMMOnce of extformula * interval * aggMM_once_state *
-                  (aggMM_once_state -> timestamp -> unit) *
-                  (aggMM_once_state -> timestamp -> relation -> unit) *
-                  (aggMM_once_state -> relation)
-  | EPrev of interval * extformula * pinfo
-  | ENext of interval * extformula * ninfo
-  | ESinceA of comp_two * interval * extformula * extformula * sainfo
-  | ESince of comp_two * interval * extformula * extformula * sinfo
-  | EOnceA of interval * extformula * oainfo
-  | EOnceZ of interval * extformula * ozinfo
-  | EOnce of interval * extformula * oinfo
-  | ENUntil of comp_two * interval * extformula * extformula * uninfo
-  | EUntil of comp_two * interval * extformula * extformula * uinfo
-  | EEventuallyZ of interval * extformula * ezinfo
-  | EEventually of interval * extformula * einfo
+  | ERel of relation * int
+  | EPred of predicate * comp_one * info * int
+  | ELet of predicate * comp_one * extformula * extformula * linfo * int
+  | ENeg of extformula * int
+  | EAnd of comp_two * extformula * extformula * ainfo * int
+  | EOr of comp_two * extformula * extformula * ainfo * int
+  | EExists of comp_one * extformula * int
+  | EAggreg of agg_info * Aggreg.aggregator * extformula * int
+  | EAggOnce of agg_info * Aggreg.once_aggregator * extformula * int
+  | EPrev of interval * extformula * pinfo * int
+  | ENext of interval * extformula * ninfo * int
+  | ESince of extformula * extformula * sinfo * int
+  | EOnceA of interval * extformula * oainfo * int
+  | EOnceZ of interval * extformula * ozinfo * int
+  | EOnce of interval * extformula * oinfo * int
+  | ENUntil of comp_two * interval * extformula * extformula * uninfo * int
+  | EUntil of comp_two * interval * extformula * extformula * uinfo * int
+  | EEventuallyZ of interval * extformula * ezinfo * int
+  | EEventually of interval * extformula * einfo * int
 
 
   let rec contains_eventually = function
-  | ERel           (rel)                                      -> false
-  | EPred          (p, comp, inf)                             -> false
-  | ELet           (p, comp, f1, f2, inf)                     -> contains_eventually f1 || contains_eventually f2
-  | ENeg           (f1)                                       -> contains_eventually f1
-  | EAnd           (c, f1, f2, ainf)                          -> contains_eventually f1 || contains_eventually f2
-  | EOr            (c, f1, f2, ainf)                          -> contains_eventually f1 || contains_eventually f2
-  | EExists        (c, f1)                                    -> contains_eventually f1
-  | EAggreg        (c, f1)                                    -> contains_eventually f1
-  | EAggOnce       (f1, dt, agg, upd_old, upd_new, get_res)   -> contains_eventually f1
-  | EAggMMOnce     (f1, dt, aggMM, upd_old, upd_new, get_res) -> contains_eventually f1
-  | EPrev          (dt, f1, pinf)                             -> contains_eventually f1
-  | ENext          (dt, f1, ninf)                             -> contains_eventually f1
-  | ESinceA        (c2, dt, f1, f2, sainf)                    -> contains_eventually f1 || contains_eventually f2
-  | ESince         (c2, dt, f1, f2, sinf)                     -> contains_eventually f1 || contains_eventually f2
-  | EOnceA         (dt, f1, oainf)                            -> contains_eventually f1
-  | EOnceZ         (dt, f1, ozinf)                            -> contains_eventually f1
-  | EOnce          (dt, f1, oinf)                             -> contains_eventually f1
-  | ENUntil        (c1, dt, f1, f2, muninf)                   -> contains_eventually f1 || contains_eventually f2
-  | EUntil         (c1, dt, f1, f2, muinf)                    -> contains_eventually f1 || contains_eventually f2
-  | EEventuallyZ   (dt, f1, mezinf)                           -> true
-  | EEventually    (dt, f1, meinf)                            -> true
+  | ERel           (rel, _)                                      -> false
+  | EPred          (p, comp, inf, _)                             -> false
+  | ELet           (p, comp, f1, f2, inf, _)                     -> contains_eventually f1 || contains_eventually f2
+  | ENeg           (f1, _)                                       -> contains_eventually f1
+  | EAnd           (c, f1, f2, ainf, _)                          -> contains_eventually f1 || contains_eventually f2
+  | EOr            (c, f1, f2, ainf, _)                          -> contains_eventually f1 || contains_eventually f2
+  | EExists        (c, f1, _)                                    -> contains_eventually f1
+  | EAggreg        (_inf, _comp, f1, _)                          -> contains_eventually f1
+  | EAggOnce       (_inf, _state, f1, _)                         -> contains_eventually f1
+  | EPrev          (dt, f1, pinf, _)                             -> contains_eventually f1
+  | ENext          (dt, f1, ninf, _)                             -> contains_eventually f1
+  | ESince         (f1, f2, sinf, _)                             -> contains_eventually f1 || contains_eventually f2
+  | EOnceA         (dt, f1, oainf, _)                            -> contains_eventually f1
+  | EOnceZ         (dt, f1, ozinf, _)                            -> contains_eventually f1
+  | EOnce          (dt, f1, oinf, _)                             -> contains_eventually f1
+  | ENUntil        (c1, dt, f1, f2, muninf, _)                   -> contains_eventually f1 || contains_eventually f2
+  | EUntil         (c1, dt, f1, f2, muinf, _)                    -> contains_eventually f1 || contains_eventually f2
+  | EEventuallyZ   (dt, f1, mezinf, _)                           -> true
+  | EEventually    (dt, f1, meinf, _)                            -> true
 
 (* 
   Print functions used for debugging
  *)  
 
-let print_bool b =
+let prerr_bool b =
   if b then
-    print_string "true"
+    prerr_string "true"
   else
-    print_string "false"
+    prerr_string "false"
 
-let print_ainf str ainf =
-  print_string str;
+let prerr_ainf str ainf =
+  prerr_string str;
   match ainf with
-  | None -> print_string "None"
-  | Some rel -> Relation.print_rel "" rel
+  | None -> prerr_string "None"
+  | Some rel -> Relation.prerr_rel "" rel
 
-let print_auxel =
+let prerr_auxel =
   (fun (k,rel) ->
-      Printf.printf "(%d->" k;
-      Relation.print_rel "" rel;
-      print_string ")"
+      Printf.eprintf "(%d->" k;
+      Relation.prerr_rel "" rel;
+      prerr_string ")"
   )
-let print_sauxel =
+let prerr_sauxel =
   (fun (tsq,rel) ->
-      Printf.printf "(%s," (MFOTL.string_of_ts tsq);
-      Relation.print_rel "" rel;
-      print_string ")"
+      Printf.eprintf "(%s," (MFOTL.string_of_ts tsq);
+      Relation.prerr_rel "" rel;
+      prerr_string ")"
   )
 
-let print_rauxel (j,tsj,rrelsj) =
-  Printf.printf "(j=%d,tsj=" j;
-  MFOTL.print_ts tsj;
-  print_string ",r=";
-  Misc.print_dllist print_auxel rrelsj;
-  print_string "),"
+let prerr_rauxel (j,tsj,rrelsj) =
+  Printf.eprintf "(j=%d,tsj=" j;
+  MFOTL.prerr_ts tsj;
+  prerr_string ",r=";
+  Dllist.iter prerr_auxel rrelsj;
+  prerr_string "),"
 
 
-let print_aauxel (q,tsq,rel) =
-  Printf.printf "(%d,%s," q (MFOTL.string_of_ts tsq);
-  Relation.print_rel "" rel;
-  print_string ")"
+let prerr_aauxel (q,tsq,rel) =
+  Printf.eprintf "(%d,%s," q (MFOTL.string_of_ts tsq);
+  Relation.prerr_rel "" rel;
+  prerr_string ")"
 
-let print_inf inf =
-  Misc.print_queue print_aauxel inf
+let prerr_inf inf =
+  Misc.prerr_queue prerr_aauxel inf
 
-let print_predinf str inf =
-  print_string str;
-  print_inf inf;
-  print_newline()
+let prerr_predinf str inf =
+  prerr_string str;
+  prerr_inf inf;
+  prerr_newline()
 
-let print_linf str inf =
-  Printf.printf "%s{llast=%s}\n" str (Neval.string_of_cell inf.llast)
+let prerr_linf str inf =
+  Printf.eprintf "%s{llast=%s}\n" str (Neval.string_of_cell inf.llast)
 
-let print_ozinf str inf =
-  print_string str;
+let prerr_ozinf str inf =
+  prerr_string str;
   if inf.ozlast == Dllist.void then
-    print_string "ozlast = None; "
+    prerr_string "ozlast = None; "
   else
     begin
       let (j,_,_) = Dllist.get_data inf.ozlast in
-      Printf.printf "ozlast (index) = %d; " j
+      Printf.eprintf "ozlast (index) = %d; " j
     end;
-  Misc.print_dllist print_aauxel inf.ozauxrels;
-  Sliding.print_stree
+  Dllist.iter prerr_aauxel inf.ozauxrels;
+  Sliding.prerr_stree
     string_of_int
-    (Relation.print_rel " ztree = ")
+    (Relation.prerr_rel " ztree = ")
     "; ozinf.ztree = "
     inf.oztree
 
-let print_oinf str inf =
-  print_string (str ^ "{");
+let prerr_oinf str inf =
+  prerr_string (str ^ "{");
   if inf.olast == Dllist.void then
-    print_string "last = None; "
+    prerr_string "last = None; "
   else
     begin
       let (ts,_) = Dllist.get_data inf.olast in
-      Printf.printf "last (ts) = %s; " (MFOTL.string_of_ts ts)
+      Printf.eprintf "last (ts) = %s; " (MFOTL.string_of_ts ts)
     end;
-  print_string "oauxrels = ";
-  Misc.print_dllist print_sauxel inf.oauxrels;
-  Sliding.print_stree MFOTL.string_of_ts (Relation.print_rel "") ";\n oinf.tree = " inf.otree;
-  print_string "}"
+  prerr_string "oauxrels = ";
+  Dllist.iter prerr_sauxel inf.oauxrels;
+  Sliding.prerr_stree MFOTL.string_of_ts (Relation.prerr_rel "") ";\n oinf.tree = " inf.otree;
+  prerr_string "}"
 
 
-let print_sainf str inf =
-  print_string str;
-  print_ainf "{srel2 = " inf.sarel2;
-  Relation.print_rel "; sres=" inf.sres;
-  print_string "; sauxrels=";
-  Misc.print_mqueue print_sauxel inf.saauxrels;
-  print_string "}"
-
-let print_sinf str inf =
-  print_string str;
-  print_ainf "{srel2=" inf.srel2  ;
-  print_string ", sauxrels=";
-  Misc.print_mqueue print_sauxel inf.sauxrels;
-  print_string "}"
+let prerr_sinf str inf =
+  prerr_string str;
+  prerr_ainf "{srel2=" inf.srel2  ;
+  prerr_string ", saux=???";
+  (* TODO(JS): print saux *)
+  prerr_string "}"
 
 
-let print_uinf str inf =
-  Printf.printf "%s{first=%b; last=%s; " str inf.ufirst
+let prerr_uinf str inf =
+  Printf.eprintf "%s{first=%b; last=%s; " str inf.ufirst
     (Neval.string_of_cell inf.ulast);
-  Relation.print_rel "res=" inf.ures;
-  print_string "; raux=";
-  Misc.print_dllist print_rauxel inf.raux;
-  print_string "; saux=";
-  Misc.print_dllist print_auxel inf.saux;
-  print_endline "}"
+  Relation.prerr_rel "res=" inf.ures;
+  prerr_string "; raux=";
+  Dllist.iter prerr_rauxel inf.raux;
+  prerr_string "; saux=";
+  Dllist.iter prerr_auxel inf.saux;
+  prerr_endline "}"
 
-let print_uninf str uninf =
-  Printf.printf "%s{last1=%s; last2=%s; " str
+let prerr_uninf str uninf =
+  Printf.eprintf "%s{last1=%s; last2=%s; " str
     (Neval.string_of_cell uninf.last1) (Neval.string_of_cell uninf.last2);
-  print_string "listrel1=";
-  Misc.print_dllist print_aauxel uninf.listrel1;
-  print_string "; listrel2=";
-  Misc.print_dllist print_aauxel uninf.listrel2;
-  print_string "}\n"
+  prerr_string "listrel1=";
+  Dllist.iter prerr_aauxel uninf.listrel1;
+  prerr_string "; listrel2=";
+  Dllist.iter prerr_aauxel uninf.listrel2;
+  prerr_string "}\n"
 
-let print_ezinf str inf =
-  Printf.printf "%s{ezlastev=%s; " str (Neval.string_of_cell inf.ezlastev);
+let prerr_ezinf str inf =
+  Printf.eprintf "%s{ezlastev=%s; " str (Neval.string_of_cell inf.ezlastev);
   if inf.ezlast == Dllist.void then
-    print_string "ezlast = None; "
+    prerr_string "ezlast = None; "
   else
     begin
       let (_,ts,_) = Dllist.get_data inf.ezlast in
-      Printf.printf "elast (ts) = %s; " (MFOTL.string_of_ts ts)
+      Printf.eprintf "elast (ts) = %s; " (MFOTL.string_of_ts ts)
     end;
-  print_string "eauxrels=";
-  Misc.print_dllist print_aauxel inf.ezauxrels;
-  Sliding.print_stree string_of_int (Relation.print_rel "") "; ezinf.eztree = " inf.eztree;
-  print_string "}\n"
+  prerr_string "eauxrels=";
+  Dllist.iter prerr_aauxel inf.ezauxrels;
+  Sliding.prerr_stree string_of_int (Relation.prerr_rel "") "; ezinf.eztree = " inf.eztree;
+  prerr_string "}\n"
 
 
-let print_einf str inf =
-  Printf.printf "%s{elastev=%s; " str (Neval.string_of_cell inf.elastev);
+let prerr_einf str inf =
+  Printf.eprintf "%s{elastev=%s; " str (Neval.string_of_cell inf.elastev);
   if inf.elast == Dllist.void then
-    print_string "elast = None; "
+    prerr_string "elast = None; "
   else
     begin
       let ts = fst (Dllist.get_data inf.elast) in
-      Printf.printf "elast (ts) = %s; " (MFOTL.string_of_ts ts)
+      Printf.eprintf "elast (ts) = %s; " (MFOTL.string_of_ts ts)
     end;
-  print_string "eauxrels=";
-  Misc.print_dllist print_sauxel inf.eauxrels;
-  Sliding.print_stree MFOTL.string_of_ts (Relation.print_rel "") "; einf.etree = " inf.etree;
-  print_string "}"
+  prerr_string "eauxrels=";
+  Dllist.iter prerr_sauxel inf.eauxrels;
+  Sliding.prerr_stree MFOTL.string_of_ts (Relation.prerr_rel "") "; einf.etree = " inf.etree;
+  prerr_string "}"
 
-let print_einfn str inf =
-  print_einf str inf;
-  print_newline()
+let prerr_einfn str inf =
+  prerr_einf str inf;
+  prerr_newline()
 
 
-let print_extf str ff =
-  let print_spaces d =
-    for i = 1 to d do print_string " " done
+let prerr_extf str ff =
+  let prerr_spaces d =
+    for i = 1 to d do prerr_string " " done
   in
-  let rec print_f_rec d f =
-    print_spaces d;
+  let rec prerr_f_rec d f =
+    prerr_spaces d;
     (match f with
-      | ERel _ ->
-        print_string "ERel\n";
+      | ERel (_, loc) ->
+        prerr_string "ERel\n";
 
-      | EPred (p,_,inf) ->
-        Predicate.print_predicate p;
-        print_string ": inf=";
-        print_inf inf;
-        print_string "\n"
+      | EPred (p,_,inf,loc) ->
+        Predicate.prerr_predicate p;
+        prerr_string ": inf=";
+        prerr_inf inf;
+        prerr_string "\n"
 
       | _ ->
         (match f with
-        | ENeg f ->
-          print_string "NOT\n";
-          print_f_rec (d+1) f;
+        | ENeg (f,loc) ->
+          prerr_string "NOT\n";
+          prerr_f_rec (d+1) f;
 
-        | EExists (_,f) ->
-          print_string "EXISTS\n";
-          print_f_rec (d+1) f;
+        | EExists (_,f,loc) ->
+          prerr_string "EXISTS\n";
+          prerr_f_rec (d+1) f;
 
-        | EPrev (intv,f,pinf) ->
-          print_string "PREVIOUS";
-          MFOTL.print_interval intv;
-          print_string ": plast=";
-          print_string (Neval.string_of_cell pinf.plast);
-          print_string "\n";
-          print_f_rec (d+1) f
+        | EPrev (intv,f,pinf,loc) ->
+          prerr_string "PREVIOUS";
+          MFOTL.prerr_interval intv;
+          prerr_string ": plast=";
+          prerr_string (Neval.string_of_cell pinf.plast);
+          prerr_string "\n";
+          prerr_f_rec (d+1) f
 
-        | ENext (intv,f,ninf) ->
-          print_string "NEXT";
-          MFOTL.print_interval intv;
-          print_string ": init=";
-          print_bool ninf.init;
-          print_string "\n";
-          print_f_rec (d+1) f
+        | ENext (intv,f,ninf,loc) ->
+          prerr_string "NEXT";
+          MFOTL.prerr_interval intv;
+          prerr_string ": init=";
+          prerr_bool ninf.init;
+          prerr_string "\n";
+          prerr_f_rec (d+1) f
 
-        | EOnceA (intv,f,inf) ->
-          print_string "ONCE";
-          MFOTL.print_interval intv;
-          Relation.print_rel ": rel = " inf.ores;
-          print_string "; oaauxrels = ";
-          Misc.print_mqueue print_sauxel inf.oaauxrels;
-          print_string "\n";
-          print_f_rec (d+1) f
+        | EOnceA (intv,f,inf,loc) ->
+          prerr_string "ONCE";
+          MFOTL.prerr_interval intv;
+          Relation.prerr_rel ": rel = " inf.ores;
+          prerr_string "; oaauxrels = ";
+          Misc.prerr_mqueue prerr_sauxel inf.oaauxrels;
+          prerr_string "\n";
+          prerr_f_rec (d+1) f
 
-        | EOnceZ (intv,f,oinf) ->
-          print_string "ONCE";
-          MFOTL.print_interval intv;
-          print_ozinf ": ozinf=" oinf;
-          print_f_rec (d+1) f
+        | EOnceZ (intv,f,oinf,loc) ->
+          prerr_string "ONCE";
+          MFOTL.prerr_interval intv;
+          prerr_ozinf ": ozinf=" oinf;
+          prerr_f_rec (d+1) f
 
-        | EOnce (intv,f,oinf) ->
-          print_string "ONCE";
-          MFOTL.print_interval intv;
-          print_oinf ": oinf = " oinf;
-          print_string "\n";
-          print_f_rec (d+1) f
+        | EOnce (intv,f,oinf,loc) ->
+          prerr_string "ONCE";
+          MFOTL.prerr_interval intv;
+          prerr_oinf ": oinf = " oinf;
+          prerr_string "\n";
+          prerr_f_rec (d+1) f
 
-        | EEventuallyZ (intv,f,einf) ->
-          print_string "EVENTUALLY";
-          MFOTL.print_interval intv;
-          print_ezinf ": ezinf=" einf;
-          print_f_rec (d+1) f
+        | EEventuallyZ (intv,f,einf,loc) ->
+          prerr_string "EVENTUALLY";
+          MFOTL.prerr_interval intv;
+          prerr_ezinf ": ezinf=" einf;
+          prerr_f_rec (d+1) f
 
-        | EEventually (intv,f,einf) ->
-          print_string "EVENTUALLY";
-          MFOTL.print_interval intv;
-          print_einf ": einf=" einf;
-          print_string "\n";
-          print_f_rec (d+1) f
+        | EEventually (intv,f,einf,loc) ->
+          prerr_string "EVENTUALLY";
+          MFOTL.prerr_interval intv;
+          prerr_einf ": einf=" einf;
+          prerr_string "\n";
+          prerr_f_rec (d+1) f
+
+        | EAggreg (info,_,f,loc) -> 
+          prerr_string (string_of_agg_op info.op);
+          prerr_string "_";
+          prerr_string (string_of_cst info.default);
+          prerr_string "\n";
+          prerr_f_rec (d+1) f
+
+        | EAggOnce (info,aggr,f,loc) -> 
+            prerr_string (string_of_agg_op info.op);
+            prerr_string "ONCE";
+            prerr_string "_";
+            prerr_string (string_of_cst info.default);
+            prerr_string " ";
+            Aggreg.prerr_state aggr;
+            prerr_string "\n";
+            prerr_f_rec (d+1) f
 
         | _ ->
           (match f with
-            | ELet (p,_,f1,f2,linf) ->
-              print_string "LET: ";
-              Predicate.print_predicate p;
-              print_linf " linf=" linf;
-              print_f_rec (d+1) f1;
-              print_f_rec (d+1) f2
+            | ELet (p,_,f1,f2,linf,loc) ->
+              prerr_string "LET: ";
+              Predicate.prerr_predicate p;
+              prerr_linf " linf=" linf;
+              prerr_f_rec (d+1) f1;
+              prerr_f_rec (d+1) f2
 
-            | EAnd (_,f1,f2,ainf) ->
-              print_ainf "AND: ainf=" ainf.arel;
-              print_string "\n";
-              print_f_rec (d+1) f1;
-              print_f_rec (d+1) f2
+            | EAnd (_,f1,f2,ainf,loc) ->
+              prerr_ainf "AND: ainf=" ainf.arel;
+              prerr_string "\n";
+              prerr_f_rec (d+1) f1;
+              prerr_f_rec (d+1) f2
 
-            | EOr (_,f1,f2,ainf) ->
-              print_ainf "OR: ainf=" ainf.arel;
-              print_string "\n";
-              print_f_rec (d+1) f1;
-              print_f_rec (d+1) f2
+            | EOr (_,f1,f2,ainf,loc) ->
+              prerr_ainf "OR: ainf=" ainf.arel;
+              prerr_string "\n";
+              prerr_f_rec (d+1) f1;
+              prerr_f_rec (d+1) f2
 
-            | ESinceA (_,intv,f1,f2,sinf) ->
-              print_string "SINCE";
-              MFOTL.print_interval intv;
-              print_sainf ": sinf = " sinf;
-              print_string "\n";
-              print_f_rec (d+1) f1;
-              print_f_rec (d+1) f2
+            | ESince (f1,f2,sinf,loc) ->
+              prerr_string "SINCE[???]"; (*TODO(JS): print interval*)
+              prerr_sinf ": sinf=" sinf;
+              prerr_string "\n";
+              prerr_f_rec (d+1) f1;
+              prerr_f_rec (d+1) f2
 
-            | ESince (_,intv,f1,f2,sinf) ->
-              print_string "SINCE";
-              MFOTL.print_interval intv;
-              print_sinf ": sinf=" sinf;
-              print_string "\n";
-              print_f_rec (d+1) f1;
-              print_f_rec (d+1) f2
+            | EUntil (_,intv,f1,f2,uinf,loc) ->
+              prerr_string "UNTIL";
+              MFOTL.prerr_interval intv;
+              prerr_uinf ": uinf=" uinf;
+              prerr_f_rec (d+1) f1;
+              prerr_f_rec (d+1) f2
 
-            | EUntil (_,intv,f1,f2,uinf) ->
-              print_string "UNTIL";
-              MFOTL.print_interval intv;
-              print_uinf ": uinf=" uinf;
-              print_f_rec (d+1) f1;
-              print_f_rec (d+1) f2
+            | ENUntil (_,intv,f1,f2,uninf,loc) ->
+              prerr_string "NUNTIL";
+              MFOTL.prerr_interval intv;
+              prerr_uninf ": uninf=" uninf;
+              prerr_f_rec (d+1) f1;
+              prerr_f_rec (d+1) f2
 
-            | ENUntil (_,intv,f1,f2,uninf) ->
-              print_string "NUNTIL";
-              MFOTL.print_interval intv;
-              print_uninf ": uninf=" uninf;
-              print_f_rec (d+1) f1;
-              print_f_rec (d+1) f2
-
-            | _ -> failwith "[print_formula] internal error"
+            | _ -> failwith "[prerr_formula] internal error"
           );
         );
     );
   in
-  print_string str;
-  print_f_rec 0 ff  
+  prerr_string str;
+  prerr_f_rec 0 ff
+
+let pp_print_comma ppf () =
+  Format.pp_print_string ppf ",";
+  Format.pp_print_space ppf ()
+
+let pp_print_term ppf t = Format.pp_print_string ppf (Predicate.string_of_term t)
+
+let rec pp_structure ppf ff =
+  let open Format in
+  let pp_unary name loc f1 =
+    fprintf ppf "@[(%d:@;<1 2>%s@;<1 2>%a@,)@]" loc name pp_structure f1
+  in
+  let pp_binary name loc f1 f2 =
+    fprintf ppf "@[(%d:@;<1 2>%s@;<1 2>@[<hv>%a@ %a@]@,)@]"
+      loc
+      name
+      pp_structure f1
+      pp_structure f2
+  in
+  match ff with
+  | ERel (rel, loc) ->
+      if Relation.is_empty rel then
+        fprintf ppf "@[<h>(%d:@ FALSE)@]" loc
+      else
+        fprintf ppf "@[<h>(%d:@ TRUE)@]" loc
+  | EPred ((p, _, args), _, _, loc) ->
+      fprintf ppf "@[<h>(%d:@ @[<hov 2>%s(@,%a)@])@]"
+        loc
+        p
+        (pp_print_list ~pp_sep:pp_print_comma pp_print_term) args
+  | ELet ((p, _, args), _, f1, f2, _, loc) ->
+      fprintf ppf "@[<hv>@[<hov 4>%d: LET@ %s(@,%a)@ =@]@;<1 2>%a@ IN@ %a@]"
+        loc
+        p
+        (pp_print_list ~pp_sep:pp_print_comma pp_print_term) args
+        pp_structure f1
+        pp_structure f2
+  | ENeg (f1, loc) -> pp_unary "NEG" loc f1
+  | EAnd (_, f1, f2, _, loc) -> pp_binary "AND" loc f1 f2
+  | EOr (_, f1, f2, _, loc) -> pp_binary "OR" loc f1 f2
+  | EExists (_, f1, loc) -> pp_unary "EXISTS" loc f1
+  | EAggreg (_, _, f1, loc) -> pp_unary "AGGREG" loc f1
+  | EAggOnce (_, _, f1, loc) -> pp_unary "AGG ONCE" loc f1
+  | EPrev (_, f1, _, loc) -> pp_unary "PREV" loc f1
+  | ENext (_, f1, _, loc) -> pp_unary "NEXT" loc f1
+  | ESince (f1, f2, _, loc) -> pp_binary "SINCE" loc f1 f2
+  | EOnceA (_, f1, _, loc) -> pp_unary "ONCE(A)" loc f1
+  | EOnceZ (_, f1, _, loc) -> pp_unary "ONCE(Z)" loc f1
+  | EOnce (_, f1, _, loc) -> pp_unary "ONCE" loc f1
+  | ENUntil (_, _, f1, f2, _, loc) -> pp_binary "NUNTIL" loc f1 f2
+  | EUntil (_, _, f1, f2, _, loc) -> pp_binary "UNTIL" loc f1 f2
+  | EEventuallyZ (_, f1, _, loc) -> pp_unary "EVENTUALLY(Z)" loc f1
+  | EEventually (_, f1, _, loc) -> pp_unary "EVENTUALLY" loc f1
+
+let extf_structure ff =
+  pp_structure Format.str_formatter ff;
+  Format.flush_str_formatter ()

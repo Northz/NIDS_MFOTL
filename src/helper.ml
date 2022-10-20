@@ -134,15 +134,25 @@ let get_new_elements l last cond f =
       else
         [], last
 
+let rec is_enum_list n = function
+  | [] -> true
+  | x::l -> x = n && is_enum_list (n + 1) l
+
 (** This function displays the "results" (if any) obtained after
     analyzing event index [i]. The results are those tuples satisfying
     the formula for some index [q<=i]. *)
-let rec show_results closed i q tsq rel =
-  if !Misc.stop_at_first_viol && Relation.cardinal rel > 1 then
-    let rel2 = Relation.singleton (Relation.choose rel) in
-    show_results closed i q tsq rel2
-  else if !Misc.verbose then
-    if closed then
+let show_results posl i q tsq rel =
+  let rel =
+    if is_enum_list 0 posl then rel else
+      Relation.map (Tuple.projections posl) rel
+  in
+  let rel =
+    if !Misc.stop_at_first_viol && Relation.cardinal rel > 1 then
+      Relation.singleton (Relation.choose rel)
+    else rel
+  in
+  if !Misc.verbose then
+    if posl = [] then
       Printf.printf "@%s (time point %d): %b\n%!"
         (MFOTL.string_of_ts tsq) q (rel <> Relation.empty)
     else
@@ -155,7 +165,7 @@ let rec show_results closed i q tsq rel =
       if Misc.debugging Dbg_perf then
         Perf.show_results q tsq;
       if rel <> Relation.empty then (* formula satisfied *)
-        if closed then (* no free variables *)
+        if posl = [] then (* no free variables *)
           Printf.printf "@%s (time point %d): true\n%!" (MFOTL.string_of_ts tsq) q
         else (* free variables *)
           begin

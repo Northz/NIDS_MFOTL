@@ -490,9 +490,9 @@ lemma (in fo_spec) adequate_verdicts_collapse: "adequate \<sigma> \<Longrightarr
   verdicts (collapse \<sigma>) = apfst (collapse_map \<sigma>) ` verdicts (forget_idx \<sigma>)"
   unfolding adequate_def verdicts_def by (auto intro: rev_image_eqI)
 
-lemma (in cosafety_monitor) adequate_verdicts_collapse_M: "adequate \<sigma> \<Longrightarrow>
+lemma (in cosafety_monitor) adequate_verdicts_collapse_M: "traces = UNIV \<Longrightarrow> adequate \<sigma> \<Longrightarrow>
   M_limit (collapse \<sigma>) = apfst (collapse_map \<sigma>) ` M_limit (forget_idx \<sigma>)"
-  unfolding M_limit_eq using adequate_verdicts_collapse .
+  using adequate_verdicts_collapse by (simp add: M_limit_eq)
 
 subsubsection \<open>Adding indexes\<close>
 
@@ -1258,9 +1258,9 @@ lemma mod_nat_cancel_left_add:
   shows "(c - b mod c + (a + b) mod c) mod c = a mod c"
 proof -
   have "(c - b mod c + (a + b) mod c) mod c = (c - b mod c + a mod c + b mod c) mod c"
-    by (metis (no_types, hide_lams) add.commute group_cancel.add2 mod_add_left_eq)
+    by (metis (no_types, opaque_lifting) add.commute group_cancel.add2 mod_add_left_eq)
   also have "\<dots> = ((c - b mod c + b mod c) mod c + a mod c) mod c"
-    by (metis (no_types, hide_lams) add.commute group_cancel.add2 mod_add_eq mod_add_right_eq)
+    by (metis (no_types, opaque_lifting) add.commute group_cancel.add2 mod_add_eq mod_add_right_eq)
   finally show ?thesis
     using assms by (simp add: mod_nat_cancel_left)
 qed
@@ -1883,7 +1883,7 @@ lemma sset_ssorted_ge_shd: "x \<in> sset s \<Longrightarrow> ssorted (smap f s) 
 
 lemma set_sorted_distinct_gr: "y \<in> set xs \<Longrightarrow> sorted (map f (x # xs)) \<Longrightarrow>
   distinct (map f (x # xs)) \<Longrightarrow> f x < f y"
-  by (smt distinct.simps(2) image_eqI less_le_trans list.simps(9) not_less_iff_gr_or_eq set_map sorted.simps(2))
+  by (metis image_eqI image_set list.simps(9) strict_sorted_iff strict_sorted_simps(2))
 
 lemma sorted_distinct_prefix_lemma: "ssorted (smap f s) \<Longrightarrow> sdistinct (smap f s) \<Longrightarrow>
   sorted (map f xs) \<Longrightarrow> distinct (map f xs) \<Longrightarrow>
@@ -2479,7 +2479,7 @@ definition multi_source_monitor :: "'b list set list \<Rightarrow> 'a wtrace lis
     determ (map2 (\<lambda>X. verdicts \<circ>> verdict_filter X) Xs \<circ>> (Union \<circ> set))"
 
 theorem multi_source_monitor_eq:
-  assumes "\<Union>(set Xs) = UNIV" and "wpartitionp \<sigma> n ps"
+  assumes "\<Union>(set Xs) = UNIV" and "wpartitionp \<sigma> n ps" and [simp]: "traces = UNIV"
   shows "multi_source_monitor Xs ps = {verdicts (collapse \<sigma>)}"
 proof -
   let ?Xs' = "map relevant_events Xs"
@@ -2497,14 +2497,15 @@ end
 locale multi_source = sliceable_fo_spec + cosafety_monitor
 begin
 
-definition multi_source_monitor_M :: "'a list set list \<Rightarrow> 'b wtrace list \<Rightarrow> (nat \<times> 'a tuple) set set" where
+definition multi_source_monitor_M :: "'b list set list \<Rightarrow> 'a wtrace list \<Rightarrow> (nat \<times> 'b tuple) set set" where
   "multi_source_monitor_M Xs = multi_source_slicer (map relevant_events Xs) \<circ>\<then>
     determ (map2 (\<lambda>X. M_limit \<circ>> verdict_filter X) Xs \<circ>> (Union \<circ> set))"
 
-corollary multi_source_monitor_eq_alt: "\<Union>(set Xs) = UNIV \<Longrightarrow> wpartitionp_alt \<sigma> n ps \<Longrightarrow>
+corollary multi_source_monitor_eq_alt: "\<Union>(set Xs) = UNIV \<Longrightarrow> wpartitionp_alt \<sigma> n ps \<Longrightarrow> traces = UNIV \<Longrightarrow>
   multi_source_monitor_M Xs (wpartitionp_alt.ps' ps) = {M_limit (collapse \<sigma>)}"
-  unfolding M_limit_eq multi_source_monitor_M_def
-  using multi_source_monitor_eq[OF _ wpartitionp_alt.wpartitionp_ps', unfolded multi_source_monitor_def] .
+  unfolding multi_source_monitor_M_def
+  using multi_source_monitor_eq[OF _ wpartitionp_alt.wpartitionp_ps', unfolded multi_source_monitor_def]
+  by (simp add: M_limit_eq)
 
 end
 

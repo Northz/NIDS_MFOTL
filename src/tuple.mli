@@ -80,6 +80,10 @@ val add_first: tuple -> cst -> tuple
   (** [add_first t v] builds a new tuple by adding the value [v] at the
       beginning of [t] *)
 
+val insert: int -> tuple -> cst -> tuple
+(** [insert pos t v] builds a new tuple by inserting the value [v] at position
+    [pos] in [t] *)
+
 (* val duplicate_pos: int -> tuple -> tuple *)
 (*   (\** [duplicate_pos pos t] builds a new tuple by adding the value at *)
 (*       position [pos] in [t] to the end of [t]. *\) *)
@@ -120,7 +124,7 @@ val satisfiesp: term list -> tuple -> bool * tuple
 
 
 val get_filter: (var list) -> formula -> tuple -> bool
-val get_tf: (var list) -> formula -> tuple -> tuple
+val get_tf: (var list) -> formula -> tuple -> tuple option
 
 
 exception Not_joinable
@@ -132,9 +136,9 @@ val join: (int * cst) list -> tuple -> tuple -> tuple
       [t1] and [t2]. The list [posvall] consists of pairs of positions
       and values, indicating what the values at the corresponding
       positions in [t2] should be. In other words, if [(pos,val)]
-      appears in [posvall], then [t] should have value [val] at
+      appears in [posvall], then [t2] should have value [val] at
       position [pos]. If this is not the case then the {!Not_joinable}
-      exception is raised. The result is obtained by appending [t1] to
+      exception is raised. The result is obtained by prepending [t1] to
       the what remains of [t2] after ignoring the values at the
       positions appearing in [posvall].
       (The list of positions in [posvall] is assumed to be ordered
@@ -145,18 +149,11 @@ val join: (int * cst) list -> tuple -> tuple -> tuple
       [["a";"c";"b";"d"]].
   *)
 
-val join_rev: int list -> (int * cst) list -> tuple -> tuple -> tuple
+val join_unchecked: (int * int) list -> tuple -> tuple -> tuple
 
 (** Pretty-printing functions: *)
 
 val string_of_tuple: tuple -> string
 (* val output_tuple: out_channel -> tuple -> unit *)
 val print_tuple: tuple -> unit
-
-
-
-
-
-
-
-
+val prerr_tuple: tuple -> unit

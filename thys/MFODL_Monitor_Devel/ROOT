@@ -1,19 +1,28 @@
 chapter AFP
 
 session MFODL_Monitor_Devel (AFP) = MFOTL_Monitor_Devel +
-  options [timeout = 1200]
   sessions
     IEEE_Floating_Point
     Generic_Join_Devel
+    "HOL-Data_Structures"
   theories
     Code_Double
     Event_Data
     Regex
     Formula
+    Typing
     Optimized_Join
     Monitor
     Optimized_MTL
+    Order_Statistic_Tree
+    Tree_List
+    Optimized_Agg
+    Optimized_Agg_Temporal
+    Cluster
+    Mapping_Code
+    Wf_Table
     Monitor_Impl
+    Sat
   theories [document=false]
     Monitor_Code
   document_files

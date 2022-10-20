@@ -1,36 +1,24 @@
-FROM ocaml/opam2:ubuntu-18.04
+FROM ocaml/opam:alpine-3.15-ocaml-4.13-flambda AS build
 
-RUN sudo apt-get update \
-    && sudo apt-get install -y \
-    subversion \
+RUN sudo apk add --no-cache \
+    gmp-dev \
     m4 \
-    libgmp-dev \
-    && sudo rm -rf /var/lib/apt/lists/* 
+    && opam update
 
-# RUN opam init -y \
-RUN opam update \
-    && opam switch create 4.06.1 \
-    && opam install \
-       ocamlfind \
-       qcheck \
-       zarith \
-       num
+COPY --chown=opam:opam . build
+WORKDIR build
 
-# RUN useradd -ms /bin/bash monply
-USER opam
-ENV WDIR /home/opam/monpoly
-RUN mkdir -p ${WDIR}
-WORKDIR ${WDIR}
+RUN opam install -y --deps-only --ignore-constraints-on=libmonpoly . \
+    && eval $(opam env) \
+    && dune build --profile=release @install @runtest \
+    && dune install --prefix=/home/opam/dist --relocatable monpoly monpoly-tools
 
-ADD . ${WDIR}
-RUN sudo chown -R opam:opam . \
-    && eval `opam config env` \
-    && make \
-    && make log_generator \
-    && make fma_generator \
-    && sudo cp ./monpoly /usr/local/bin/monpoly \
-    && sudo cp ./verimon /usr/local/bin/verimon \
-    && sudo cp ./tools/gen_log /usr/local/bin/gen_log \
-    && sudo cp ./tools/gen_fma /usr/local/bin/gen_fma \
-    && make clean 
+FROM alpine:3.15
 
+RUN apk add --no-cache gmp
+
+COPY --from=build /home/opam/dist /usr/local/
+
+ENV WDIR /work
+WORKDIR $WDIR
+ENTRYPOINT ["monpoly"]
