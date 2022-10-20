@@ -6707,6 +6707,24 @@ lemma table_eq_rel: "is_simple_eq t1 t2 \<Longrightarrow>
   table n (Formula.fv_trm t1 \<union> Formula.fv_trm t2) (eq_rel n t1 t2)"
   by (cases t1; cases t2; simp add: is_simple_eq_def)
 
+lemma wf_tuple_in_simple_eq_rel:
+  "is_simple_eq t1 t2 \<Longrightarrow> v \<in> eq_rel n t1 t2 \<Longrightarrow> wf_tuple n (fv_trm t1 \<union> fv_trm t2) v"
+  by (auto simp: is_simple_eq_def trm.is_Const_def trm.is_Var_def split: if_splits)
+
+lemma in_eq_rel_iff: "\<forall>x\<in>fv_trm t1. x < n \<Longrightarrow> \<forall>x\<in>fv_trm t2. x < n \<Longrightarrow> is_simple_eq t1 t2 
+  \<Longrightarrow> (v \<in> eq_rel n t1 t2) 
+    \<longleftrightarrow> (Formula.eval_trm (map the v) t1 = Formula.eval_trm (map the v) t2  
+      \<and> wf_tuple n (fv_trm t1 \<union> fv_trm t2) v)"
+  by (intro iffI conjI eq_rel_eval_trm wf_tuple_in_simple_eq_rel; clarsimp?)
+    (auto intro: in_eq_rel)
+
+lemma qtable_eq_relI: "\<forall>x\<in>fv_trm t1. x < n \<Longrightarrow> \<forall>x\<in>fv_trm t2. x < n \<Longrightarrow> is_simple_eq t1 t2 
+  \<Longrightarrow> qtable n (fv_trm t1 \<union> fv_trm t2) (mem_restr U) 
+    (\<lambda>v. Formula.eval_trm (map the v) t1 = Formula.eval_trm (map the v) t2) (eq_rel n t1 t2)"
+  unfolding qtable_iff
+  using in_eq_rel_iff[of t1 n t2]
+  by (auto simp: table_def)
+
 lemma wf_tuple_Suc_fviD: "wf_tuple (Suc n) (Formula.fvi b \<phi>) v \<Longrightarrow> wf_tuple n (Formula.fvi (Suc b) \<phi>) (tl v)"
   unfolding wf_tuple_def by (simp add: fvi_Suc nth_tl)
 
@@ -10450,6 +10468,60 @@ lemma pred_mode_of_eq_simps[simp]:
   "(pred_mode_of n ts = Match) \<longleftrightarrow> \<not> is_copy_pattern n ts \<and> \<not> is_simple_pattern ts 0"
   unfolding pred_mode_of_def by simp_all
 
+lemma qtable_copy_pattern:
+  assumes "X = fv (Formula.Pred p ts)" and "is_copy_pattern n ts"
+  shows "V (p, length ts) = Some P \<Longrightarrow> 
+  R = map Some ` {v. length v = length ts \<and> the (V (p, length ts)) v i} \<Longrightarrow>
+  qtable n X (mem_restr UU) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (Formula.Pred p ts)) R"
+    and "V (p, length ts) = None \<Longrightarrow> 
+  R = map Some ` {v. (p, v) \<in> \<Gamma> \<sigma> i \<and> length v = length ts}  \<Longrightarrow>
+  qtable n X (mem_restr UU) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (Formula.Pred p ts)) R"
+  using assms
+  by (auto simp: image_iff table_def
+      wf_tuple_def is_copy_pattern_def comp_def map_nth 
+      intro!: qtableI exI[of _ "map ((!) (map the _)) [0..<length _]"] nth_equalityI)
+
+lemma qtable_simple_pattern:
+  assumes "X = fv (Formula.Pred p ts)" and "\<forall>x\<in>X. x < n" 
+    and "is_simple_pattern ts 0"
+  shows "V (p, length ts) = Some P \<Longrightarrow> 
+  R = simple_match n 0 ts ` (map Some ` {v. length v = length ts \<and> P v i}) \<Longrightarrow>
+  qtable n X (mem_restr UU) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (Formula.Pred p ts)) R"
+    and "V (p, length ts) = None \<Longrightarrow> 
+  R = simple_match n 0 ts ` (map Some ` {v. (p, v) \<in> \<Gamma> \<sigma> i \<and> length v = length ts}) \<Longrightarrow> 
+  qtable n X (mem_restr UU) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (Formula.Pred p ts)) R"
+  using assms
+  by (auto simp: image_iff table_def
+      eval_trm_simple_match simple_match_eval_trm wf_tuple_simple_match
+      intro!: qtableI exI[of _ "map (eval_trm_option _) ts"])
+
+lemma qtable_no_pattern:
+  assumes "X = fv (Formula.Pred p ts)" and "\<forall>x\<in>X. x < n" and "\<forall>t\<in>set ts. trm.is_Var t \<or> trm.is_Const t"
+    and "\<not> is_copy_pattern n ts" and "\<not> is_simple_pattern ts 0"
+  shows "V (p, length ts) = Some P \<Longrightarrow> 
+  R = (\<lambda>x. tabulate x 0 n) ` Option.these (match ts ` (map Some ` {v. length v = length ts \<and> P v i})) \<Longrightarrow>
+  qtable n X (mem_restr UU) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (Formula.Pred p ts)) R"
+    and "V (p, length ts) = None \<Longrightarrow> 
+  R = (\<lambda>x. tabulate x 0 n) ` Option.these (match ts ` (map Some ` {v. (p, v) \<in> \<Gamma> \<sigma> i \<and> length v = length ts})) \<Longrightarrow>
+  qtable n X (mem_restr UU) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (Formula.Pred p ts)) R"
+  using assms
+proof (auto intro!: qtableI, goal_cases)
+  case (3 v)
+  then show ?case 
+    using ex_match[of n ts v] 
+    by (auto simp: in_these_eq image_iff
+        intro!: bexI[where P="\<lambda>x. _ = tabulate x 0 n"])
+      (metis length_map list.map_comp)
+next
+  case (6 v)
+  then show ?case 
+    using ex_match[of n ts v] 
+    by (auto simp: in_these_eq image_iff
+        intro!: bexI[where P="\<lambda>x. _ = tabulate x 0 n"])
+      (metis length_map list.map_comp)
+qed (auto simp: table_def in_these_eq match_eval_trm image_iff
+        elim!: match_wf_tuple[of _ ts "(map Some _)" n])
+
 definition "Untilp pos \<phi> I \<psi> \<equiv> Formula.Until (if pos then \<phi> else Formula.Neg \<phi>) I \<psi>"
 
 lemma (in maux) update_until':
@@ -10673,6 +10745,23 @@ lemma qtable_eval_mtrm:
   using assms unfolding table_def Formula.is_Var_def Formula.is_Const_def
   by (auto split: if_splits intro!: qtable_singleton_table qtable_unit_table qtable_empty)
 
+lemma formula_of_constraint_neq_release_safe_bdd: 
+  "formula_of_constraint (t1, b, op, t2) \<noteq> release_safe_bounded \<phi>' I \<psi>'"
+  by (induction rule: formula_of_constraint.induct)
+    (auto simp: release_safe_bounded_def)
+
+lemma (in maux) wf_mformula_and_release_safe_bddE:
+  "wf_mformula \<sigma> j P V n R \<phi>\<^sub>M (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>') 
+  \<Longrightarrow> \<exists>\<phi>\<^sub>M' \<psi>\<^sub>M' buf1 buf2. \<phi>\<^sub>M = MOr \<phi>\<^sub>M' \<psi>\<^sub>M' (buf1, buf2)"
+  by (erule wf_mformula.cases; clarsimp simp: and_release_safe_bounded_def
+      packagg_def split: option.splits if_splits)
+
+lemma (in maux) wf_mformula_and_release_safe0E:
+  "wf_mformula \<sigma> j P V n R \<phi>\<^sub>M (release_safe_0 \<phi>' I \<psi>') 
+  \<Longrightarrow> \<exists>\<phi>\<^sub>M' \<psi>\<^sub>M' buf1 buf2. \<phi>\<^sub>M = MOr \<phi>\<^sub>M' \<psi>\<^sub>M' (buf1, buf2)"
+  by (erule wf_mformula.cases; clarsimp simp: release_safe_0_def
+      packagg_def split: option.splits if_splits)
+
 lemma (in maux) meval:
   assumes "wf_mformula \<sigma> j P V n R \<phi> \<phi>'" "wf_envs S \<sigma> j \<delta> P P' V db" "S, E \<turnstile> \<phi>'"
   shows "case meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi> of (xs, \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> (j + \<delta>) P' V n R \<phi>\<^sub>n \<phi>' \<and>
@@ -10680,323 +10769,97 @@ lemma (in maux) meval:
     [progress \<sigma> P \<phi>' j..<progress \<sigma> P' \<phi>' (j + \<delta>)] xs"
   using assms
 proof (induction \<phi> arbitrary: db P P' V n R \<phi>' j \<delta> S E rule: mformula_induct)
-  case (MRel rel)
-  then show ?case
+  case (MRel rel) (* other branches have more cases *)
+  let ?case1 = "\<lambda>t\<^sub>1 t\<^sub>2. \<phi>' = (Formula.Eq t\<^sub>1 t\<^sub>2) \<and> rel = eq_rel n t\<^sub>1 t\<^sub>2 \<and> 
+    is_simple_eq t\<^sub>1 t\<^sub>2 \<and> (\<forall>x\<in>fv_trm t\<^sub>1. x < n) \<and> (\<forall>x\<in>fv_trm t\<^sub>2. x < n)" 
+  obtain t1 and t2 where cases: "?case1 t1 t2"
+    using MRel(1) 
     by (cases rule: wf_mformula.cases)
-      (auto simp add: ball_Un intro: wf_mformula.intros table_eq_rel eq_rel_eval_trm
-        in_eq_rel qtable_empty qtable_unit_table intro!: qtableI)
+      (auto simp: and_release_safe_bounded_def release_safe_0_def always_safe_0_def
+        elim: wf_mformula.cases)
+  moreover have "?case1 t1 t2 \<Longrightarrow> ?case"
+    by (auto split: prod.splits intro!: qtable_eq_relI  wf_mformula.Eq)
+  ultimately show "?case"
+    using cases by (metis (no_types, lifting))
 next
-  case (Pred e tms n P V R)
-  then show ?case
-  proof (cases "e \<in> dom P")
+  case (MPred p ts mode)
+  let ?p = "(p, length ts)"
+  have inits: "\<phi>' = Formula.Pred p ts" "\<forall>x\<in>fv (Formula.Pred p ts). x < n" 
+    "\<forall>t\<in>set ts. trm.is_Var t \<or> trm.is_Const t"
+    using MPred(1) 
+    by (cases rule: wf_mformula.cases, 
+        auto dest: wf_mformula_and_release_safe_bddE wf_mformula_and_release_safe0E)+
+  have wfmf: "wf_mformula \<sigma> (j + \<delta>) P' V n R (MPred p ts mode) (Formula.Pred p ts)"
+    "MPred p ts mode = MPred p ts (pred_mode_of n ts)"
+    using MPred(1) by (cases rule: wf_mformula.cases, auto intro!: wf_mformula.Pred
+        dest: wf_mformula_and_release_safe_bddE wf_mformula_and_release_safe0E)+
+  show ?case
+  proof (cases "?p \<in> dom P") \<comment> \<open>notice @{term "dom P = dom V"}\<close>
     case True
-    with Pred(3) have e_props: "e \<in> Mapping.keys db" "e \<in> dom P'" "e \<in> dom V"
-      "list_all2 (\<lambda>i X. X = the (V e) i) [the (P e)..<the (P' e)]
-         (the (Mapping.lookup db e))" unfolding wf_envs_def rel_mapping_alt by blast+
-    show ?thesis
-      using True e_props Pred(1-2)
-      by (fastforce intro!: wf_mformula.Pred qtableI bexI[where P="\<lambda>x. _ = tabulate x 0 n", OF refl]
-      elim!: list.rel_mono_strong bexI[rotated] dest: ex_match
-      simp: list.rel_map table_def match_wf_tuple in_these_eq match_eval_trm image_iff
-        list.map_comp keys_dom_lookup)
-=======
-  case (MPred e ts mode)
-  let ?en = "(e, length ts)"
-  from MPred show ?case
-  proof (cases "?en \<in> dom P")
-    case True
-    hence "?en \<in> Mapping.keys db" "?en \<in> dom P'" "?en \<in> dom V" and
-      "list_all2 (\<lambda>i X. X = map Some ` {v. length v = length ts \<and> the (V ?en) v i}) [the (P ?en)..<the (P'?en)]
-         (the (Mapping.lookup db ?en))"
-      using MPred(2) unfolding wf_envs_def
-      by (auto simp: dom_def rel_mapping_alt dest: bspec[where x="?en"])
-    moreover have "wf_mformula \<sigma> (j + \<delta>) P' V n R (MPred e ts (pred_mode_of n ts)) (Formula.Pred e ts)"
-      using MPred(1)
-      by (cases rule: wf_mformula.cases) (auto intro!: wf_mformula.Pred)
+    hence "?p \<in> Mapping.keys db" "?p \<in> dom P'" "?p \<in> dom V" and
+      "list_all2 (\<lambda>i X. X = map Some ` {v. length v = length ts \<and> the (V ?p) v i}) 
+        [the (P ?p)..<the (P' ?p)] (the (Mapping.lookup db ?p))" 
+      using MPred(2) unfolding wf_envs_def 
+      by (auto simp: dom_def rel_mapping_alt dest: bspec[where x="?p"])
+    then obtain m m' Rs and pred 
+      where wtnss: "P ?p = Some m" "P' ?p = Some m'" 
+        "V ?p = Some pred" "Mapping.lookup db ?p = Some Rs" 
+        and key: "list_all2 (\<lambda>i X. X = map Some ` {v. length v = length ts \<and> pred v i}) [m..<m'] Rs"
+      using True by (auto simp: dom_def keys_dom_lookup)
+    hence case1: "is_copy_pattern n ts 
+      \<Longrightarrow> list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) 
+        (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>')) [m..<m'] Rs"
+      using qtable_copy_pattern(1)
+      by - (erule list.rel_mono_strong, clarsimp simp: inits)
+    moreover have case2: "is_simple_pattern ts 0 
+      \<Longrightarrow> list_all2 (\<lambda>i T. qtable n (Formula.fv \<phi>') (mem_restr R) 
+        (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>') (simple_match n 0 ts ` T)) [m..<m'] Rs"
+      using key wtnss inits qtable_simple_pattern 
+      by - (erule list.rel_mono_strong, clarsimp)
+    moreover have case3: "\<not> is_copy_pattern n ts \<Longrightarrow> \<not> is_simple_pattern ts 0 
+      \<Longrightarrow> list_all2 (\<lambda>i T. qtable n (Formula.fv \<phi>') (mem_restr R) 
+        (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>') 
+        ((\<lambda>x. tabulate x 0 n) ` Option.these (match ts ` T))
+        ) [m..<m'] Rs"
+      using key wtnss inits qtable_no_pattern(1)
+      by - (erule list.rel_mono_strong, clarsimp)
     ultimately show ?thesis
-      apply -
-      using MPred(1) True
-      apply (cases rule: wf_mformula.cases)
-      apply (clarsimp simp add: list.rel_map keys_dom_lookup split: pred_mode.split)
-      apply (intro conjI impI)
-        apply (erule list.rel_mono_strong)
-        apply (simp add: is_copy_pattern_def comp_def)
-        apply (rule qtableI)
-          apply (simp add: table_def wf_tuple_def)
-         apply (clarsimp simp add: map_nth)
-        apply (simp add: image_iff)
-        apply (intro exI conjI)
-          prefer 2
-          apply assumption
-         apply simp
-        apply (simp add: comp_def wf_tuple_def)
-        apply (subst map_cong[where g="(!) _", OF refl])
-         apply simp
-        apply (metis map_nth)
-       apply (erule list.rel_mono_strong)
-       apply (rule qtableI)
-         apply (simp add: table_def wf_tuple_simple_match)
-        apply (clarsimp simp add: eval_trm_simple_match)
-       apply (simp add: image_iff)
-       apply (intro exI conjI)
-         prefer 2
-         apply assumption
-        apply simp
-       apply (simp add: simple_match_eval_trm)
-      apply (erule list.rel_mono_strong)
-      apply (rule qtableI)
-        apply (clarsimp simp add: table_def match_wf_tuple in_these_eq)
-       apply (clarsimp simp add: in_these_eq match_eval_trm)
-      apply (drule ex_match)
-       apply simp
-      apply (clarsimp simp add: image_iff Bex_def in_these_eq)
-      by (metis length_map map_map)
->>>>>>> master
+      using wtnss wfmf inits 
+      by (clarsimp simp: list.rel_map split: pred_mode.split)
   next
-    note Pred(1)
-    moreover
+    let ?next_keys = "\<Union>k \<in> {j ..< j + \<delta>}. {(p, n). \<exists>x. (p, x) \<in> \<Gamma> \<sigma> k \<and> n = length x}"
+    let "?option_sats_at k" = "map Some ` {v. (p, v) \<in> \<Gamma> \<sigma> k \<and> length v = length ts}"
     case False
-    moreover
-<<<<<<< HEAD
-    from False Pred(3) have e_not_mem: "e \<notin> dom P'" "e \<notin> dom V"
-      unfolding wf_envs_def rel_mapping_alt by auto
-    moreover
-    from False Pred(3) have *: "e \<in> (\<Union>k \<in> {j ..< j + \<delta>}. fst ` \<Gamma> \<sigma> k) \<longleftrightarrow> e \<in> Mapping.keys db"
-      unfolding wf_envs_def by auto
-    from False Pred(3) have
-      "e \<in> Mapping.keys db \<Longrightarrow> Mapping.lookup db e = Some (map (\<lambda>k. {ts. (e, ts) \<in> \<Gamma> \<sigma> k}) [j ..< j + \<delta>])"
-      unfolding wf_envs_def keys_dom_lookup by (metis Diff_iff domD option.sel)
-    with * have db_props: "(case Mapping.lookup db e of None \<Rightarrow> replicate \<delta> {} | Some xs \<Rightarrow> xs) =
-      map (\<lambda>k. {ts. (e, ts) \<in> \<Gamma> \<sigma> k}) [j ..< j + \<delta>]"
-      by (cases "e \<in> (\<Union>k \<in> {j ..< j + \<delta>}. fst ` \<Gamma> \<sigma> k)")
-        (auto 0 3 simp: image_iff keys_dom_lookup list.rel_eq[symmetric] list.rel_map
-         intro: list.rel_refl split: option.splits)
-    define xs where "xs = fst (meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db (MPred e tms))"
-    define \<alpha> where "\<alpha> = snd (meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db (MPred e tms))"
-
-    have pair_eq: "meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db (MPred e tms) = (xs, \<alpha>)"
-      unfolding xs_def \<alpha>_def
-      by auto
-    have \<alpha>_eq: "\<alpha> = (MPred e tms)"
-      unfolding Pred(1) \<alpha>_def meval.simps
-      by auto
-    have wf: "wf_mformula \<sigma> (j + \<delta>) P' V n R \<alpha> (formula.Pred e tms)"
-      using wf_mformula.Pred[OF Pred(1-2)]
-      unfolding \<alpha>_eq
-      by auto
-
-    have xs_eq: "xs = map (\<lambda>X. (\<lambda>f. Table.tabulate f 0 n) ` Option.these
-        (match tms ` X)) (case Mapping.lookup db e of None \<Rightarrow> replicate (length (map (\<tau> \<sigma>) [j..<j + \<delta>])) empty_table | Some xs \<Rightarrow> xs)"
-      unfolding xs_def
-      by auto
-    then have "length xs = \<delta>"
-      using db_props
-      by (auto split: option.splits)
-    then have "length [Monitor.progress \<sigma> P (formula.Pred e tms) j..<Monitor.progress \<sigma> P' (formula.Pred e tms) (j + \<delta>)] =
-               length xs"
-      using False e_not_mem
-      by auto
-    moreover have "\<forall>(i, r) \<in> set (zip [Monitor.progress \<sigma> P (formula.Pred e tms) j..<Monitor.progress \<sigma> P' (formula.Pred e tms) (j + \<delta>)] xs).
-      qtable n (fv (formula.Pred e tms)) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Pred e tms)) r"
-    proof -
-      {
-        fix i r
-        assume assm: "(i, r) \<in> set (zip [Monitor.progress \<sigma> P (formula.Pred e tms) j..<Monitor.progress \<sigma> P' (formula.Pred e tms) (j + \<delta>)] xs)"
-        then have mems:
-          "i \<in> set [Monitor.progress \<sigma> P (formula.Pred e tms) j..<Monitor.progress \<sigma> P' (formula.Pred e tms) (j + \<delta>)]"
-          "r \<in> set xs"
-          by (meson set_zip_leftD set_zip_rightD)+
-
-        have i_mem: "i \<in> set [j..<(j + \<delta>)]"
-          using False e_not_mem mems(1)
-          unfolding Pred(1)
-          by auto
-        have assm': "(i, r) \<in> set (zip [j..<(j + \<delta>)] xs)"
-          using assm False e_not_mem mems(1)
-          unfolding Pred(1)
-          by auto
-        
-        have "qtable n (fv (formula.Pred e tms)) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Pred e tms)) r"
-        proof (cases "Mapping.lookup db e")
-          case None
-          then have "xs = replicate (length (map (\<tau> \<sigma>) [j..<j + \<delta>])) ((\<lambda>f. Table.tabulate f 0 n) ` Option.these (match tms ` empty_table))"
-            using xs_eq
-            by auto
-          then have r_eq: "r = {}"
-            using mems(2)
-            unfolding empty_table_def
-            by auto
-          then have qtable1:
-            "table n (fv (formula.Pred e tms)) r"
-            "(\<And>x. x \<in> r \<Longrightarrow> wf_tuple n (fv (formula.Pred e tms)) x \<Longrightarrow> mem_restr R x \<Longrightarrow> Formula.sat \<sigma> V (map the x) i (formula.Pred e tms))"
-            by (auto simp: list.rel_map table_def match_wf_tuple in_these_eq match_eval_trm image_iff)
-          
-          have \<Gamma>_props: "replicate \<delta> {} = map (\<lambda>k. {ts. (e, ts) \<in> \<Gamma> \<sigma> k}) [j..<j + \<delta>]"
-            using None db_props
-            by auto
-          have qtable2: "(\<And>x. wf_tuple n (fv (formula.Pred e tms)) x \<Longrightarrow> mem_restr R x \<Longrightarrow> Formula.sat \<sigma> V (map the x) i (formula.Pred e tms) \<Longrightarrow> x \<in> r)"
-          proof -
-            fix x
-            assume assms: "wf_tuple n (fv (formula.Pred e tms)) x" "mem_restr R x" "Formula.sat \<sigma> V (map the x) i (formula.Pred e tms)"
-            have "(case V e of
-               None \<Rightarrow> (e, map (Formula.eval_trm (map the x)) tms) \<in> \<Gamma> \<sigma> i
-             | Some X \<Rightarrow> map (Formula.eval_trm (map the x)) tms \<in> X i)"
-              using Pred(1) assms(3)
-              by auto
-            then have non_empty: "(e, map (Formula.eval_trm (map the x)) tms) \<in> \<Gamma> \<sigma> i"
-              using e_not_mem
-              by auto
-            
-            have "{ts. (e, ts) \<in> \<Gamma> \<sigma> i} \<in> set (map (\<lambda>k. {ts. (e, ts) \<in> \<Gamma> \<sigma> k}) [j..<j + \<delta>])"
-              using i_mem
-              by auto
-            moreover have "\<forall>x \<in> set (map (\<lambda>k. {ts. (e, ts) \<in> \<Gamma> \<sigma> k}) [j..<j + \<delta>]). x = {}"
-              using \<Gamma>_props
-              by (metis in_set_replicate)
-            ultimately have "{ts. (e, ts) \<in> \<Gamma> \<sigma> i} = {}"
-              using \<Gamma>_props
-              by auto
-            then show "x \<in> r"
-              using non_empty
-              by auto
-          qed
-
-          show ?thesis
-            using qtableI[OF qtable1 qtable2]
-            by auto
-        next
-          case (Some ys)
-          then have xs_eq: "xs = map (\<lambda>X. (\<lambda>f. tabulate f 0 n) ` Option.these (match tms ` X)) ys"
-            using xs_eq
-            by auto
-          moreover have ys_eq: "ys = map (\<lambda>k. {ts. (e, ts) \<in> \<Gamma> \<sigma> k}) [j..<j + \<delta>]"
-            using Some db_props
-            by auto
-          ultimately have qtable1:
-            "table n (fv (formula.Pred e tms)) r"
-            using Pred(1) mems(2)
-            by (auto simp: table_def match_wf_tuple in_these_eq)
-
-          have r_eq: "r = (\<lambda>x. tabulate x 0 n) ` Option.these (match tms ` {ts. (e, ts) \<in> \<Gamma> \<sigma> i})"
-            using zip_map_el[OF assm'[unfolded xs_eq ys_eq map_map]]
-            by auto
-           
-          have qtable2: "(\<And>x. x \<in> r \<Longrightarrow> wf_tuple n (fv (formula.Pred e tms)) x \<Longrightarrow> mem_restr R x \<Longrightarrow> Formula.sat \<sigma> V (map the x) i (formula.Pred e tms))"
-          proof -
-            fix x
-            assume "x \<in> r"
-            then have "(e, map (Formula.eval_trm (map the x)) tms) \<in> \<Gamma> \<sigma> i"
-              using mems(2) i_mem Pred(1) r_eq
-              unfolding xs_eq ys_eq
-              by (auto dest: ex_match simp: list.rel_map in_these_eq match_eval_trm image_iff)
-            then show "Formula.sat \<sigma> V (map the x) i (formula.Pred e tms)"
-              using e_not_mem
-              by auto
-          qed
-
-          have qtable3: "(\<And>x. wf_tuple n (fv (formula.Pred e tms)) x \<Longrightarrow> mem_restr R x \<Longrightarrow> Formula.sat \<sigma> V (map the x) i (formula.Pred e tms) \<Longrightarrow> x \<in> r)"
-          proof -
-            fix x
-            assume assms: "wf_tuple n (fv (formula.Pred e tms)) x" "mem_restr R x" "Formula.sat \<sigma> V (map the x) i (formula.Pred e tms)"
-            then have \<Gamma>_mem: "(e, map (Formula.eval_trm (map the x)) tms) \<in> \<Gamma> \<sigma> i"
-              using e_not_mem
-              unfolding Pred(1)
-              by (auto split: option.splits)
-            have wf: "wf_tuple n (\<Union> (fv_trm ` set tms)) x"
-              using assms(1)
-              unfolding Pred(1)
-              by auto
-            have fvs: "\<forall>t\<in>set tms. (\<forall>i\<in>fv_trm t. i < n) \<and> (trm.is_Var t \<or> trm.is_Const t)"
-              using Pred(1-2)
-              by auto
-            obtain f where f_props:
-              "match tms (map (Formula.eval_trm (map the x)) tms) = Some f"
-              "x = tabulate f 0 n"
-              using \<Gamma>_mem ex_match[OF wf fvs]
-              by auto
-            moreover have "match tms (map (Formula.eval_trm (map the x)) tms) \<in> match tms ` {ts. (e, ts) \<in> \<Gamma> \<sigma> i}"
-              using \<Gamma>_mem
-              by auto
-            ultimately have "f \<in> Option.these (match tms ` {ts. (e, ts) \<in> \<Gamma> \<sigma> i})"
-              using in_these_eq[of f]
-              by auto
-            then have "\<exists>x\<in>Option.these (match tms ` {ts. (e, ts) \<in> \<Gamma> \<sigma> i}). tabulate f 0 n = tabulate x 0 n"
-              using f_props
-              by auto
-            then show "x \<in> r"
-              using f_props(2)
-              unfolding xs_eq ys_eq Pred(1) r_eq
-              by auto
-          qed
-
-          show ?thesis
-            using qtableI[OF qtable1 qtable2 qtable3]
-            by auto
-        qed
-        then have "qtable n (fv (formula.Pred e tms)) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Pred e tms)) r"
-          using qtableI[of n "(fv (formula.Pred e tms))" r "(mem_restr R)" "(\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Pred e tms))"]
-          by auto
-      }
-      then show ?thesis by auto
-    qed
-    ultimately have "list_all2 (\<lambda>i. qtable n (fv (formula.Pred e tms)) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Pred e tms))) [Monitor.progress \<sigma> P (formula.Pred e tms) j..<Monitor.progress \<sigma> P' (formula.Pred e tms) (j + \<delta>)] xs"
-      unfolding list_all2_iff
-      by auto
-    then show ?thesis
-      using wf pair_eq
-      by auto
-  qed
-next
-  case (Let P V m \<phi>1 \<phi>1' p n R \<phi>2 \<phi>2' b)
-  from Let(1-3,5) have
-    1: "wf_mformula \<sigma> j P V m UNIV \<phi>1 \<phi>1'" and
-    fv: "m = Formula.nfv \<phi>1'" "{0..<m} \<subseteq> fv \<phi>1'" and
-    2: "wf_mformula \<sigma> j (P(p \<mapsto> progress \<sigma> P \<phi>1' j))
-      (V(p \<mapsto> \<lambda>i. {v. length v = m \<and> Formula.sat \<sigma> V v i \<phi>1'}))
-      n R \<phi>2 \<phi>2'"
-    by auto
-  obtain xs \<phi>1_new where e1: "meval m (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>1 = (xs, \<phi>1_new)" and
-=======
-    from False MPred(2) have "?en \<notin> dom P'" "?en \<notin> dom V"
-      unfolding wf_envs_def rel_mapping_alt by auto
-    moreover
-    from False MPred(2) have *: "?en \<in> (\<Union>k \<in> {j ..< j + \<delta>}. {(p, n). \<exists>x. (p, x) \<in> \<Gamma> \<sigma> k \<and> n = length x}) \<longrightarrow> ?en \<in> Mapping.keys db"
-      unfolding wf_envs_def by (auto simp: subset_iff)
-    moreover
-    from False MPred(2) have
-      "?en \<in> Mapping.keys db \<Longrightarrow> Mapping.lookup db ?en = Some (map (\<lambda>k. map Some ` {t. (e, t) \<in> \<Gamma> \<sigma> k \<and> length t = length ts}) [j ..< j + \<delta>])"
+    hence obs: "?p \<notin> dom P'" "?p \<notin> dom V" "?p \<in> ?next_keys \<longrightarrow> ?p \<in> Mapping.keys db"
+      using MPred(2)
+      unfolding wf_envs_def rel_mapping_alt 
+      by (auto simp: subset_iff)
+    have key: "?p \<in> Mapping.keys db \<Longrightarrow> Mapping.lookup db ?p 
+      = Some (map ?option_sats_at [j ..< j + \<delta>])"
+      using False MPred(2) 
       unfolding wf_envs_def keys_dom_lookup
-      by (clarsimp, erule_tac x="?en" in ballE, auto)
+      by (clarsimp, erule_tac x="?p" in ballE, auto)
+    hence case1: "Mapping.lookup db ?p = None \<Longrightarrow> ?thesis"
+      using wfmf inits obs False
+      by (clarsimp simp: keys_dom_lookup dom_def list.rel_map wf_tuple_def 
+          qtable_empty_iff[unfolded empty_table_def])
+        (erule_tac x="j+i" in ballE; force)
+    moreover have case2: "\<exists>x. Mapping.lookup db ?p = Some x \<Longrightarrow> is_copy_pattern n ts \<Longrightarrow> ?thesis"
+      using wfmf inits False obs key qtable_copy_pattern(2) 
+      by (clarsimp simp: keys_dom_lookup dom_def list.rel_map image_image 
+          split: pred_mode.split intro!: list.rel_refl_strong)
+    moreover have case3: "\<exists>x. Mapping.lookup db ?p = Some x \<Longrightarrow> \<not> is_copy_pattern n ts 
+      \<Longrightarrow> is_simple_pattern ts 0 \<Longrightarrow> ?thesis"
+      using wfmf inits False obs key qtable_simple_pattern(2)
+      by (clarsimp simp: keys_dom_lookup dom_def list.rel_map image_image 
+          split: pred_mode.split intro!: list.rel_refl_strong)
+    moreover have case4: "\<exists>x. Mapping.lookup db ?p = Some x \<Longrightarrow> \<not> is_copy_pattern n ts 
+      \<Longrightarrow> \<not> is_simple_pattern ts 0 \<Longrightarrow> ?thesis"
+      using wfmf inits False obs key qtable_no_pattern(2)
+      by (clarsimp simp: keys_dom_lookup dom_def list.rel_map image_image 
+          split: pred_mode.split intro!: list.rel_refl_strong)
     ultimately show ?thesis
-      apply (cases rule: wf_mformula.cases)
-      apply (simp add: keys_dom_lookup dom_def)
-      apply (intro conjI wf_mformula.Pred; simp?)
-      apply (cases "Mapping.lookup db ?en")
-       apply (simp add: list.rel_map qtable_empty_iff[unfolded empty_table_def])
-       apply (metis add_less_cancel_left atLeastLessThan_iff length_map not_add_less1 not_le)
-      apply (simp add: list.rel_map image_image split: pred_mode.split)
-      apply safe
-        apply (simp add: is_copy_pattern_def comp_def)
-        apply (intro list.rel_refl_strong qtableI)
-          apply (simp add: table_def wf_tuple_def)
-         apply (clarsimp simp add: map_nth)
-        apply (simp add: image_iff)
-        apply (rule exI, erule conjI)
-        apply (simp add: comp_def wf_tuple_def)
-        apply (subst map_cong[where g="(!) _", OF refl])
-         apply simp
-        apply (metis map_nth)
-       apply (intro list.rel_refl_strong qtableI)
-         apply (simp add: table_def wf_tuple_simple_match)
-        apply (clarsimp simp add: eval_trm_simple_match)
-       apply (simp add: image_iff)
-       apply (intro exI conjI)
-         apply assumption
-        apply simp
-       apply (simp add: simple_match_eval_trm)
-      apply (fastforce intro!: qtableI list.rel_refl dest: ex_match
-          simp: table_def match_wf_tuple in_these_eq match_eval_trm image_iff)
-      done
+      by (meson not_None_eq)
   qed
 next
   case (MLet p m \<phi>1 \<phi>2)
@@ -11009,20 +10872,92 @@ next
       n R \<phi>2 \<phi>2'" and
     safe1: "safe_formula \<phi>1'" and
     safe2: "safe_formula \<phi>2'" 
-    by (cases rule: wf_mformula.cases) auto
+    by (cases rule: wf_mformula.cases) 
+      (auto dest: wf_mformula_and_release_safe_bddE wf_mformula_and_release_safe0E)
   from MLet.prems(3) Let obtain E' where
     wty1: "S, E' \<turnstile> \<phi>1'" and
     wty2: "S((p, m) \<mapsto> tabulate E' 0 (Formula.nfv \<phi>1')), E \<turnstile> \<phi>2'"
     unfolding fv by (cases pred: wty_formula) simp_all
   obtain xs \<phi>1_new where e1: "meval (j + \<delta>) m (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>1 = (xs, \<phi>1_new)" and
->>>>>>> master
       wf1: "wf_mformula \<sigma> (j + \<delta>) P' V m UNIV \<phi>1_new \<phi>1'" and
-      res1: "list_all2 (\<lambda>i (r). qtable m (fv \<phi>1') (mem_restr UNIV) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>1') r)
+      res1: "list_all2 (\<lambda>i. qtable m (fv \<phi>1') (mem_restr UNIV) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>1'))
        [progress \<sigma> P \<phi>1' j..<progress \<sigma> P' \<phi>1' (j + \<delta>)] xs"
-<<<<<<< HEAD
-    using Let.IH(1)[OF Let.prems(1)] by (auto simp: eqTrueI[OF mem_restr_UNIV, abs_def])
-  from Let.IH(2)[OF wf_envs_update[OF Let.prems(1) fv res1]] wf1 e1 fv
-  show ?case unfolding Let by (auto simp: fun_upd_def intro!: wf_mformula.Let)
+    using MLet(1)[OF 1(1) MLet.prems(2) wty1] by (auto simp: eqTrueI[OF mem_restr_UNIV, abs_def])
+  from MLet(2)[OF 2 wf_envs_update[OF MLet.prems(2) fv res1 safe1 wty1] wty2] wf1 e1 fv safe1 safe2
+  show ?case unfolding Let
+    by (auto simp: fun_upd_def intro!: wf_mformula.Let)
+next
+  case (MLetPast p m \<phi>1 \<phi>2 i buf)
+  let ?pn = "(p, m)"
+  from MLetPast.prems(1) obtain \<phi>1' \<phi>2' where LetPast: "\<phi>' = Formula.LetPast p \<phi>1' \<phi>2'" and
+    1: "wf_mformula \<sigma> j (P(?pn\<mapsto>i)) (V(?pn \<mapsto> letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V(?pn \<mapsto> X)) v i \<phi>1'))) m UNIV \<phi>1 \<phi>1'" and
+    buf: "case buf of
+        None \<Rightarrow> i = letpast_progress \<sigma> P ?pn \<phi>1' j
+      | Some Z \<Rightarrow> Suc i = letpast_progress \<sigma> P ?pn \<phi>1' j \<and>
+          qtable m (Formula.fv \<phi>1') (mem_restr UNIV) (\<lambda>v. letpast_sat (\<lambda>X u k. Formula.sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>1') (map the v) i) Z" and
+    fv: "m = Formula.nfv \<phi>1'" "{0..<m} \<subseteq> fv \<phi>1'" and
+    2:  "wf_mformula \<sigma> j (P(?pn \<mapsto> letpast_progress \<sigma> P ?pn \<phi>1' j))
+      (V(?pn \<mapsto> letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V(?pn \<mapsto> X)) v i \<phi>1'))) n R \<phi>2 \<phi>2'" and
+    safe: "safe_letpast ?pn \<phi>1' \<le> PastRec" and
+    safe1: "safe_formula \<phi>1'" and
+    safe2: "safe_formula \<phi>2'"
+    by (cases rule: wf_mformula.cases) auto
+  from MLetPast.prems(3) LetPast obtain E' where
+    wty1: "S((p, m) \<mapsto> tabulate E' 0 (Formula.nfv \<phi>1')), E' \<turnstile> \<phi>1'" and
+    wty2: "S((p, m) \<mapsto> tabulate E' 0 (Formula.nfv \<phi>1')), E \<turnstile> \<phi>2'"
+    unfolding fv by (cases pred: wty_formula) simp_all
+  from MLetPast(4) have pred: "pred_mapping (\<lambda> x. x\<le>j) P"
+    by auto
+  from MLetPast(3) pred LetPast
+  have invar:"letpast_meval_invar n V \<sigma> P \<phi>1' m (j+\<delta>) i [] (list_of_option buf) p (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>1 (letpast_progress \<sigma> P ?pn \<phi>1' j)"
+    by(auto intro!: letpast_meval_invar_init[where j="j+\<delta>" and ts="(map (\<tau> \<sigma>) [j ..< j + \<delta>])" and \<phi> = "\<phi>1" and \<phi>'= "\<phi>1'", simplified])
+
+  obtain ys' i' buf' \<phi>f \<phi>f1 \<phi>f2 xs' where
+    e1: "meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db (MLetPast p m \<phi>1 \<phi>2 i buf) = (xs', \<phi>f)" and
+    e_letpast: "(ys', i', buf', \<phi>f1) = letpast_meval m (j+\<delta>) i [] (list_of_option buf) ?pn (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>1" and
+    e2: "meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) (Mapping.update ?pn ys' db) \<phi>2 = (xs', \<phi>f2)" and
+    \<phi>f: "\<phi>f = MLetPast p m \<phi>f1 \<phi>f2 i' buf'"
+      apply(simp)
+    apply(atomize_elim)
+    apply (auto split: prod.splits)
+    done
+  have pred_alt: "pred_mapping (\<lambda>x. x \<le> j + \<delta> - length (map (\<tau> \<sigma>) [j..<j + \<delta>])) P" 
+    using pred by fastforce
+  have pred_alt_2: "pred_mapping (\<lambda>x. x \<le> j + \<delta>) P'" 
+    using MLetPast.prems(2) wf_envs_P_simps(2) by blast
+  have rel_map:  "rel_mapping (\<le>) P P'" 
+    using MLetPast.prems(2) by auto
+  have wf_form: "wf_mformula \<sigma> (j + \<delta> - length (map (\<tau> \<sigma>) [j..<j + \<delta>])) (P((p, m) \<mapsto> i))
+ (V((p, m) \<mapsto> letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, m) \<mapsto> X)) v i \<phi>1'))) m UNIV \<phi>1 \<phi>1'" by (simp add: "1")
+  have wf_envs: "wf_envs S \<sigma> (j + \<delta> - length (map (\<tau> \<sigma>) [j..<j + \<delta>])) (length (map (\<tau> \<sigma>) [j..<j + \<delta>])) P P' V db" 
+    using MLetPast.prems(2) by force
+  have post: "letpast_meval_post n V \<sigma> P' \<phi>1' m (j+\<delta>) i' ys' buf' p \<phi>f1 (letpast_progress \<sigma> P ?pn \<phi>1' j)"
+    apply(rule letpast_meval_invar_post[OF safe pred_alt pred_alt_2 rel_map fv wf_form wf_envs _ _ wty1 safe1 invar e_letpast])
+    subgoal for xs db \<phi>_m us P P' V S
+      apply(cases "us=[]")
+       apply simp_all
+      subgoal
+        apply (intro MLetPast.IH(1)[where j4="j+\<delta>" and \<delta>4="0", simplified])
+          apply simp_all
+        done
+      apply(intro MLetPast.IH)
+        apply(simp_all)
+      done
+    apply simp
+    done
+
+  from e1 e_letpast e2 have
+    wf_letpast: "wf_mformula \<sigma> (j+\<delta>) (P'(?pn\<mapsto>i')) (V(?pn \<mapsto> letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V(?pn \<mapsto> X)) v i \<phi>1'))) m UNIV \<phi>f1 \<phi>1'" and
+    buf': "case buf' of
+        None \<Rightarrow> i' = letpast_progress \<sigma> P' ?pn \<phi>1' (j+\<delta>)
+      | Some Z \<Rightarrow> Suc i' = letpast_progress \<sigma> P' ?pn \<phi>1' (j+\<delta>) \<and>
+          qtable m (Formula.fv \<phi>1') (mem_restr UNIV) (\<lambda>v. letpast_sat (\<lambda>X u k. Formula.sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>1') (map the v) i') Z" and
+    list_letpast_full: "list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>1') (mem_restr UNIV) (\<lambda>v. letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V(?pn \<mapsto> X)) v i \<phi>1') (map the v) i))
+      [letpast_progress \<sigma> P ?pn \<phi>1' j..<letpast_progress \<sigma> P' ?pn \<phi>1' (j+\<delta>)] ys'"
+    using post by (auto simp add: letpast_meval_post_def)
+  from MLetPast(2)[OF 2 wf_envs_update_sup[OF MLetPast.prems(2) fv list_letpast_full safe1 wty1] wty2] e1 fv safe e_letpast \<phi>f buf' e2 wf_letpast safe1 safe2
+  show ?case unfolding LetPast
+    by (auto simp: fun_upd_def Let_def intro!: wf_mformula.LetPast simp del: fun_upd_apply)
 next
   case (And P V n R \<phi> \<phi>' \<psi> \<psi>' pos \<chi> buf)
   have IH: "case meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<phi> of
