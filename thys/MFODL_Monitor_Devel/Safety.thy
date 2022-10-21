@@ -804,19 +804,7 @@ lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 Pred L
       list_all safe_formula pos \<Longrightarrow> list_all safe_formula (map remove_neg neg) \<Longrightarrow>
       (\<Union>\<phi>\<in>set neg. fv \<phi>) \<subseteq> (\<Union>\<phi>\<in>set pos. fv \<phi>) \<Longrightarrow>
       list_all P pos \<Longrightarrow> list_all P (map remove_neg neg) \<Longrightarrow> P (\<And>\<^sub>F l)"
-    (*and Ands: "\<And>l pos neg. (pos, neg) = partition safe_formula l \<Longrightarrow> pos \<noteq> [] \<Longrightarrow>
-      list_all safe_formula pos \<Longrightarrow> list_all (\<lambda>\<phi>. (case \<phi> of
-          Neg \<phi>' \<Rightarrow> safe_formula \<phi>'
-          | _ \<Rightarrow> safe_formula \<phi>
-        )
-      ) neg \<Longrightarrow>
-      (\<Union>\<phi>\<in>set neg. fv \<phi>) \<subseteq> (\<Union>\<phi>\<in>set pos. fv \<phi>) \<Longrightarrow>
-      list_all P pos \<Longrightarrow> list_all (\<lambda>\<phi>. (case \<phi> of
-          Neg \<phi>' \<Rightarrow> P \<phi>'
-          | _ \<Rightarrow> P \<phi>
-        )
-      ) neg \<Longrightarrow> P (Ands l)"
-  *)and Neg: "\<And>\<phi>. fv \<phi> = {} \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (\<not>\<^sub>F \<phi>)"
+    and Neg: "\<And>\<phi>. fv \<phi> = {} \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (\<not>\<^sub>F \<phi>)"
     and Or: "\<And>\<phi> \<psi>. fv \<psi> = fv \<phi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> 
       \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (\<phi> \<or>\<^sub>F \<psi>)"
     and Exists: "\<And>t \<phi>. safe_formula \<phi> \<Longrightarrow> 0 \<in> fv \<phi> 
@@ -1073,6 +1061,24 @@ lemma safe_formula_NegD:
 lemma safe_formula_Neg: "safe_formula (\<not>\<^sub>F \<phi>) = (FV \<phi> = {} \<and> safe_formula \<phi>)"
   by (induct "\<not>\<^sub>F \<phi>" rule: safe_formula.induct) auto
 
+(* can we replace safety in release for safe_formula_dual? *)
+lemma "\<not> mem I 0 \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> fv \<phi>' \<union> fv \<psi>' \<subseteq> fv \<phi> 
+  \<Longrightarrow> safe_formula_dual True safe_formula \<phi>' I \<psi>' 
+  \<longleftrightarrow> safe_formula \<phi>' \<and> safe_formula \<psi>' \<and> fv \<phi>' = fv \<psi>' 
+    \<and> safe_formula (and_release_safe_bounded \<phi> \<phi>' I \<psi>')"
+  by (auto simp: safe_formula_dual_def 
+      and_release_safe_bounded_def release_safe_bounded_def
+      case_Neg_iff split: if_splits) (* yes for conjunctions with release *)
+
+lemma "mem I 0 \<and> bounded I \<Longrightarrow> safe_formula_dual False safe_formula \<phi> I \<psi> 
+  \<Longrightarrow> safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> safe_formula (release_safe_0 \<phi> I \<psi>)"
+  by (auto simp: safe_formula_dual_def release_safe_0_def case_Neg_iff split: if_splits)
+
+lemma "mem I 0 \<and> bounded I \<Longrightarrow> safe_formula \<psi> \<and> fv \<phi> \<subseteq> fv \<psi> \<and> safe_formula (release_safe_0 \<phi> I \<psi>)
+  \<Longrightarrow> safe_formula_dual False safe_formula \<phi> I \<psi>"
+  apply (auto simp: safe_formula_dual_def release_safe_0_def case_Neg_iff split: if_splits)
+   apply (cases \<phi>; clarsimp simp: safe_formula_dual_def split: if_splits)
+  oops (* no for release alone *)
 
 subsection \<open>Future reach\<close>
 
