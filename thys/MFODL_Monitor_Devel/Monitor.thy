@@ -3056,8 +3056,8 @@ begin
 
 definition "traces = {\<sigma>. wty_trace SIG \<sigma>}"
 
-lemma map_\<Gamma>_subset_traces: "\<sigma> \<in> traces \<Longrightarrow> (\<And>D. f D \<subseteq> D) \<Longrightarrow> map_\<Gamma> f \<sigma> \<in> traces"
-  by (auto simp: traces_def wty_envs_def)
+sublocale traces_downward_closed traces
+  by unfold_locales (auto simp add: traces_def wty_envs_def)
 
 end
 
@@ -3067,20 +3067,7 @@ locale future_bounded_mfodl = wty_mfodl +
 sublocale future_bounded_mfodl \<subseteq> sliceable_timed_progress "Formula.nfv \<phi>" "Formula.fv \<phi>" traces "relevant_events \<phi>"
   "\<lambda>\<sigma> v i. Formula.sat \<sigma> Map.empty v i \<phi>" "pprogress \<phi>"
 proof (unfold_locales, goal_cases)
-  case (1 x)
-  then show ?case by (simp add: fvi_less_nfv)
-next
-  case (2 v v' \<sigma> i)
-  then show ?case by (simp cong: sat_fv_cong[rule_format])
-next
-  case (3 \<sigma> S)
-  then show ?case by (auto intro: map_\<Gamma>_subset_traces)
-next
-  case (4 \<sigma> V S i)
-  then show ?case
-    using sat_slice_iff[symmetric] by simp
-next
-  case (5 \<pi>' \<pi>)
+  case (1 \<pi>' \<pi>)
   moreover obtain \<sigma> where "prefix_of \<pi>' \<sigma>"
     using ex_prefix_of ..
   moreover have "prefix_of \<pi> \<sigma>"
@@ -3088,26 +3075,26 @@ next
   ultimately show ?case
     by (simp add: pprogress_eq plen_mono progress_mono)
 next
-  case (6 \<sigma> x)
+  case (2 \<sigma> x)
   obtain j where "x \<le> progress \<sigma> Map.empty \<phi> j"
     using future_bounded progress_ge by blast
   then have "x \<le> pprogress \<phi> (take_prefix j \<sigma>)"
     by (simp add: pprogress_eq[of _ \<sigma>])
   then show ?case by force
 next
-  case (7 \<sigma> \<pi> \<sigma>' i v)
+  case (3 \<sigma> \<pi> \<sigma>' i v)
   then have "i < progress \<sigma> Map.empty \<phi> (plen \<pi>)"
     by (simp add: pprogress_eq)
-  with 7 show ?case
+  with 3 show ?case
     using sat_prefix_conv by blast
 next
-  case (8 \<pi> \<pi>')
+  case (4 \<pi> \<pi>')
   then have "plen \<pi> = plen \<pi>'"
     unfolding length_pts_eq_plen[symmetric] by auto
   moreover obtain \<sigma> \<sigma>' where "prefix_of \<pi> \<sigma>" "prefix_of \<pi>' \<sigma>'"
     using ex_prefix_of by blast+
   moreover have "\<forall>i < plen \<pi>. \<tau> \<sigma> i = \<tau> \<sigma>' i"
-    using 8 calculation nth_pts_eq_\<tau>[OF calculation(3)] nth_pts_eq_\<tau>[OF calculation(2)]
+    using 4 calculation nth_pts_eq_\<tau>[OF calculation(3)] nth_pts_eq_\<tau>[OF calculation(2)]
     by auto
   ultimately show ?case
     by (simp add: pprogress_eq progress_time_conv)
