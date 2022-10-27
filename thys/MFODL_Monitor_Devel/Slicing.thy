@@ -240,9 +240,6 @@ fun inputs :: "'a Formula.formula \<Rightarrow> (Formula.name \<times> nat optio
 | "inputs (Formula.TP t) = {}"
 | "inputs (Formula.TS t) = {}"
 
-definition unique_inputs :: "'a Formula.formula \<Rightarrow> bool" where
-  "unique_inputs \<phi> \<longleftrightarrow> (\<forall>(p, vs)\<in>inputs \<phi>. \<forall>(q, ws)\<in>inputs \<phi>. p = q \<longrightarrow> length vs = length ws \<longrightarrow> vs = ws)"
-
 lemma Some_set_unshift_opt: "Some x \<in> set (unshift_opt b vs) \<longleftrightarrow> Some (x + b) \<in> set vs"
   by (fastforce simp add: unshift_opt_def split: option.splits if_splits)
 
@@ -883,251 +880,343 @@ next
 qed
 
 
-fun genvar :: "(Formula.name \<times> nat \<rightharpoonup> bool \<Rightarrow> nat \<Rightarrow> bool) \<Rightarrow> 'a Formula.formula \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> bool" where
-  "genvar G (Formula.Pred r ts) pos x = (case G (r, length ts) of
-      Some g \<Rightarrow> (\<exists>y<length ts. ts ! y = Formula.Var x \<and> g pos y)
-    | None \<Rightarrow> pos \<and> (\<exists>t\<in>set ts. t = Formula.Var x))"
-| "genvar G (Formula.Let p \<phi> \<psi>) pos x = genvar (G((p, Formula.nfv \<phi>) \<mapsto> genvar G \<phi>)) \<psi> pos x"
-| "genvar G (Formula.LetPast p \<phi> \<psi>) pos x = genvar (G((p, Formula.nfv \<phi>) \<mapsto> lfp (\<lambda>g. genvar (G((p, Formula.nfv \<phi>) \<mapsto> g)) \<phi>))) \<psi> pos x"
-| "genvar G (Formula.Eq t1 t2) pos x = False"
-| "genvar G (Formula.Less t1 t2) pos x = False"
-| "genvar G (Formula.LessEq t1 t2) pos x = False"
-| "genvar G (Formula.Neg \<phi>) pos x = genvar G \<phi> (\<not> pos) x"
-| "genvar G (Formula.Or \<phi> \<psi>) pos x = (if pos then (\<and>) else (\<or>)) (genvar G \<phi> pos x) (genvar G \<psi> pos x)"
-| "genvar G (Formula.And \<phi> \<psi>) pos x = (if pos then (\<or>) else (\<and>)) (genvar G \<phi> pos x) (genvar G \<psi> pos x)"
-| "genvar G (Formula.Ands \<phi>s) pos x = (if pos then (\<exists>\<phi>\<in>set \<phi>s. genvar G \<phi> pos x) else (\<forall>\<phi>\<in>set \<phi>s. genvar G \<phi> pos x))"
-| "genvar G (Formula.Exists t \<phi>) pos x = genvar G \<phi> pos (Suc x)"
-| "genvar G (Formula.Agg y \<omega> tys f \<phi>) pos x = genvar G \<phi> pos (x + length tys)"
-| "genvar G (Formula.Prev I \<phi>) pos x = (pos \<and> genvar G \<phi> pos x)"
-| "genvar G (Formula.Next I \<phi>) pos x = genvar G \<phi> pos x"
-| "genvar G (Formula.Since \<phi> I \<psi>) pos x = genvar G \<psi> pos x"
-| "genvar G (Formula.Until \<phi> I \<psi>) pos x = genvar G \<psi> pos x"
-| "genvar G _ pos x = False" (*TODO*)
+fun genvar :: "'a Formula.formula \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> Formula.name \<Rightarrow> nat \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> bool" where
+  "genvar (Formula.Pred r ts) pos x q n c k = (pos = c \<and> q = r \<and> n = length ts \<and> k < length ts \<and> ts ! k = Formula.Var x)"
+| "genvar (Formula.Let p \<phi> \<psi>) pos x q n c k = ((\<exists>pos' y. genvar \<phi> pos' y q n c k \<and> genvar \<psi> pos x p (Formula.nfv \<phi>) pos' y) \<or>
+    (p \<noteq> q \<or> n \<noteq> Formula.nfv \<phi>) \<and> genvar \<psi> pos x q n c k)"
+| "genvar (Formula.LetPast p \<phi> \<psi>) pos x q n c k = ((p \<noteq> q \<or> n \<noteq> Formula.nfv \<phi>) \<and>
+    ((\<exists>pos' y. lfp (\<lambda>g pos' y.
+        genvar \<phi> pos' y q n c k \<or> (\<exists>pos'' y'. g pos'' y' \<and> genvar \<phi> pos' y p (Formula.nfv \<phi>) pos'' y')) pos' y \<and>
+      genvar \<psi> pos x p (Formula.nfv \<phi>) pos' y) \<or>
+    genvar \<psi> pos x q n c k))"
+| "genvar (Formula.Eq t1 t2) pos x q n c k = False"
+| "genvar (Formula.Less t1 t2) pos x q n c k = False"
+| "genvar (Formula.LessEq t1 t2) pos x q n c k = False"
+| "genvar (Formula.Neg \<phi>) pos x q n c k = genvar \<phi> (\<not> pos) x q n c k"
+| "genvar (Formula.Or \<phi> \<psi>) pos x q n c k = (if pos then (\<and>) else (\<or>)) (genvar \<phi> pos x q n c k) (genvar \<psi> pos x q n c k)"
+| "genvar (Formula.And \<phi> \<psi>) pos x q n c k = (if pos then (\<or>) else (\<and>)) (genvar \<phi> pos x q n c k) (genvar \<psi> pos x q n c k)"
+| "genvar (Formula.Ands \<phi>s) pos x q n c k = (if pos then (\<exists>\<phi>\<in>set \<phi>s. genvar \<phi> pos x q n c k) else (\<forall>\<phi>\<in>set \<phi>s. genvar \<phi> pos x q n c k))"
+| "genvar (Formula.Exists t \<phi>) pos x q n c k = genvar \<phi> pos (Suc x) q n c k"
+(* TODO: The condition that x must be free in Agg should be derivable. *)
+| "genvar (Formula.Agg y \<omega> tys f \<phi>) pos x q n c k = (pos \<and> x + length tys \<in> Formula.fv \<phi> \<and>
+    genvar \<phi> pos (x + length tys) q n c k)"
+| "genvar (Formula.Prev I \<phi>) pos x q n c k = (pos \<and> genvar \<phi> pos x q n c k)"
+(* The following cases could be made more precise. *)
+| "genvar (Formula.Next I \<phi>) pos x q n c k = (pos \<and> genvar \<phi> pos x q n c k)"
+| "genvar (Formula.Since \<phi> I \<psi>) pos x q n c k = (pos \<and> genvar \<psi> pos x q n c k)"
+| "genvar (Formula.Until \<phi> I \<psi>) pos x q n c k = (pos \<and> genvar \<psi> pos x q n c k)"
+| "genvar (Formula.MatchP I r) pos x q n c k = False"
+| "genvar (Formula.MatchF I r) pos x q n c k = False"
+| "genvar (Formula.TP t) pos x q n c k = False"
+| "genvar (Formula.TS t) pos x q n c k = False"
 
-
-(* lemma sat_inter_names_cong: "(\<And>e. e \<in> names \<phi> \<Longrightarrow> {xs. (e, xs) \<in> E} = {xs. (e, xs) \<in> F}) \<Longrightarrow>
-  Formula.sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) v i \<phi> \<longleftrightarrow> Formula.sat (map_\<Gamma> (\<lambda>D. D \<inter> F) \<sigma>) v i \<phi>"
-  by (induction \<phi> arbitrary: v i) (auto split: nat.splits)
-
-lemma unique_names_matches_absorb: "fst x \<in> names \<alpha> \<Longrightarrow> names \<alpha> \<inter> names \<beta> = {} \<Longrightarrow>
-    Formula.matches v \<alpha> x \<or> Formula.matches v \<beta> x \<longleftrightarrow> Formula.matches v \<alpha> x"
-  "fst x \<in> names \<beta> \<Longrightarrow> names \<alpha> \<inter> names \<beta> = {} \<Longrightarrow>
-    Formula.matches v \<alpha> x \<or> Formula.matches v \<beta> x \<longleftrightarrow> Formula.matches v \<beta> x"
-  by (auto dest: matches_in_names)
-
-definition mergeable_envs where
-  "mergeable_envs n S \<longleftrightarrow> (\<forall>v1\<in>S. \<forall>v2\<in>S. (\<forall>A B f.
-    (\<forall>x\<in>A. x < n \<and> v1 ! x = f x) \<and> (\<forall>x\<in>B. x < n \<and> v2 ! x = f x) \<longrightarrow>
-    (\<exists>v\<in>S. \<forall>x\<in>A \<union> B. v ! x = f x)))"
-
-lemma mergeable_envsI:
-  assumes "\<And>v1 v2 v. v1 \<in> S \<Longrightarrow> v2 \<in> S \<Longrightarrow> length v = n \<Longrightarrow> \<forall>x < n. v ! x = v1 ! x \<or> v ! x = v2 ! x \<Longrightarrow> v \<in> S"
-  shows "mergeable_envs n S"
-  unfolding mergeable_envs_def
-proof (safe, goal_cases mergeable)
-  case [simp]: (mergeable v1 v2 A B f)
-  let ?v = "tabulate (\<lambda>x. if x \<in> A \<union> B then f x else v1 ! x) 0 n"
-  from assms[of v1 v2 ?v, simplified] show ?case
-    by (auto intro!: bexI[of _ ?v])
-qed
-
-lemma in_listset_nth: "x \<in> listset As \<Longrightarrow> i < length As \<Longrightarrow> x ! i \<in> As ! i"
-  by (induction As arbitrary: x i) (auto simp: set_Cons_def nth_Cons split: nat.split)
-
-lemma all_nth_in_listset: "length x = length As \<Longrightarrow> (\<And>i. i < length As \<Longrightarrow> x ! i \<in> As ! i) \<Longrightarrow> x \<in> listset As"
-  by (induction x As rule: list_induct2) (fastforce simp: set_Cons_def nth_Cons)+
-
-lemma mergeable_envs_listset: "mergeable_envs (length As) (listset As)"
-  by (rule mergeable_envsI) (auto intro!: all_nth_in_listset elim!: in_listset_nth)
-
-lemma mergeable_envs_Ex: "mergeable_envs n S \<Longrightarrow> Formula.nfv \<alpha> \<le> n \<Longrightarrow> Formula.nfv \<beta> \<le> n \<Longrightarrow>
-  (\<exists>v'\<in>S. \<forall>x\<in>fv \<alpha>. v' ! x = v ! x) \<Longrightarrow> (\<exists>v'\<in>S. \<forall>x\<in>fv \<beta>. v' ! x = v ! x) \<Longrightarrow>
-  (\<exists>v'\<in>S. \<forall>x\<in>fv \<alpha> \<union> fv \<beta>. v' ! x = v ! x)"
-proof (clarify, goal_cases mergeable)
-  case (mergeable v1 v2)
+lemma genvar_sat:
+  assumes "genvar \<phi> (Formula.sat \<sigma> V v i \<phi>) x q n c k" and "length v \<ge> Formula.nfv \<phi>"
+  obtains vs as j where "(q, vs) \<in> inputs \<phi>" "length vs = n" "k < n" "vs ! k = Some x"
+    "(q, n) \<in> dom V \<longrightarrow> the (V (q, n)) as j = c"
+    "(q, n) \<notin> dom V \<longrightarrow> (q, as) \<in> \<Gamma> \<sigma> j = c"
+    "length as = n" "as ! k = v ! x"
+  using assms
+proof (induction \<phi> arbitrary: V v i x q n c k thesis)
+  case (Pred r ts)
   then show ?case
-    by (auto intro: order.strict_trans2[OF fvi_less_nfv[rule_format]]
-      elim!: mergeable_envs_def[THEN iffD1, rule_format, of _ _ v1 v2])
-qed
-
-lemma in_set_ConsE: "xs \<in> set_Cons A As \<Longrightarrow> (\<And>y ys. xs = y # ys \<Longrightarrow> y \<in> A \<Longrightarrow> ys \<in> As \<Longrightarrow> P) \<Longrightarrow> P"
-  unfolding set_Cons_def by blast
-
-lemma mergeable_envs_set_Cons: "mergeable_envs n S \<Longrightarrow> mergeable_envs (Suc n) (set_Cons UNIV S)"
-  unfolding mergeable_envs_def
-proof (clarify, elim in_set_ConsE, goal_cases mergeable)
-  case (mergeable v1 v2 A B f y1 ys1 y2 ys2)
-  let ?A = "(\<lambda>x. x - 1) ` (A - {0})"
-  let ?B = "(\<lambda>x. x - 1) ` (B - {0})"
-  from mergeable(4-9) have "\<exists>v \<in> S. \<forall>x\<in>?A \<union> ?B. v ! x = f (Suc x)"
-    by (auto dest!: mergeable(2,3)[rule_format] intro!: mergeable(1)[rule_format, of ys1 ys2])
-  then obtain v where "v \<in> S" "\<forall>x\<in>?A \<union> ?B. v ! x = f (Suc x)" by blast
-  then show ?case
-    by (intro bexI[of _ "f 0 # v"]) (auto simp: nth_Cons' set_Cons_def)
-qed
-
-lemma slice_Exists: "Formula.slice (Formula.Exists \<phi>) S \<sigma> = Formula.slice \<phi> (set_Cons UNIV S) \<sigma>"
-  unfolding Formula.slice_def by (auto simp: set_Cons_def intro: map_\<Gamma>_cong)
-
-lemma image_Suc_fvi: "Suc ` Formula.fvi (Suc b) \<phi> = Formula.fvi b \<phi> - {0}"
-  by (auto simp: image_def Bex_def Formula.fvi_Suc dest: gr0_implies_Suc)
-
-lemma nfv_Exists: "Formula.nfv (Formula.Exists \<phi>) = Formula.nfv \<phi> - 1"
-  unfolding Formula.nfv_def
-  by (cases "fv \<phi> = {}") (auto simp add: image_Suc_fvi mono_Max_commute[symmetric] mono_def)
-
-lemma set_Cons_empty_iff[simp]: "set_Cons A Xs = {} \<longleftrightarrow> A = {} \<or> Xs = {}"
-  unfolding set_Cons_def by auto
-
-lemma unique_sat_slice_mem: "safe_formula \<phi> \<Longrightarrow> gen_unique \<phi> \<Longrightarrow> S \<noteq> {} \<Longrightarrow>
-  mergeable_envs n S \<Longrightarrow> Formula.nfv \<phi> \<le> n \<Longrightarrow>
-  Formula.sat (Formula.slice \<phi> S \<sigma>) v i \<phi> \<Longrightarrow> \<exists>v'\<in>S. \<forall>x\<in>fv \<phi>. v' ! x = v ! x"
-proof (induction arbitrary: v i S n rule: safe_formula_induct)
-  case (1 t1 t2)
-  then show ?case by (cases "t2") (auto simp: Formula.is_Const_def)
+    by (auto simp add: domIff split: option.splits)
 next
-  case (2 t1 t2)
-  then show ?case by (cases "t1") (auto simp: Formula.is_Const_def)
+  case (Let p \<phi> \<psi>)
+  define pos where "pos = Formula.sat \<sigma> V v i (Formula.Let p \<phi> \<psi>)"
+  consider (left) pos' y where "genvar \<phi> pos' y q n c k" "genvar \<psi> pos x p (Formula.nfv \<phi>) pos' y"
+    | (right) "p \<noteq> q \<or> n \<noteq> Formula.nfv \<phi>" "genvar \<psi> pos x q n c k"
+    using Let.prems(2) by (auto simp add: pos_def)
+  then show ?case proof cases
+    case left
+    obtain vs as j where "(p, vs) \<in> inputs \<psi>" "length vs = Formula.nfv \<phi>" "y < Formula.nfv \<phi>"
+      "vs ! y = Some x" "length as = Formula.nfv \<phi>" "as ! y = v ! x"
+      and pos': "pos' = Formula.sat \<sigma> V as j \<phi>"
+      apply (rule Let.IH(2)[rotated, OF left(2)[unfolded pos_def, simplified]])
+      using Let.prems by (auto simp add: domIff)
+    obtain vs' as' j' where "(q, vs') \<in> inputs \<phi>" "length vs' = n" "k < n" "vs' ! k = Some y"
+      "(q, n) \<in> dom V \<longrightarrow> the (V (q, n)) as' j' = c"
+      "(q, n) \<notin> dom V \<longrightarrow> (q, as') \<in> \<Gamma> \<sigma> j' = c"
+      "length as' = n" "as' ! k = as ! y"
+      apply (rule Let.IH(1)[rotated, OF left(1)[unfolded pos', simplified]])
+      using \<open>length as = Formula.nfv \<phi>\<close> by simp_all
+    show ?thesis proof (rule Let.prems(1))
+      show "(q, map (case_option None ((!) vs)) vs') \<in> inputs (Formula.Let p \<phi> \<psi>)"
+        using \<open>_ \<in> inputs \<psi>\<close> \<open>_ \<in> inputs \<phi>\<close> \<open>length vs = Formula.nfv \<phi>\<close>
+        by (auto simp add: compose_inputs_def)
+      show "length (map (case_option None ((!) vs)) vs') = n"
+        using \<open>length vs' = n\<close> by simp
+      show "k < n" by fact
+      show "map (case_option None ((!) vs)) vs' ! k = Some x"
+        using \<open>k < n\<close> \<open>length vs' = n\<close> \<open>vs' ! k = Some y\<close> \<open>vs ! y = Some x\<close> by simp
+      show "(q, n) \<in> dom V \<longrightarrow> the (V (q, n)) as' j' = c" by fact
+      show "as' ! k = v ! x"
+        using \<open>as' ! k = as ! y\<close> \<open>as ! y = v ! x\<close> by simp
+    qed fact+
+  next
+    case right
+    obtain vs' as' j' where "(q, vs') \<in> inputs \<psi>" "length vs' = n" "k < n" "vs' ! k = Some x"
+      "(q, n) \<in> dom V \<longrightarrow> the (V (q, n)) as' j' = c"
+      "(q, n) \<notin> dom V \<longrightarrow> (q, as') \<in> \<Gamma> \<sigma> j' = c"
+      "length as' = n" "as' ! k = v ! x"
+      apply (rule Let.IH(2)[rotated, OF right(2)[unfolded pos_def, simplified]])
+      using Let.prems apply simp
+      using Let.prems right(1) by (simp add: domIff split: if_splits)
+    with right(1) show ?thesis
+      by (intro Let.prems(1)) (auto simp add: compose_inputs_def)
+  qed
 next
-  case (3 x y)
-  then show ?case by auto
+  case (LetPast p \<phi> \<psi>)
+  then show ?case sorry
 next
-  case (4 x y)
+  case (Eq t1 t2)
   then show ?case by simp
 next
-  case (5 e ts)
-  then obtain v' where "v' \<in> S" and eq: "\<forall>t\<in>set ts. Formula.eval_trm v' t = Formula.eval_trm v t"
-    by (auto simp: Formula.slice_def)
-  have "\<forall>t\<in>set ts. \<forall>x\<in>fv_trm t. v' ! x = v ! x" proof
-    fix t assume "t \<in> set ts"
-    with eq have "Formula.eval_trm v' t = Formula.eval_trm v t" ..
-    then show "\<forall>x\<in>fv_trm t. v' ! x = v ! x" by (cases t) (simp_all)
+  case (Less t1 t2)
+  then show ?case by simp
+next
+  case (LessEq t1 t2)
+  then show ?case by simp
+next
+  case (Neg \<phi>)
+  then show ?case by clarsimp blast
+next
+  case (Or \<phi> \<psi>)
+  show ?case
+    using Or.IH[of q n k x V c v thesis i] Or.prems
+    by (clarsimp simp add: less_max_iff_disj split: if_splits) (metis (full_types))+
+next
+  case (And \<phi> \<psi>)
+  have [simp]: "A \<longrightarrow> \<not> B \<Longrightarrow> \<not> (A \<and> B)" for A B by blast
+  show ?case
+    using And.IH[of q n k x V c v thesis i] And.prems
+    by (clarsimp simp add: less_max_iff_disj split: if_splits) (metis (full_types))+
+next
+  case (Ands \<phi>s)
+  show ?case
+    using Ands.prems(2) apply (clarsimp split: if_splits)
+    subgoal premises h for \<phi>
+      apply (rule Ands.IH[OF h(2), of q n k x V c v thesis i])
+        apply (rule Ands.prems(1))
+      using h Ands.prems(3) by auto
+    subgoal premises h for \<phi>
+      apply (rule Ands.IH[OF h(2), of q n k x V c v thesis i])
+        apply (rule Ands.prems(1))
+      using h Ands.prems(3)
+               apply auto
+      apply (subgoal_tac "\<not> (\<forall>x\<in>set \<phi>s. Formula.sat \<sigma> V v i x)")
+      by auto
+    done
+next
+  case (Exists t \<phi>)
+  have 1: "Formula.nfv \<phi> \<le> Suc (length v)"
+    using Exists.prems(3)
+    by (simp add: Formula.nfv_def) (metis fvi_Suc Suc_le_D not_less_eq_eq)
+  show ?case proof (cases "\<exists>z. Formula.sat \<sigma> V (z # v) i \<phi>")
+    case True
+    then obtain z where 2: "Formula.sat \<sigma> V (z # v) i \<phi>" "genvar \<phi> True (Suc x) q n c k"
+      using Exists.prems(2) by auto
+    show ?thesis
+      apply (rule Exists.IH[rotated])
+        apply (subst 2)
+        apply (rule 2)
+       apply (simp add: 1)
+      apply (rule Exists.prems(1))
+             apply simp
+             apply (rule rev_image_eqI, assumption)
+             apply simp+
+          apply (simp add: unshift_opt_def)
+      by simp_all
+  next
+    case False
+    then obtain z where 2: "\<not> Formula.sat \<sigma> V (z # v) i \<phi>" "genvar \<phi> False (Suc x) q n c k"
+      using Exists.prems(2) by auto
+    show ?thesis
+      apply (rule Exists.IH[rotated])
+        apply (subst 2)
+        apply (rule 2)
+       apply (simp add: 1)
+      apply (rule Exists.prems(1))
+             apply simp
+             apply (rule rev_image_eqI, assumption)
+             apply simp+
+          apply (simp add: unshift_opt_def)
+      by simp_all
   qed
-  with \<open>v' \<in> S\<close> show ?case by auto
 next
-  case (6 \<phi> \<psi>)
-  from \<open>gen_unique (Formula.And \<phi> \<psi>)\<close>
-  have *:
-    "Formula.sat (Formula.slice (Formula.And \<phi> \<psi>) S \<sigma>) v i \<phi> = Formula.sat (Formula.slice \<phi> S \<sigma>) v i \<phi>"
-    "Formula.sat (Formula.slice (Formula.And \<phi> \<psi>) S \<sigma>) v i \<psi> = Formula.sat (Formula.slice \<psi> S \<sigma>) v i \<psi>"
-    unfolding Formula.slice_def Formula.And_def
-    by (fastforce simp: unique_names_matches_absorb intro!: sat_inter_names_cong)+
-  from 6(1,4-) 6(2,3)[where S=S] show ?case
-    unfolding Formula.And_def
-    by (auto simp: *[unfolded Formula.And_def] intro!: mergeable_envs_Ex)
+  case (Agg y \<omega> tys f \<phi>)
+  have 1: "Formula.nfv \<phi> \<le> length tys + length v"
+    using Agg.prems(3)
+    apply (auto simp add: Formula.nfv_def)
+    subgoal for x
+      apply (cases "x \<le> length tys")
+       apply simp
+      apply (drule bspec[where x="x - length tys"], rule UnI1)
+       apply (metis fvi_iff_fv le_add_diff_inverse2 nat_le_linear)
+      by linarith
+    done
+  obtain zs where 2: "length zs = length tys" "Formula.sat \<sigma> V (zs @ v) i \<phi>"
+    "genvar \<phi> True (x + length tys) q n c k"
+    using Agg.prems(2)
+    apply (auto simp add: subset_iff)
+    subgoal for zs
+      apply (subgoal_tac "((\<forall>a x. length x = length tys \<longrightarrow>
+             Formula.sat \<sigma> V (x @ v) i \<phi> \<longrightarrow>
+             Formula.eval_trm (x @ v) f \<noteq> a) \<longrightarrow>
+             (\<forall>t. t \<in> fv \<phi> \<longrightarrow> t < length tys))")
+      by auto
+    done
+  show ?case
+    apply (rule Agg.IH[rotated])
+      apply (subst 2)
+      apply (rule 2)
+     apply (simp add: 2)
+     apply (rule 1)
+    apply (rule Agg.prems(1))
+           apply simp
+           apply (rule rev_image_eqI, assumption)
+           apply simp+
+        apply (simp add: unshift_opt_def)
+    using 2 by (simp_all add: nth_append)
 next
-  case (7 \<phi> \<psi>)
-  from \<open>gen_unique (Formula.And_Not \<phi> \<psi>)\<close>
-  have *:
-    "Formula.sat (Formula.slice (Formula.And_Not \<phi> \<psi>) S \<sigma>) v i \<phi> = Formula.sat (Formula.slice \<phi> S \<sigma>) v i \<phi>"
-    unfolding Formula.slice_def Formula.And_Not_def
-    by (fastforce simp: unique_names_matches_absorb intro!: sat_inter_names_cong)
-  from 7(1,2,5-) 7(3)[where S=S] have "\<exists>v'\<in>S. \<forall>x\<in>fv \<phi>. v' ! x = v ! x"
-    unfolding Formula.And_Not_def
-    by (auto simp: *[unfolded Formula.And_Not_def])
-  with \<open>fv \<psi> \<subseteq> fv \<phi>\<close> show ?case by (auto simp: Formula.fvi_And_Not)
+  case (Prev I \<phi>)
+  show ?case
+    apply (cases i)
+    using Prev apply simp
+    subgoal for i'
+      using Prev.IH[of q n k x V c v thesis i'] Prev.prems
+      by auto
+    done
 next
-  case (8 \<phi> \<psi>)
-  from \<open>gen_unique (Formula.Or \<phi> \<psi>)\<close>
-  have *:
-    "Formula.sat (Formula.slice (Formula.Or \<phi> \<psi>) S \<sigma>) v i \<phi> = Formula.sat (Formula.slice \<phi> S \<sigma>) v i \<phi>"
-    "Formula.sat (Formula.slice (Formula.Or \<phi> \<psi>) S \<sigma>) v i \<psi> = Formula.sat (Formula.slice \<psi> S \<sigma>) v i \<psi>"
-    unfolding Formula.slice_def
-    by (fastforce simp: unique_names_matches_absorb intro!: sat_inter_names_cong)+
-  from 8(1,4-) 8(2,3)[where S=S] have "\<exists>v'\<in>S. \<forall>x\<in>fv \<phi>. v' ! x = v ! x"
-    by (auto simp: * \<open>fv \<psi> = fv \<phi>\<close>)
-  then show ?case by (auto simp: \<open>fv \<psi> = fv \<phi>\<close>)
-next
-  case (9 \<phi>)
-  then obtain z where sat_\<phi>: "Formula.sat (Formula.slice (Formula.Exists \<phi>) S \<sigma>) (z # v) i \<phi>"
+  case (Next I \<phi>)
+  show ?case
+    using Next.IH[of q n k x V c v thesis "Suc i"] Next.prems
     by auto
-  from "9.prems" sat_\<phi> have "\<exists>v'\<in>set_Cons UNIV S. \<forall>x\<in>fv \<phi>. v' ! x = (z # v) ! x"
-    by (intro "9.IH") (auto simp: nfv_Exists slice_Exists intro!: mergeable_envs_set_Cons)
-  then show ?case
-    by (auto simp: set_Cons_def fvi_Suc Ball_def nth_Cons split: nat.splits)
 next
-  case (10 I \<phi>)
-  then obtain j where "Formula.sat (Formula.slice \<phi> S \<sigma>) v j \<phi>"
-    by (auto simp: Formula.slice_def split: nat.splits)
-  with 10 show ?case by simp
-next
-  case (11 I \<phi>)
-  then obtain j where "Formula.sat (Formula.slice \<phi> S \<sigma>) v j \<phi>"
-    by (auto simp: Formula.slice_def split: nat.splits)
-  with 11 show ?case by simp
-next
-  case (12 \<phi> I \<psi>)
-  from \<open>gen_unique (Formula.Since \<phi> I \<psi>)\<close>
-  have *:
-    "Formula.sat (Formula.slice (Formula.Since \<phi> I \<psi>) S \<sigma>) v j \<psi> = Formula.sat (Formula.slice \<psi> S \<sigma>) v j \<psi>" for j
-    unfolding Formula.slice_def
-    by (fastforce simp: unique_names_matches_absorb intro!: sat_inter_names_cong)
-  from 12 obtain j where "Formula.sat (Formula.slice (Formula.Since \<phi> I \<psi>) S \<sigma>) v j \<psi>"
+  case (Since \<phi> I \<psi>)
+  show ?case
+    using Since.prems(2-)
+    apply clarsimp
+    apply (subgoal_tac "\<exists>j\<le>i. memL I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and>
+                  memR I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and>
+                  Formula.sat \<sigma> V v j \<psi> \<and>
+                  (\<forall>k\<in>{j<..i}. Formula.sat \<sigma> V v k \<phi>)")
+     apply simp
+    subgoal for j
+      apply (rule Since.IH(2)[rotated, of V v j x q n c k])
+        apply simp
+       apply simp
+      apply (rule Since.prems(1))
+             apply simp
+             apply (rule disjI2)
+      by simp_all
     by auto
-  with 12 have "\<exists>v'\<in>S. \<forall>x\<in>fv \<psi>. v' ! x = v ! x" by (auto simp: *)(*
-  with \<open>fv \<phi> \<subseteq> fv \<psi>\<close> show ?case by auto
 next
-  case (13 \<phi> I \<psi>)
-  from \<open>gen_unique (Formula.Since (Formula.Neg \<phi>) I \<psi>)\<close>
-  have *:
-    "Formula.sat (Formula.slice (Formula.Since (Formula.Neg \<phi>) I \<psi>) S \<sigma>) v j \<psi> = Formula.sat (Formula.slice \<psi> S \<sigma>) v j \<psi>" for j
-    unfolding Formula.slice_def
-    by (fastforce simp: unique_names_matches_absorb intro!: sat_inter_names_cong)
-  from 13 obtain j where "Formula.sat (Formula.slice (Formula.Since (Formula.Neg \<phi>) I \<psi>) S \<sigma>) v j \<psi>"
+  case (Until \<phi> I \<psi>)
+  show ?case
+    using Until.prems(2-)
+    apply clarsimp
+    apply (subgoal_tac "\<exists>j\<ge>i. memL I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and>
+                  memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and>
+                  Formula.sat \<sigma> V v j \<psi> \<and>
+                  (\<forall>k\<in>{i..<j}. Formula.sat \<sigma> V v k \<phi>)")
+     apply simp
+    subgoal for j
+      apply (rule Until.IH(2)[rotated, of V v j x q n c k])
+        apply simp
+       apply simp
+      apply (rule Until.prems(1))
+             apply simp
+             apply (rule disjI2)
+      by simp_all
     by auto
-  with 13 have "\<exists>v'\<in>S. \<forall>x\<in>fv \<psi>. v' ! x = v ! x" by (auto simp: *)(*
-  with \<open>fv (Formula.Neg \<phi>) \<subseteq> fv \<psi>\<close> show ?case by auto
 next
-  case (14 \<phi> I \<psi>)
-  from \<open>gen_unique (Formula.Until \<phi> I \<psi>)\<close>
-  have *:
-    "Formula.sat (Formula.slice (Formula.Until \<phi> I \<psi>) S \<sigma>) v j \<psi> = Formula.sat (Formula.slice \<psi> S \<sigma>) v j \<psi>" for j
-    unfolding Formula.slice_def
-    by (fastforce simp: unique_names_matches_absorb intro!: sat_inter_names_cong)
-  from 14 obtain j where "Formula.sat (Formula.slice (Formula.Until \<phi> I \<psi>) S \<sigma>) v j \<psi>"
-    by auto
-  with 14 have "\<exists>v'\<in>S. \<forall>x\<in>fv \<psi>. v' ! x = v ! x" by (auto simp: *)(*
-  with \<open>fv \<phi> \<subseteq> fv \<psi>\<close> show ?case by auto
+  case (MatchF I r)
+  then show ?case by simp
 next
-  case (15 \<phi> I \<psi>)
-  from \<open>gen_unique (Formula.Until (Formula.Neg \<phi>) I \<psi>)\<close>
-  have *:
-    "Formula.sat (Formula.slice (Formula.Until (Formula.Neg \<phi>) I \<psi>) S \<sigma>) v j \<psi> = Formula.sat (Formula.slice \<psi> S \<sigma>) v j \<psi>" for j
-    unfolding Formula.slice_def
-    by (fastforce simp: unique_names_matches_absorb intro!: sat_inter_names_cong)
-  from 15 obtain j where "Formula.sat (Formula.slice (Formula.Until (Formula.Neg \<phi>) I \<psi>) S \<sigma>) v j \<psi>"
-    by auto
-  with 15 have "\<exists>v'\<in>S. \<forall>x\<in>fv \<psi>. v' ! x = v ! x" by (auto simp: *)(*
-  with \<open>fv (Formula.Neg \<phi>) \<subseteq> fv \<psi>\<close> show ?case by auto
+  case (MatchP I r)
+  then show ?case by simp
+next
+  case (TP t)
+  then show ?case by simp
+next
+  case (TS t)
+  then show ?case by simp
 qed
 
-lemma unique_sat_slice:
-  assumes formula: "safe_formula \<phi>" "gen_unique \<phi>"
-      and restr: "S \<noteq> {}" "mergeable_envs (Formula.nfv \<phi>) S"
-      and sat_slice: "Formula.sat (Formula.slice \<phi> S \<sigma>) v i \<phi>"
-    shows "Formula.sat \<sigma> v i \<phi>"
+definition guarded_by_unique_inputs :: "'a Formula.formula \<Rightarrow> bool" where
+  "guarded_by_unique_inputs \<phi> \<longleftrightarrow> (\<forall>x\<in>Formula.fv \<phi>. \<exists>q n k. genvar \<phi> True x q n True k \<and>
+    (\<forall>vs. (q, vs) \<in> inputs \<phi> \<longrightarrow> length vs = n \<longrightarrow> vs ! k = Some x))"
+
+definition mergeable_envs where
+  "mergeable_envs A S \<longleftrightarrow> (\<forall>v\<in>S. \<forall>v'\<in>S. \<forall>x\<in>A. \<exists>u\<in>S. \<forall>y\<in>A.
+    u ! y = (if x = y then v ! y else v' ! y))"
+
+lemma sat_slice_inversion:
+  assumes "guarded_by_unique_inputs \<phi>" and "mergeable_envs (Formula.fv \<phi>) S"
+    and "length v \<ge> Formula.nfv \<phi>"
+    and "Formula.sat (map_\<Gamma> (\<lambda>D. D \<inter> relevant_events \<phi> S) \<sigma>) Map.empty v i \<phi>"
+    and "S \<noteq> {}"
+  shows "\<exists>v'\<in>S. \<forall>x\<in>Formula.fv \<phi>. v' ! x = v ! x"
 proof -
-  obtain v' where "v' \<in> S" and fv_eq: "\<forall>x\<in>fv \<phi>. v' ! x = v ! x"
-    using unique_sat_slice_mem[OF formula restr order_refl sat_slice] ..
-  with sat_slice have "Formula.sat (Formula.slice \<phi> S \<sigma>) v' i \<phi>"
-    by (auto iff: sat_fvi_cong)
-  then have "Formula.sat \<sigma> v' i \<phi>"
-    unfolding sat_slice_iff[OF \<open>v' \<in> S\<close>, symmetric] .
-  with fv_eq show ?thesis by (auto iff: sat_fvi_cong)
+  have *: "\<exists>v'\<in>S. v' ! x = v ! x" if x: "x \<in> Formula.fv \<phi>" for x
+  proof -
+    obtain q n k where "genvar \<phi> True x q n True k"
+      and unique: "\<And>vs. (q, vs) \<in> inputs \<phi> \<Longrightarrow> length vs = n \<Longrightarrow> vs ! k = Some x"
+      using assms(1) x by (auto simp add: guarded_by_unique_inputs_def)
+    then obtain vs v' as where "(q, vs) \<in> inputs \<phi>" "length vs = n" "k < n" "vs ! k = Some x"
+      "v' \<in> S" "Safety.matches v' \<phi> (q, as)" "length as = n" "as ! k = v ! x"
+      using assms(3,4) genvar_sat[of \<phi> "map_\<Gamma> (\<lambda>D. D \<inter> relevant_events \<phi> S) \<sigma>" Map.empty v i x q n True k]
+      apply (auto simp add: set_eq_iff)
+      by (metis (opaque_lifting))
+    note \<open>as ! k = v ! x\<close>
+    also have "as ! k = v' ! x"
+      using \<open>Safety.matches v' \<phi> (q, as)\<close>
+    proof (rule unique_inputs_matches)
+      show "\<forall>xa\<in>{x}. xa < Formula.nfv \<phi> \<and> v' ! xa = v' ! x"
+        using x fvi_less_nfv by auto
+      show "\<forall>ka\<in>{k}. ka < length as"
+        using \<open>k < n\<close> \<open>length as = n\<close> by simp
+      show "k \<in> {k}" by simp
+      fix us k'
+      assume "(q, us) \<in> inputs \<phi>" "length us = length as" "k' \<in> {k}"
+      then show "us ! k' \<in> Some ` {x}"
+        using unique \<open>length as = n\<close> by auto
+    qed
+    finally have "v' ! x = v ! x" .
+    then show "\<exists>v'\<in>S. v' ! x = v ! x"
+      using \<open>v' \<in> S\<close> by blast
+  qed
+  have "\<exists>v'\<in>S. (\<forall>x\<in>F. v' ! x = v ! x)" if "finite F" "F \<subseteq> Formula.fv \<phi>" for F
+    using that
+  proof (induction F)
+    case empty
+    then show ?case using \<open>S \<noteq> {}\<close> by blast
+  next
+    case (insert x F)
+    then obtain v' where 1: "v' \<in> S" "\<forall>y\<in>F. v' ! y = v ! y"
+      by blast
+    obtain v'' where 2: "v'' \<in> S" "v'' ! x = v ! x"
+      using insert.prems * by blast
+    have "x \<in> Formula.fv \<phi>"
+      using insert.prems by blast
+    then obtain u where "u \<in> S" "\<forall>y\<in>Formula.fv \<phi>. u ! y = (if x = y then v'' ! y else v' ! y)"
+      using assms(2) 1 2 by (force simp add: mergeable_envs_def)
+    then have "\<forall>y\<in>insert x F. u ! y = v ! y"
+      using insert.prems 1 2 by (auto split: if_splits dest!: subsetD)
+    then show ?case
+      using \<open>u \<in> S\<close> by blast
+  qed
+  from this[of "Formula.fv \<phi>"] show ?thesis
+    by simp
 qed
 
 subsection \<open>Lemma 3\<close>
 
-lemma (in splitting_strategy) unique_sat_strategy:
-  "safe_formula \<phi> \<Longrightarrow> gen_unique \<phi> \<Longrightarrow> slice_set \<phi> k \<noteq> {} \<Longrightarrow>
-  mergeable_envs (Formula.nfv \<phi>) (slice_set \<phi> k) \<Longrightarrow>
-  Formula.sat (Formula.slice \<phi> (slice_set \<phi> k) \<sigma>) (map the v) i \<phi> \<Longrightarrow>
-  ok \<phi> v \<Longrightarrow> k \<in> strategy \<phi> v"
-  by (drule (3) unique_sat_slice_mem) (auto dest: wf_tuple_cong)
-
 locale skip_inter = joint_data_slicer +
-  assumes nonempty: "slice_set \<phi> k \<noteq> {}"
-  and mergeable: "mergeable_envs (Formula.nfv \<phi>) (slice_set \<phi> k)"
+  assumes guarded: "guarded_by_unique_inputs \<phi>"
+  and mergeable: "mergeable_envs (Formula.fv \<phi>) (slice_set k)"
+  and nonempty: "slice_set k \<noteq> {}"
 begin
 
 subsection \<open>Definition of J'\<close>
@@ -1137,28 +1226,49 @@ definition "skip_joiner = (\<lambda>s. \<Union>k. s k)"
 subsection \<open>Theorem 3\<close>
 
 lemma skip_joiner:
-  assumes "monitorable \<phi>" "safe_formula \<phi>" "gen_unique \<phi>"
-  shows "joiner \<phi> (\<lambda>k. M \<phi> (splitter \<phi> \<pi> k)) = skip_joiner (\<lambda>k. M \<phi> (splitter \<phi> \<pi> k))"
+  assumes "\<pi> \<in> prefixes"
+  shows "joiner (\<lambda>k. M (splitter \<pi> k)) = skip_joiner (\<lambda>k. M (splitter \<pi> k))"
   (is "?L = ?R")
 proof safe
   fix i v
   assume "(i, v) \<in> ?R"
-  then obtain k where in_M: "(i, v) \<in> M \<phi> (splitter \<phi> \<pi> k)"
-  unfolding skip_joiner_def by blast
-  from ex_prefix_of obtain \<sigma> where "prefix_of \<pi> \<sigma>" by blast
-  with sound_monitor[OF assms(1) in_M] have
-    "Formula.sat (Formula.slice \<phi> (slice_set \<phi> k) \<sigma>) (map the v) i \<phi>" "ok \<phi> v"
-    by (auto simp: splitter_pslice intro!: prefix_of_pslice_slice)
-  note unique_sat_strategy[OF assms(2,3) nonempty mergeable this]
-  with in_M show "(i, v) \<in> ?L" unfolding joiner_def by blast
+  then obtain k where in_M: "(i, v) \<in> M (splitter \<pi> k)"
+    unfolding skip_joiner_def by blast
+  obtain \<sigma> where "\<sigma> \<in> traces" "prefix_of \<pi> \<sigma>"
+    using assms by (auto simp add: prefixes_def)
+  with sound_monitor[OF _ in_M] wf_monitor[OF _ in_M] have
+    sat: "Formula.sat (map_\<Gamma> (\<lambda>D. D \<inter> relevant_events \<phi> (slice_set k)) \<sigma>) Map.empty (map the v) i \<phi>"
+    and "ok \<phi> v"
+    by (auto simp: splitter_pslice)
+  then obtain w where "ok \<phi> w" "k \<in> strategy w" "\<forall>x\<in>Formula.fv \<phi>. v ! x = w ! x"
+    using sat_slice_inversion[OF guarded mergeable _ sat nonempty] fv_less_nfv
+    by (auto simp add: slice_set_def wf_tuple_def)
+  then have "k \<in> strategy v"
+    using \<open>ok \<phi> v\<close>
+    by (metis (mono_tags, lifting) wf_tuple_cong fv_less_nfv nth_map wf_tuple_length)
+  with in_M \<open>ok \<phi> v\<close> show "(i, v) \<in> ?L" unfolding joiner_def
+    by blast
 qed (auto simp: joiner_def skip_joiner_def)
 
-sublocale skip_joint_monitor: monitor monitorable
-  "\<lambda>\<phi> \<pi>. (if safe_formula \<phi> \<and> gen_unique \<phi> then skip_joiner else joiner \<phi>) (\<lambda>k. M \<phi> (splitter \<phi> \<pi> k))"
-  using joint_monitor.mono_monitor joint_monitor.sound_monitor joint_monitor.complete_monitor
-  by unfold_locales (auto simp: skip_joiner[symmetric] split: if_splits)
-
-end*)
+sublocale skip_joint_slicer: slicer "Formula.nfv \<phi>" "Formula.fv \<phi>" traces
+  "\<lambda>\<sigma> v i. Formula.sat \<sigma> Map.empty v i \<phi>" "\<lambda>\<pi>. skip_joiner (\<lambda>k. M (splitter \<pi> k))"
+  "\<lambda>_. M" splitter skip_joiner
+  apply unfold_locales
+        apply (subst skip_joiner[symmetric], blast)+
+        apply (fact joint_monitor.mono_monitor)
+       apply (subst (asm) skip_joiner[symmetric], blast)
+       apply (fact joint_monitor.wf_monitor)
+      apply (subst (asm) skip_joiner[symmetric], blast)
+      apply (fact joint_monitor.sound_monitor)
+     apply (rule ex_cong[THEN iffD1])
+      apply (subst skip_joiner[symmetric])
+       apply blast
+      apply (rule refl)
+     apply (fact joint_monitor.complete_monitor)
+    apply (fact joint_slicer.mono_splitter)
+   apply (rule refl)
+  apply (fact joint_slicer.splitter_prefix)
+  done
 
 (*<*)
 end
