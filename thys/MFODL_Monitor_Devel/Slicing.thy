@@ -903,8 +903,8 @@ fun genvar :: "'a Formula.formula \<Rightarrow> bool \<Rightarrow> nat \<Rightar
 | "genvar (Formula.Prev I \<phi>) pos x q n c k = (pos \<and> genvar \<phi> pos x q n c k)"
 | "genvar (Formula.Next I \<phi>) pos x q n c k = ((pos \<or> I = all) \<and> genvar \<phi> pos x q n c k)"
 (* The following cases could be made more precise. *)
-| "genvar (Formula.Since \<phi> I \<psi>) pos x q n c k = ((pos \<or> I = all) \<and> genvar \<psi> pos x q n c k)"
-| "genvar (Formula.Until \<phi> I \<psi>) pos x q n c k = ((pos \<or> I = all) \<and> genvar \<psi> pos x q n c k)"
+| "genvar (Formula.Since \<phi> I \<psi>) pos x q n c k = ((pos \<or> mem I 0) \<and> genvar \<psi> pos x q n c k)"
+| "genvar (Formula.Until \<phi> I \<psi>) pos x q n c k = ((pos \<or> mem I 0) \<and> genvar \<psi> pos x q n c k)"
 | "genvar (Formula.MatchP I r) pos x q n c k = False"
 | "genvar (Formula.MatchF I r) pos x q n c k = False"
 | "genvar (Formula.TP t) pos x q n c k = False"
@@ -1209,8 +1209,8 @@ next
              apply simp
              apply (rule disjI2)
       by simp_all
-    apply simp
-    apply (cases "\<exists>j\<le>i. Formula.sat \<sigma> V v j \<psi> \<and> (\<forall>k\<in>{j<..i}. Formula.sat \<sigma> V v k \<phi>)")
+    apply (cases "\<exists>j\<le>i. memL I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> memR I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and>
+      Formula.sat \<sigma> V v j \<psi> \<and> (\<forall>k\<in>{j<..i}. Formula.sat \<sigma> V v k \<phi>)")
      apply clarsimp
     subgoal for j
       apply (rule Since.IH(2)[rotated, of V v j x q n c k])
@@ -1220,16 +1220,12 @@ next
              apply simp
              apply (rule disjI2)
       by simp_all
-    apply (subgoal_tac "\<exists>j. \<not> Formula.sat \<sigma> V v j \<psi>")
+    apply (subgoal_tac "\<not> Formula.sat \<sigma> V v i \<psi>")
      apply clarsimp
-    subgoal for j
-      apply (rule Since.IH(2)[rotated, of V v j x q n c k])
-        apply simp
+     apply (rule Since.IH(2)[rotated, of V v i x q n c k])
        apply simp
-      apply (rule Since.prems(1))
-             apply simp
-             apply (rule disjI2)
-      by simp_all
+      apply simp
+     apply (rule Since.prems(1))
     by auto
 next
   case (Until \<phi> I \<psi>)
@@ -1246,8 +1242,8 @@ next
              apply simp
              apply (rule disjI2)
       by simp_all
-    apply simp
-    apply (cases "\<exists>j\<ge>i. Formula.sat \<sigma> V v j \<psi> \<and> (\<forall>k\<in>{i..<j}. Formula.sat \<sigma> V v k \<phi>)")
+    apply (cases "\<exists>j\<ge>i. memL I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and>
+      Formula.sat \<sigma> V v j \<psi> \<and> (\<forall>k\<in>{i..<j}. Formula.sat \<sigma> V v k \<phi>)")
      apply clarsimp
     subgoal for j
       apply (rule Until.IH(2)[rotated, of V v j x q n c k])
@@ -1257,16 +1253,12 @@ next
              apply simp
              apply (rule disjI2)
       by simp_all
-    apply (subgoal_tac "\<exists>j. \<not> Formula.sat \<sigma> V v j \<psi>")
+    apply (subgoal_tac "\<not> Formula.sat \<sigma> V v i \<psi>")
      apply clarsimp
-    subgoal for j
-      apply (rule Until.IH(2)[rotated, of V v j x q n c k])
-        apply simp
+     apply (rule Until.IH(2)[rotated, of V v i x q n c k])
        apply simp
-      apply (rule Until.prems(1))
-             apply simp
-             apply (rule disjI2)
-      by simp_all
+      apply simp
+     apply (rule Until.prems(1))
     by auto
 next
   case (MatchF I r)
