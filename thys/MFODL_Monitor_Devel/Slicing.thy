@@ -918,10 +918,10 @@ lemma memR_all[simp]: "memR all x"
 
 lemma genvar_sat:
   assumes "genvar \<phi> (Formula.sat \<sigma> V v i \<phi>) x q n c k" and "length v \<ge> Formula.nfv \<phi>"
-  obtains vs as j where "(q, vs) \<in> inputs \<phi>" "length vs = n" "k < n" "vs ! k = Some x"
+  obtains vs as j where
     "(q, n) \<in> dom V \<longrightarrow> the (V (q, n)) as j = c"
     "(q, n) \<notin> dom V \<longrightarrow> (q, as) \<in> \<Gamma> \<sigma> j = c"
-    "length as = n" "as ! k = v ! x"
+    "length as = n" "k < n" "as ! k = v ! x"
   using assms
 proof (induction \<phi> arbitrary: V v i x q n c k thesis)
   case (Pred r ts)
@@ -935,33 +935,25 @@ next
     using Let.prems(2) by (auto simp add: pos_def)
   then show ?case proof cases
     case left
-    obtain vs as j where "(p, vs) \<in> inputs \<psi>" "length vs = Formula.nfv \<phi>" "y < Formula.nfv \<phi>"
-      "vs ! y = Some x" "length as = Formula.nfv \<phi>" "as ! y = v ! x"
+    obtain as j where "y < Formula.nfv \<phi>" "length as = Formula.nfv \<phi>" "as ! y = v ! x"
       and pos': "pos' = Formula.sat \<sigma> V as j \<phi>"
       apply (rule Let.IH(2)[rotated, OF left(2)[unfolded pos_def, simplified]])
       using Let.prems by (auto simp add: domIff)
-    obtain vs' as' j' where "(q, vs') \<in> inputs \<phi>" "length vs' = n" "k < n" "vs' ! k = Some y"
+    obtain as' j' where "k < n"
       "(q, n) \<in> dom V \<longrightarrow> the (V (q, n)) as' j' = c"
       "(q, n) \<notin> dom V \<longrightarrow> (q, as') \<in> \<Gamma> \<sigma> j' = c"
       "length as' = n" "as' ! k = as ! y"
       apply (rule Let.IH(1)[rotated, OF left(1)[unfolded pos', simplified]])
       using \<open>length as = Formula.nfv \<phi>\<close> by simp_all
     show ?thesis proof (rule Let.prems(1))
-      show "(q, map (case_option None ((!) vs)) vs') \<in> inputs (Formula.Let p \<phi> \<psi>)"
-        using \<open>_ \<in> inputs \<psi>\<close> \<open>_ \<in> inputs \<phi>\<close> \<open>length vs = Formula.nfv \<phi>\<close>
-        by (auto simp add: compose_inputs_def)
-      show "length (map (case_option None ((!) vs)) vs') = n"
-        using \<open>length vs' = n\<close> by simp
       show "k < n" by fact
-      show "map (case_option None ((!) vs)) vs' ! k = Some x"
-        using \<open>k < n\<close> \<open>length vs' = n\<close> \<open>vs' ! k = Some y\<close> \<open>vs ! y = Some x\<close> by simp
       show "(q, n) \<in> dom V \<longrightarrow> the (V (q, n)) as' j' = c" by fact
       show "as' ! k = v ! x"
         using \<open>as' ! k = as ! y\<close> \<open>as ! y = v ! x\<close> by simp
     qed fact+
   next
     case right
-    obtain vs' as' j' where "(q, vs') \<in> inputs \<psi>" "length vs' = n" "k < n" "vs' ! k = Some x"
+    obtain as' j' where "k < n"
       "(q, n) \<in> dom V \<longrightarrow> the (V (q, n)) as' j' = c"
       "(q, n) \<notin> dom V \<longrightarrow> (q, as') \<in> \<Gamma> \<sigma> j' = c"
       "length as' = n" "as' ! k = v ! x"
@@ -985,17 +977,16 @@ next
     using LetPast.prems(2) by (auto simp add: pos_def)
   then show ?case proof cases
     case left
-    obtain vs as j where "(p, vs) \<in> inputs \<psi>" "length vs = Formula.nfv \<phi>" "y < Formula.nfv \<phi>"
-      "vs ! y = Some x" "length as = Formula.nfv \<phi>" "as ! y = v ! x"
+    obtain as j where "y < Formula.nfv \<phi>" "length as = Formula.nfv \<phi>" "as ! y = v ! x"
       and pos': "pos' = letpast_sat (\<lambda>X u k. Formula.sat \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) u k \<phi>) as j"
       apply (rule LetPast.IH(2)[rotated, OF left(2)[unfolded pos_def, simplified sat.simps Let_def]])
       using LetPast.prems by (auto simp add: domIff)
     have "lfp ?G \<le> (\<lambda>pos' y. \<forall>as j. pos' = letpast_sat (\<lambda>X u k. Formula.sat \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) u k \<phi>) as j \<longrightarrow>
         length as = Formula.nfv \<phi> \<longrightarrow>
-        (\<exists>vs' as' j'. (q, vs') \<in> lfp ?F \<and> length vs' = n \<and> k < n \<and> vs' ! k = Some y \<and>
+        (\<exists>as' j'.
           ((q, n) \<in> dom V \<longrightarrow> the (V (q, n)) as' j' = c) \<and>
           ((q, n) \<notin> dom V \<longrightarrow> (q, as') \<in> \<Gamma> \<sigma> j' = c) \<and>
-          length as' = n \<and> as' ! k = as ! y))"
+          length as' = n \<and> k < n \<and> as' ! k = as ! y))"
       apply (rule lfp_induct[OF mono_G])
       apply clarsimp
       apply (erule disjE)
@@ -1005,12 +996,7 @@ next
           apply assumption
          apply simp
         using diff apply (simp del: fun_upd_apply cong: conj_cong)
-        subgoal for vs' as' j'
-          apply (rule exI[where x=vs'])
-          apply (rule conjI)
-           apply (subst lfp_unfold[OF mono_compose_inputs])
-           apply (auto simp add: compose_inputs_def split: if_splits)
-          done
+        apply (auto simp add: compose_inputs_def split: if_splits)
         done
       apply clarsimp
       subgoal premises h for y as j pos'' y'
@@ -1026,41 +1012,27 @@ next
         using h(1) apply simp
         using diff apply (simp del: fun_upd_apply cong: conj_cong)
         apply clarsimp
-        subgoal for vs' as' j'
+        subgoal for as' j'
           apply (rule h(4)[rule_format, THEN exE])
             apply (rule exI[where x=j'], assumption)
-           apply simp
-          apply clarsimp
-          subgoal for vs'' as'' j''
-            apply (rule exI[where x="map (case_option None ((!) vs')) vs''"])
-            apply (rule conjI)
-             apply (subst lfp_unfold[OF mono_compose_inputs])
-             apply (auto simp add: compose_inputs_def)
-            done
+           apply (auto simp add: compose_inputs_def)
           done
         done
       done
-    then obtain vs' as' j' where "(q, vs') \<in> lfp ?F" "length vs' = n" "k < n" "vs' ! k = Some y"
+    then obtain as' j' where "k < n"
       "(q, n) \<in> dom V \<longrightarrow> the (V (q, n)) as' j' = c"
       "(q, n) \<notin> dom V \<longrightarrow> (q, as') \<in> \<Gamma> \<sigma> j' = c"
       "length as' = n" "as' ! k = as ! y"
       using left(1) pos' \<open>length as = Formula.nfv \<phi>\<close> by blast
     show ?thesis proof (rule LetPast.prems(1))
-      show "(q, map (case_option None ((!) vs)) vs') \<in> inputs (Formula.LetPast p \<phi> \<psi>)"
-        using \<open>_ \<in> inputs \<psi>\<close> \<open>_ \<in> lfp ?F\<close> \<open>length vs = Formula.nfv \<phi>\<close>
-        by (auto simp add: compose_inputs_def)
-      show "length (map (case_option None ((!) vs)) vs') = n"
-        using \<open>length vs' = n\<close> by simp
       show "k < n" by fact
-      show "map (case_option None ((!) vs)) vs' ! k = Some x"
-        using \<open>k < n\<close> \<open>length vs' = n\<close> \<open>vs' ! k = Some y\<close> \<open>vs ! y = Some x\<close> by simp
       show "(q, n) \<in> dom V \<longrightarrow> the (V (q, n)) as' j' = c" by fact
       show "as' ! k = v ! x"
         using \<open>as' ! k = as ! y\<close> \<open>as ! y = v ! x\<close> by simp
     qed fact+
   next
     case right
-    obtain vs' as' j' where "(q, vs') \<in> inputs \<psi>" "length vs' = n" "k < n" "vs' ! k = Some x"
+    obtain as' j' where "k < n"
       "(q, n) \<in> dom V \<longrightarrow> the (V (q, n)) as' j' = c"
       "(q, n) \<notin> dom V \<longrightarrow> (q, as') \<in> \<Gamma> \<sigma> j' = c"
       "length as' = n" "as' ! k = v ! x"
@@ -1085,30 +1057,20 @@ next
 next
   case (Or \<phi> \<psi>)
   show ?case
-    using Or.IH[of q n k x V c v thesis i] Or.prems
-    by (clarsimp simp add: less_max_iff_disj split: if_splits) (metis (full_types))+
+    using Or.IH[of q n V c k v x thesis i] Or.prems
+    by (auto split: if_splits)
 next
   case (And \<phi> \<psi>)
-  have [simp]: "A \<longrightarrow> \<not> B \<Longrightarrow> \<not> (A \<and> B)" for A B by blast
   show ?case
-    using And.IH[of q n k x V c v thesis i] And.prems
-    by (clarsimp simp add: less_max_iff_disj split: if_splits) (metis (full_types))+
+    using And.IH[of q n V c k v x thesis i] And.prems
+    by (auto split: if_splits)
 next
   case (Ands \<phi>s)
   show ?case
-    using Ands.prems(2) apply (clarsimp split: if_splits)
-    subgoal premises h for \<phi>
-      apply (rule Ands.IH[OF h(2), of q n k x V c v thesis i])
-        apply (rule Ands.prems(1))
-      using h Ands.prems(3) by auto
-    subgoal premises h for \<phi>
-      apply (rule Ands.IH[OF h(2), of q n k x V c v thesis i])
-        apply (rule Ands.prems(1))
-      using h Ands.prems(3)
-               apply auto
-      apply (subgoal_tac "\<not> (\<forall>x\<in>set \<phi>s. Formula.sat \<sigma> V v i x)")
-      by auto
-    done
+    using Ands.IH[of _ q n V c k v x thesis i] Ands.prems
+    apply (auto split: if_splits)
+    apply (subgoal_tac "\<not> (\<forall>x\<in>set \<phi>s. Formula.sat \<sigma> V v i x)")
+    by auto
 next
   case (Exists t \<phi>)
   have 1: "Formula.nfv \<phi> \<le> Suc (length v)"
@@ -1124,10 +1086,6 @@ next
         apply (rule 2)
        apply (simp add: 1)
       apply (rule Exists.prems(1))
-             apply simp
-             apply (rule rev_image_eqI, assumption)
-             apply simp+
-          apply (simp add: unshift_opt_def)
       by simp_all
   next
     case False
@@ -1139,10 +1097,6 @@ next
         apply (rule 2)
        apply (simp add: 1)
       apply (rule Exists.prems(1))
-             apply simp
-             apply (rule rev_image_eqI, assumption)
-             apply simp+
-          apply (simp add: unshift_opt_def)
       by simp_all
   qed
 next
@@ -1175,10 +1129,6 @@ next
      apply (simp add: 2)
      apply (rule 1)
     apply (rule Agg.prems(1))
-           apply simp
-           apply (rule rev_image_eqI, assumption)
-           apply simp+
-        apply (simp add: unshift_opt_def)
     using 2 by (simp_all add: nth_append)
 next
   case (Prev I \<phi>)
@@ -1186,13 +1136,13 @@ next
     apply (cases i)
     using Prev apply simp
     subgoal for i'
-      using Prev.IH[of q n k x V c v thesis i'] Prev.prems
+      using Prev.IH[of q n V c k v x thesis i'] Prev.prems
       by auto
     done
 next
   case (Next I \<phi>)
   show ?case
-    using Next.IH[of q n k x V c v thesis "Suc i"] Next.prems
+    using Next.IH[of q n V c k v x thesis "Suc i"] Next.prems
     by auto
 next
   case (Since \<phi> I \<psi>)
@@ -1206,8 +1156,6 @@ next
         apply simp
        apply simp
       apply (rule Since.prems(1))
-             apply simp
-             apply (rule disjI2)
       by simp_all
     apply (cases "\<exists>j\<le>i. memL I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> memR I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and>
       Formula.sat \<sigma> V v j \<psi> \<and> (\<forall>k\<in>{j<..i}. Formula.sat \<sigma> V v k \<phi>)")
@@ -1217,8 +1165,6 @@ next
         apply simp
        apply simp
       apply (rule Since.prems(1))
-             apply simp
-             apply (rule disjI2)
       by simp_all
     apply (subgoal_tac "\<not> Formula.sat \<sigma> V v i \<psi>")
      apply clarsimp
@@ -1239,8 +1185,6 @@ next
         apply simp
        apply simp
       apply (rule Until.prems(1))
-             apply simp
-             apply (rule disjI2)
       by simp_all
     apply (cases "\<exists>j\<ge>i. memL I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> memR I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and>
       Formula.sat \<sigma> V v j \<psi> \<and> (\<forall>k\<in>{i..<j}. Formula.sat \<sigma> V v k \<phi>)")
@@ -1250,8 +1194,6 @@ next
         apply simp
        apply simp
       apply (rule Until.prems(1))
-             apply simp
-             apply (rule disjI2)
       by simp_all
     apply (subgoal_tac "\<not> Formula.sat \<sigma> V v i \<psi>")
      apply clarsimp
@@ -1304,8 +1246,8 @@ proof -
     obtain q n k where "genvar \<phi> True x q n True k"
       and unique: "\<And>vs. (q, vs) \<in> inputs \<phi> \<Longrightarrow> length vs = n \<Longrightarrow> vs ! k = Some x"
       using assms(1) x by (auto simp add: guarded_by_unique_inputs_def)
-    then obtain vs v' as where "(q, vs) \<in> inputs \<phi>" "length vs = n" "k < n" "vs ! k = Some x"
-      "v' \<in> S" "Safety.matches v' \<phi> (q, as)" "length as = n" "as ! k = v ! x"
+    then obtain v' as where
+      "v' \<in> S" "Safety.matches v' \<phi> (q, as)" "length as = n" "k < n" "as ! k = v ! x"
       using assms(3,4) genvar_sat[of \<phi> "map_\<Gamma> (\<lambda>D. D \<inter> relevant_events \<phi> S) \<sigma>" Map.empty v i x q n True k]
       apply (auto simp add: set_eq_iff)
       by (metis (opaque_lifting))
