@@ -4929,10 +4929,10 @@ next
   show ?case using check_binary_complete[OF _ 17(2-5), of \<phi> \<psi>] 17(1) by blast
 next
   case (18 S E I r)
-  show ?case using check_regex_complete[OF _ _ _ 16(2-5)[unfolded check.simps], of formula.MatchF] 16(1) by blast 
+  show ?case using check_regex_complete[OF _ _ _ 18(2-5)[unfolded check.simps], of formula.MatchF] 18(1) by blast 
 next
   case (19 S E I r)
-  then show ?case using check_regex_complete[OF _ _ _ 17(2-5)[unfolded check.simps], of formula.MatchP] 17(1) by blast
+  then show ?case using check_regex_complete[OF _ _ _ 19(2-5)[unfolded check.simps], of formula.MatchP] 19(1) by blast
 next
   case (20 S E p \<phi> \<psi>)
   define f0 where f0_def: "f0 = new_type_symbol ^^ Formula.nfv \<phi>"

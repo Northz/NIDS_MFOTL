@@ -1291,17 +1291,59 @@ term "\<And>\<^sub>F [\<exists>\<^sub>F:t. (trm =\<^sub>F \<^bold>v x) \<and>\<^
 term "\<langle>\<sigma>, V, v, i + length v\<rangle> \<Turnstile>\<^sub>M \<^bold>Y I (\<not>\<^sub>F (P \<dagger> [\<^bold>c a, \<^bold>v 0]) 
   \<and>\<^sub>F (Q \<dagger> [\<^bold>v y])) \<^bold>S (point n) ((\<^bold>X \<^bold>[2,3\<^bold>] (P \<dagger> [\<^bold>c b, \<^bold>v 0])) \<or>\<^sub>F Q \<dagger> [\<^bold>v y])"
 
-unbundle MFODL_no_notation \<comment> \<open> disable notation \<close>
+definition "down_cl_ivl \<sigma> I i \<equiv> {j |j. j \<le> i \<and> mem I ((\<tau> \<sigma> i - \<tau> \<sigma> j))}"
+
+lemma down_cl_ivl_nmem0I: "down_cl_ivl \<sigma> I i = {} \<Longrightarrow> \<not> mem I 0"
+  unfolding down_cl_ivl_def
+  by (transfer, clarsimp simp: downclosed_def upclosed_def)
+    (metis bot_nat_0.extremum diff_self_eq_0 le_refl)
+
+definition "up_cl_ivl \<sigma> I i \<equiv> {j |j. i \<le> j \<and> mem I ((\<tau> \<sigma> j - \<tau> \<sigma> i))}"
+
+lemma up_cl_ivl_nmem0I: "up_cl_ivl \<sigma> I i = {} \<Longrightarrow> \<not> mem I 0"
+  unfolding up_cl_ivl_def
+  by (transfer, clarsimp simp: downclosed_def upclosed_def)
+    (metis bot_nat_0.extremum diff_self_eq_0 le_refl)
 
 thm fvi.simps(16-)
 
-
 lemma release_fvi:
-  "Formula.fvi b (Formula.Release \<phi> I \<psi>) = Formula.fvi b (release_safe_0 \<phi> I \<psi>)"
-  "Formula.fvi b (Formula.Release \<phi> I \<psi>) = Formula.fvi b (release_safe_bounded \<phi> I \<psi>)"
-  "Formula.fvi b (Formula.And \<phi>' (Formula.Release \<phi> I \<psi>)) = Formula.fvi b (and_release_safe_bounded \<phi>' \<phi> I \<psi>)"
+  "Formula.fvi b (\<phi> \<^bold>R I \<psi>) = Formula.fvi b (release_safe_0 \<phi> I \<psi>)"
+  "Formula.fvi b (\<phi> \<^bold>R I \<psi>) = Formula.fvi b (release_safe_bounded \<phi> I \<psi>)"
+  "Formula.fvi b (\<phi>' \<and>\<^sub>F (\<phi> \<^bold>R I \<psi>)) = Formula.fvi b (and_release_safe_bounded \<phi>' \<phi> I \<psi>)"
   by (auto simp add: release_safe_0_def always_safe_0_def Formula.TT_def Formula.FF_def 
       and_release_safe_bounded_def release_safe_bounded_def always_safe_bounded_def)
+
+(* fun subformulas :: "'a Formula.formula \<Rightarrow> 'a Formula.formula set"
+  where "subformulas (p \<dagger> ts) = {p \<dagger> ts}"
+  | "subformulas (t1 =\<^sub>F t2) = {t1 =\<^sub>F t2}"
+  | "subformulas (t1 <\<^sub>F t2) = {t1 <\<^sub>F t2}"
+  | "subformulas (t1 \<le>\<^sub>F t2) = {t1 \<le>\<^sub>F t2}"
+  | "subformulas (Formula.Let p \<alpha> \<beta>) = subformulas \<alpha> \<union> subformulas \<beta> \<union> {Formula.Let p \<alpha> \<beta>}"
+  | "subformulas (Formula.LetPast p \<alpha> \<beta>) = subformulas \<alpha> \<union> subformulas \<beta> \<union> {Formula.LetPast p \<alpha> \<beta>}"
+  | "subformulas (\<not>\<^sub>F \<alpha>) = subformulas \<alpha> \<union> {\<not>\<^sub>F \<alpha>}"
+  | "subformulas (\<alpha> \<or>\<^sub>F \<beta>) = subformulas \<alpha> \<union> subformulas \<beta> \<union> {\<alpha> \<or>\<^sub>F \<beta>}"
+  | "subformulas (\<alpha> \<and>\<^sub>F \<beta>) = subformulas \<alpha> \<union> subformulas \<beta> \<union> {\<alpha> \<and>\<^sub>F \<beta>}"
+  | "subformulas (\<And>\<^sub>F \<alpha>s) = (\<Union>\<alpha>\<in>set \<alpha>s. subformulas \<alpha>) \<union> {\<And>\<^sub>F \<alpha>s}"
+  | "subformulas (\<exists>\<^sub>F:t. \<alpha>) = subformulas \<alpha> \<union> {\<exists>\<^sub>F:t. \<alpha>}"
+  | "subformulas (Formula.Agg y \<omega> tys f \<alpha>) = subformulas \<alpha> \<union> {Formula.Agg y \<omega> tys f \<alpha>}"
+  | "subformulas (\<^bold>Y I \<alpha>) = subformulas \<alpha> \<union> {\<^bold>Y I \<alpha>}"
+  | "subformulas (\<^bold>X I \<alpha>) = subformulas \<alpha> \<union> {\<^bold>X I \<alpha>}"
+  | "subformulas (\<alpha> \<^bold>S I \<beta>) = subformulas \<alpha> \<union> subformulas \<beta> \<union> {\<alpha> \<^bold>S I \<beta>}"
+  | "subformulas (\<alpha> \<^bold>U I \<beta>) = subformulas \<alpha> \<union> subformulas \<beta> \<union> {\<alpha> \<^bold>U I \<beta>}"
+  | "subformulas (\<alpha> \<^bold>T I \<beta>) = subformulas \<alpha> \<union> subformulas \<beta> \<union> {\<alpha> \<^bold>T I \<beta>}"
+  | "subformulas (\<alpha> \<^bold>R I \<beta>) = subformulas \<alpha> \<union> subformulas \<beta> \<union> {\<alpha> \<^bold>R I \<beta>}"
+  | "subformulas (Formula.MatchP I r) = {Formula.MatchP I r}"
+  | "subformulas (Formula.MatchF I r) = {Formula.MatchF I r}"
+  | "subformulas (Formula.TP j) = {Formula.TP j}"
+  | "subformulas (Formula.TS t) = {Formula.TS t}"
+
+lemma self_subformula: "\<alpha> \<in> subformulas \<alpha>"
+  by (induct \<alpha> rule: subformulas.induct) auto
+
+definition "strict_subformulas \<alpha> = subformulas \<alpha> - {\<alpha>}" *)
+
+unbundle MFODL_no_notation \<comment> \<open> disable notation \<close>
 
 
 subsection \<open> Rewriting formulas \<close>

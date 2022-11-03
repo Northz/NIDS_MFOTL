@@ -2357,7 +2357,7 @@ lemma pred_mapping_mono_strong: "pred_mapping Q P \<Longrightarrow>
 
 lemma bounded_fixpoint_ex:
   fixes f :: "nat \<Rightarrow> nat"
-  shows "mono_on f {..j} \<Longrightarrow> (\<forall>x \<le> j. f x \<le> j) \<Longrightarrow> \<exists>y \<le> j. y = f y"
+  shows "mono_on {..j} f \<Longrightarrow> (\<forall>x \<le> j. f x \<le> j) \<Longrightarrow> \<exists>y \<le> j. y = f y"
   apply (induct j)
    apply simp
   apply (simp add: mono_on_def)
@@ -2365,7 +2365,7 @@ lemma bounded_fixpoint_ex:
 
 lemma bounded_fixpoint_ex_above:
   fixes f :: "nat \<Rightarrow> nat"
-  shows "mono_on f {i..j} \<Longrightarrow> (\<forall>x \<in> {i .. j}. f x \<in> {i .. j}) \<Longrightarrow> i \<le> j \<Longrightarrow> \<exists>y \<in> {i .. j}. y = f y"
+  shows "mono_on {i..j} f \<Longrightarrow> (\<forall>x \<in> {i .. j}. f x \<in> {i .. j}) \<Longrightarrow> i \<le> j \<Longrightarrow> \<exists>y \<in> {i .. j}. y = f y"
   apply (induct j)
    apply simp
    apply (simp add: mono_on_def)
@@ -2388,7 +2388,7 @@ shows "\<exists>x \<le> j'. x = Monitor.progress \<sigma> (P'(p \<mapsto> x)) \<
 proof -
   have "\<exists>x \<in> {i .. j'}. x = Monitor.progress \<sigma> (P'(p \<mapsto> x)) \<phi> j'"
   proof (rule bounded_fixpoint_ex_above)
-    show "mono_on (\<lambda>x. Monitor.progress \<sigma> (P'(p \<mapsto> x)) \<phi> j') {i..j'}"
+    show "mono_on {i..j'} (\<lambda>x. Monitor.progress \<sigma> (P'(p \<mapsto> x)) \<phi> j')"
       by (auto intro!: mono_onI assms(2,4,5) pred_mapping_map_upd rel_mapping_map_upd rel_mapping_reflp reflpI)
     show "\<forall>x\<in>{i..j'}. Monitor.progress \<sigma> (P'(p \<mapsto> x)) \<phi> j' \<in> {i..j'}"
       unfolding Ball_def atLeastAtMost_iff
