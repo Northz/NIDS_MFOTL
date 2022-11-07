@@ -457,6 +457,10 @@ fun contains_pred :: "name \<times> nat \<Rightarrow> 't formula \<Rightarrow> b
 |  "contains_pred p (TP t) = False"
 |  "contains_pred p (TS t) = False"
 
+lemma TT_no_pred [simp]: 
+  "\<not> contains_pred p Formula.TT"
+  by (simp add: Formula.TT_def)
+
 
 subsubsection \<open>Semantics\<close>
 

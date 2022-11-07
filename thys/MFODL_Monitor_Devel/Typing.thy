@@ -275,9 +275,9 @@ lemma wty_formula_TSD [wty_formulaD]:
 
 lemma wty_regexatms_atms:
   assumes "safe_formula (Formula.MatchP I r) \<or> safe_formula (Formula.MatchF I r)"
-  shows "(\<forall>x \<in> Regex.atms r. S, E \<turnstile> x) \<longleftrightarrow> (\<forall>x \<in> atms r. S, E \<turnstile> x)"
+  shows "(\<forall>x \<in> Regex.atms r. S, E \<turnstile> x) \<longleftrightarrow> (\<forall>x \<in> safe_atms r. S, E \<turnstile> x)"
 proof -
-  have "\<forall>x \<in> Regex.atms r. S, E \<turnstile> x" if "\<forall>x \<in> atms r. S, E \<turnstile> x"
+  have "\<forall>x \<in> Regex.atms r. S, E \<turnstile> x" if "\<forall>x \<in> safe_atms r. S, E \<turnstile> x"
     "Regex.safe_regex fv (\<lambda>g \<phi>. safe_formula \<phi> \<or>
       (g = Lax \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))) m g r" for m g
     using that
@@ -290,7 +290,7 @@ proof -
     subgoal for r1 r2 m g x
       by (cases m) auto
     done
-  moreover have "\<forall>x \<in> Regex.atms r. S, E \<turnstile> x \<Longrightarrow> \<forall>x \<in> atms r. S, E \<turnstile> x"
+  moreover have "\<forall>x \<in> Regex.atms r. S, E \<turnstile> x \<Longrightarrow> \<forall>x \<in> safe_atms r. S, E \<turnstile> x"
     by (induction r) (auto split: formula.splits elim: wty_formula.cases)
   ultimately show ?thesis
     using assms
@@ -405,10 +405,10 @@ proof -
   with assms show ?thesis by auto
 qed
 
-lemma match_sat_fv: assumes "safe_regex temp Strict r"
+lemma match_sat_fv: assumes "Regex.safe_regex fv rgx_safe_pred temp Strict r"
     "Regex.match (Formula.sat \<sigma> V v) r j i"
     "x \<in> fv (formula.MatchP I r) \<or> x \<in>fv (formula.MatchF I r)"
-  shows "\<exists>\<phi>\<in>atms r. \<exists>k. Formula.sat \<sigma> V v k \<phi> \<and> x \<in> fv \<phi>"
+  shows "\<exists>\<phi>\<in>safe_atms r. \<exists>k. Formula.sat \<sigma> V v k \<phi> \<and> x \<in> fv \<phi>"
   using assms
   proof (induction r arbitrary:i j)
 
@@ -416,10 +416,10 @@ lemma match_sat_fv: assumes "safe_regex temp Strict r"
   moreover obtain k where "\<exists>j. Regex.match (Formula.sat \<sigma> V v) r1 j k \<or>  Regex.match (Formula.sat \<sigma> V v) r2 j k" using  Plus.prems(2)  by auto
   moreover {
     assume assm: "\<exists>j. Regex.match (Formula.sat \<sigma> V v) r1 j k"
-    hence ?case using Plus.prems(1,3) Plus.IH(1)  by (fastforce simp add: atms_def) 
+    hence ?case using Plus.prems(1,3) Plus.IH(1)  by (fastforce simp add: safe_atms_def) 
   } moreover {
     assume assm: "\<exists>j. Regex.match (Formula.sat \<sigma> V v) r2 j k"
-    from this have ?case using Plus.prems(1,3) Plus.IH(2) by (fastforce simp add: atms_def)
+    from this have ?case using Plus.prems(1,3) Plus.IH(2) by (fastforce simp add: safe_atms_def)
   }
   ultimately show ?case by auto
 next
@@ -607,17 +607,17 @@ lemma nfv_exists: " Formula.nfv \<phi> \<le> Suc (Formula.nfv (Formula.Exists t 
    apply (auto simp add: Formula.nfv_def fvi_Suc) 
   by (metis Max.coboundedI finite_fvi finite_imageI finite_insert fvi_Suc imageI insertCI list_decode.cases)
 
-lemma match_safe_wty_nfv: assumes "\<phi> \<in> atms r"   "safe_formula (formula.MatchP I r) \<or> safe_formula (formula.MatchF I r)" " S, E \<turnstile> formula.MatchP I r \<or>  S, E \<turnstile> formula.MatchF I r"
+lemma match_safe_wty_nfv: assumes "\<phi> \<in> safe_atms r"   "safe_formula (formula.MatchP I r) \<or> safe_formula (formula.MatchF I r)" " S, E \<turnstile> formula.MatchP I r \<or>  S, E \<turnstile> formula.MatchF I r"
   shows "S, E \<turnstile> \<phi>"
 proof -
     from assms(3) assms(2) show  "S, E \<turnstile> \<phi>" using  Regex.Regex.regex.pred_set[of "(\<lambda>\<phi>. S, E \<turnstile> \<phi>)"] assms(1) wty_regexatms_atms  
       by (auto elim: wty_formula.cases)
   qed
 
-lemma match_sat'_fv: assumes "safe_regex temp Strict r"
+lemma match_sat'_fv: assumes "Regex.safe_regex fv rgx_safe_pred temp Strict r"
     "Regex.match (sat' \<sigma> V v) r j i"
     "x \<in> fv (formula.MatchP I r) \<or> x \<in>fv (formula.MatchF I r)"
-  shows "\<exists>\<phi>\<in>atms r. \<exists>k. sat' \<sigma> V v k \<phi> \<and> x \<in> fv \<phi>"
+  shows "\<exists>\<phi>\<in>safe_atms r. \<exists>k. sat' \<sigma> V v k \<phi> \<and> x \<in> fv \<phi>"
   using assms
   proof (induction r arbitrary:i j)
 
@@ -625,10 +625,10 @@ lemma match_sat'_fv: assumes "safe_regex temp Strict r"
   moreover obtain k where "\<exists>j. Regex.match (sat' \<sigma> V v) r1 j k \<or>  Regex.match (sat' \<sigma> V v) r2 j k" using  Plus.prems(2)  by auto
   moreover {
     assume assm: "\<exists>j. Regex.match (sat' \<sigma> V v) r1 j k"
-    hence ?case using Plus.prems(1,3) Plus.IH(1)  by (fastforce simp add: atms_def) 
+    hence ?case using Plus.prems(1,3) Plus.IH(1)  by (fastforce simp add: safe_atms_def) 
   } moreover {
     assume assm: "\<exists>j. Regex.match (sat' \<sigma> V v) r2 j k"
-    from this have ?case using Plus.prems(1,3) Plus.IH(2) by (fastforce simp add: atms_def)
+    from this have ?case using Plus.prems(1,3) Plus.IH(2) by (fastforce simp add: safe_atms_def)
   }
   ultimately show ?case by auto
 next
@@ -1316,7 +1316,7 @@ next
     by blast
   thus ?case 
     using And_Trigger 
-    by (auto simp: safe_formula_dual_def split: if_splits)
+    by (auto simp: safe_dual_def split: if_splits)
 next
   case (And_Release \<phi> \<phi>' I \<psi>')
   have "S, E \<turnstile> \<phi>" 
@@ -1324,7 +1324,7 @@ next
     by blast
   thus ?case 
     using And_Release
-    by (auto simp: safe_formula_dual_def split: if_splits)
+    by (auto simp: safe_dual_def split: if_splits)
 next
   case (Ands l pos neg)
   from Ands have "\<exists>\<phi> \<in> set l . x \<in> fv \<phi>" by auto
@@ -1554,14 +1554,14 @@ next
   case (MatchP I r)
   have "(\<exists>j. Regex.match (sat' \<sigma> V v) r j i)" 
     using MatchP.prems(3)  by auto
-  then obtain \<phi> j where phidef: "\<phi> \<in> atms r" "sat' \<sigma> V v j \<phi>" "x \<in> fv \<phi> " 
+  then obtain \<phi> j where phidef: "\<phi> \<in> safe_atms r" "sat' \<sigma> V v j \<phi>" "x \<in> fv \<phi> " 
     using MatchP(1) MatchP.prems(4) match_sat'_fv 
     by auto blast
   have wty: "S, E \<turnstile> \<phi>" 
     using MatchP.prems(1) MatchP(1)  MatchP.prems(4) phidef(1) 
       match_safe_wty_nfv[of \<phi> r I S E] safe_formula.simps(19) 
     by blast
-  have IH: "S, E \<turnstile> \<phi> \<Longrightarrow> \<phi> \<in> atms r \<Longrightarrow> sat' \<sigma> V v j \<phi> 
+  have IH: "S, E \<turnstile> \<phi> \<Longrightarrow> \<phi> \<in> safe_atms r \<Longrightarrow> sat' \<sigma> V v j \<phi> 
     \<Longrightarrow> x \<in> fv \<phi> \<Longrightarrow> ty_of (v ! x ) = E x" for \<phi> E  v  x
     using MatchP.IH MatchP.prems 
     by blast
@@ -1572,14 +1572,14 @@ next
   case (MatchF I r)
   have "(\<exists>j. Regex.match (sat' \<sigma> V v) r  i j)"
     using MatchF.prems(3) by auto
-  then obtain \<phi> j where phidef: " \<phi> \<in> atms r" " sat' \<sigma> V v j \<phi>" "x \<in> fv \<phi> "
+  then obtain \<phi> j where phidef: " \<phi> \<in> safe_atms r" " sat' \<sigma> V v j \<phi>" "x \<in> fv \<phi> "
     using match_sat'_fv  MatchF(1)  MatchF.prems(4) 
     by auto blast
   have wty: "S, E \<turnstile> \<phi>" 
     using MatchF.prems(1) MatchF(1)  MatchF.prems(4) phidef(1)
       match_safe_wty_nfv[of \<phi> r I S E] safe_formula.simps(20) 
     by blast
-  have IH: "S, E \<turnstile> \<phi> \<Longrightarrow> \<phi> \<in> atms r \<Longrightarrow> sat' \<sigma> V v j \<phi> 
+  have IH: "S, E \<turnstile> \<phi> \<Longrightarrow> \<phi> \<in> safe_atms r \<Longrightarrow> sat' \<sigma> V v j \<phi> 
     \<Longrightarrow> x \<in> fv \<phi> \<Longrightarrow> ty_of (v ! x ) = E x" for \<phi> E  v  x
     using MatchF.IH MatchF.prems 
     by blast
@@ -1666,11 +1666,11 @@ lemma rel_regex_fv_cong: "Regex.rel_regex (\<lambda>a b. P a b) r r' \<Longright
   fv_regex r = fv_regex r'"
   by (induction r r' rule: regex.rel_induct) auto
 
-lemma rel_regex_safe_aux: "safe_regex m g r \<Longrightarrow>
-  (\<And>\<phi> \<phi>'. \<phi> \<in> atms r \<Longrightarrow> P \<phi> \<phi>' \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<phi>') \<Longrightarrow>
+lemma rel_regex_safe_aux: "Regex.safe_regex fv rgx_safe_pred m g r \<Longrightarrow>
+  (\<And>\<phi> \<phi>'. \<phi> \<in> safe_atms r \<Longrightarrow> P \<phi> \<phi>' \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<phi>') \<Longrightarrow>
   (\<And>\<phi> \<phi>'. P \<phi> \<phi>' \<Longrightarrow> fv \<phi> = fv \<phi>') \<Longrightarrow>
   (\<And>\<phi> \<phi>'. P (formula.Neg \<phi>) \<phi>' \<Longrightarrow> (case \<phi>' of formula.Neg \<phi>'' \<Rightarrow> P \<phi> \<phi>'' | _ \<Rightarrow> False)) \<Longrightarrow>
-  Regex.rel_regex (\<lambda>a b. P a b) r r' \<Longrightarrow> safe_regex m g r'"
+  Regex.rel_regex (\<lambda>a b. P a b) r r' \<Longrightarrow> Regex.safe_regex fv rgx_safe_pred m g r'"
 proof (induction m g r arbitrary: r' rule: safe_regex_induct)
   case (Skip m g n)
   then show ?case
@@ -1861,14 +1861,14 @@ next
   case (And_Trigger \<phi> \<phi>' I \<psi>')
   then show ?case
     by (cases \<psi>) 
-      (auto simp: rel_formula_fv safe_formula_dual_def 
+      (auto simp: rel_formula_fv safe_dual_def 
         intro: formula.rel_intros(17) split: if_splits
         elim!: formula.rel_cases[of _ "formula.Trigger _ I _"])
 next
   case (And_Release \<phi> \<phi>' I \<psi>')
   then show ?case
     by (cases \<psi>)
-      (auto simp: rel_formula_fv safe_formula_dual_def and_release_safe_bounded_def 
+      (auto simp: rel_formula_fv safe_dual_def and_release_safe_bounded_def 
         release_safe_bounded_def
         intro: formula.rel_intros(18)
         elim!: formula.rel_cases[of _ "formula.Release _ I _"])
@@ -1999,7 +1999,7 @@ next
   thus ?case
     using Trigger_0 
     apply (cases \<psi>; clarsimp simp: case_Neg_iff 
-        rel_formula_fv safe_formula_dual_def elim!: case_NegE)
+        rel_formula_fv safe_dual_def elim!: case_NegE)
     using fvi.simps(7) rel_formula_fv by blast
 next
   case (Release \<phi>' I \<psi>')
@@ -2019,7 +2019,8 @@ next
       (metis always_safe_0_safe release_safe_0_def safe_formula.simps(8))
 next
   case (MatchP I r)
-  have "regex.rel_regex (formula.rel_formula f) r r' \<Longrightarrow> safe_regex Past Strict r'" for r'
+  have "regex.rel_regex (formula.rel_formula f) r r' 
+  \<Longrightarrow> Regex.safe_regex fv rgx_safe_pred Past Strict r'" for r'
     apply (rule rel_regex_safe_aux[OF MatchP(1), where ?P="formula.rel_formula f"])
     using MatchP(2)     
     by (auto simp: rel_formula_fv split: formula.splits)
@@ -2028,7 +2029,8 @@ next
     by (cases \<psi>) auto
 next
   case (MatchF I r)
-  have "regex.rel_regex (formula.rel_formula f) r r' \<Longrightarrow> safe_regex Futu Strict r'" for r'
+  have "regex.rel_regex (formula.rel_formula f) r r' 
+  \<Longrightarrow> Regex.safe_regex fv rgx_safe_pred Futu Strict r'" for r'
     apply (rule rel_regex_safe_aux[OF MatchF(1), where ?P="formula.rel_formula f"])
     using MatchF(2)
     by (auto simp: rel_formula_fv split: formula.splits)
@@ -2067,8 +2069,8 @@ lemma rel_formula_swap: "formula.rel_formula f x y \<Longrightarrow> formula.rel
   by (induction x y rule: formula.rel_induct) (auto intro: list_all2_swap rel_regex_swap)
 
 lemma rel_regex_safe:
-  assumes "Regex.rel_regex (formula.rel_formula f) r r'" "safe_regex m g r"
-  shows "safe_regex m g r'"
+  assumes "Regex.rel_regex (formula.rel_formula f) r r'" "Regex.safe_regex fv rgx_safe_pred m g r"
+  shows "Regex.safe_regex fv rgx_safe_pred m g r'"
 proof -
   have rel_Neg: "\<And>\<phi> \<phi>'. formula.rel_formula f (formula.Neg \<phi>) \<phi>' \<Longrightarrow>
     case \<phi>' of formula.Neg x \<Rightarrow> formula.rel_formula f \<phi> x | _ \<Rightarrow> False"
@@ -2079,13 +2081,13 @@ proof -
 qed
 
 lemma rel_regex_atms:
-  assumes "Regex.rel_regex (formula.rel_formula f) r r'" "x \<in> atms r"
-  shows "\<exists>x' \<in> atms r'. formula.rel_formula f x x'"
+  assumes "Regex.rel_regex (formula.rel_formula f) r r'" "x \<in> safe_atms r"
+  shows "\<exists>x' \<in> safe_atms r'. formula.rel_formula f x x'"
 proof -
   obtain \<phi> where \<phi>_def: "\<phi> \<in> Regex.atms r" "safe_formula \<phi> \<Longrightarrow> \<phi> = x"
     "\<not>safe_formula \<phi> \<Longrightarrow> \<phi> = formula.Neg x"
     using assms(2)
-    by (auto simp: atms_def) (force split: formula.splits)
+    by (auto simp: safe_atms_def) (force split: formula.splits)
   obtain x' where x'_def: "x' \<in> regex.atms r'" "formula.rel_formula f \<phi> x'"
     using rel_regex_regex_atms[OF assms(1) \<phi>_def(1)]
     by auto
@@ -2094,7 +2096,7 @@ proof -
     case True
     then show ?thesis
       using x'_def rel_formula_safe[OF True x'_def(2)]
-      by (auto simp: \<phi>_def(2)[OF True] atms_def intro!: UN_I[OF x'_def(1)] bexI[of _ x'])
+      by (auto simp: \<phi>_def(2)[OF True] safe_atms_def intro!: UN_I[OF x'_def(1)] bexI[of _ x'])
   next
     case False
     obtain x'' where x''_def: "x' = formula.Neg x''" "formula.rel_formula f x x''"
@@ -2102,24 +2104,24 @@ proof -
       by (cases x') (auto simp: \<phi>_def(3)[OF False])    
     show ?thesis
       using x''_def(2) rel_formula_safe[OF _ rel_formula_swap[OF x'_def(2)]] False
-      unfolding atms_def
+      unfolding safe_atms_def
       by (fastforce simp: x''_def intro!: UN_I[OF x'_def(1)] bexI[of _ x''])
   qed
 qed
 
-lemma fv_safe_regex_atms: "safe_regex m g r \<Longrightarrow> x \<in> Regex.fv_regex Formula.fv r \<Longrightarrow>
-  \<exists>\<phi> \<in> atms r. safe_formula \<phi> \<and> x \<in> Formula.fv \<phi>"
+lemma fv_safe_regex_atms: "Regex.safe_regex fv rgx_safe_pred m g r 
+  \<Longrightarrow> x \<in> Regex.fv_regex Formula.fv r \<Longrightarrow> \<exists>\<phi> \<in> safe_atms r. safe_formula \<phi> \<and> x \<in> Formula.fv \<phi>"
 proof (induction r)
   case (Test z)
   then show ?case
-    by (cases z) (auto simp: atms_def)
+    by (cases z) (auto simp: safe_atms_def)
 next
   case (Times r1 r2)
   then show ?case
     by (cases m) auto
 qed auto
 
-lemma pred_regex_wty_formula: "regex.pred_regex (wty_formula S E) r \<Longrightarrow> \<phi> \<in> atms r \<Longrightarrow> S, E \<turnstile> \<phi>"
+lemma pred_regex_wty_formula: "regex.pred_regex (wty_formula S E) r \<Longrightarrow> \<phi> \<in> safe_atms r \<Longrightarrow> S, E \<turnstile> \<phi>"
   by (induction r) (auto split: if_splits formula.splits elim: wty_formula.cases)
 
 lemma wty_trm_cong_aux: "E \<turnstile> t :: typ \<Longrightarrow> E \<turnstile> t :: typ' \<Longrightarrow> typ = typ'"
@@ -2366,10 +2368,10 @@ next
   obtain r' where r'_def: "\<phi>' = formula.MatchP I r'" "Regex.rel_regex (formula.rel_formula f) r r'"
     using MatchP(5)
     by (cases \<phi>') auto
-  obtain a where a_def: "a \<in> atms r" "x \<in> fv a"
+  obtain a where a_def: "a \<in> safe_atms r" "x \<in> fv a"
     using MatchP(6) fv_safe_regex_atms[OF MatchP(1)]
     by force
-  obtain a' where a'_def: "a' \<in> atms r'" "formula.rel_formula f a a'"
+  obtain a' where a'_def: "a' \<in> safe_atms r'" "formula.rel_formula f a a'"
     using rel_regex_atms[OF r'_def(2) a_def(1)]
     by auto
   have wty: "S, E \<turnstile> a" "S, E' \<turnstile> a'"
@@ -2384,10 +2386,10 @@ next
   obtain r' where r'_def: "\<phi>' = formula.MatchF I r'" "Regex.rel_regex (formula.rel_formula f) r r'"
     using MatchF(5)
     by (cases \<phi>') auto
-  obtain a where a_def: "a \<in> atms r" "x \<in> fv a"
+  obtain a where a_def: "a \<in> safe_atms r" "x \<in> fv a"
     using MatchF(6) fv_safe_regex_atms[OF MatchF(1)]
     by force
-  obtain a' where a'_def: "a' \<in> atms r'" "formula.rel_formula f a a'"
+  obtain a' where a'_def: "a' \<in> safe_atms r'" "formula.rel_formula f a a'"
     using rel_regex_atms[OF r'_def(2) a_def(1)]
     by auto
   have wty: "S, E \<turnstile> a" "S, E' \<turnstile> a'"
@@ -2429,8 +2431,9 @@ next
 qed auto *)
 
 lemma safe_regex_regex_atms_dest:
-  assumes "safe_regex m g r" "a \<in> regex.atms r"
-  shows "safe_formula a \<and> a \<in> atms r \<or> (\<not>safe_formula a \<and> (case a of formula.Neg \<phi> \<Rightarrow> \<phi> \<in> atms r | _ \<Rightarrow> False))"
+  assumes "Regex.safe_regex fv rgx_safe_pred m g r" "a \<in> regex.atms r"
+  shows "safe_formula a \<and> a \<in> safe_atms r 
+    \<or> (\<not>safe_formula a \<and> (case a of formula.Neg \<phi> \<Rightarrow> \<phi> \<in> safe_atms r | _ \<Rightarrow> False))"
   using assms
 proof (induction m g r rule: safe_regex.induct)
   case (2 m g \<phi>)
