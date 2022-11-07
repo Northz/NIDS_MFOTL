@@ -20,8 +20,8 @@ abbreviation sorted :: "'a::linorder list \<Rightarrow> bool" where
 text \<open>Equivalent lemmas for <= instead of <.\<close>
 
 lemma insort_list_sorted: "sorted (xs @ [a]) \<Longrightarrow>
-  Sorting.insort x (xs @ a # ys) =
-  (if x < a then Sorting.insort x xs @ (a#ys) else xs @ Sorting.insort x (a#ys))"
+  Sorting.insort1 x (xs @ a # ys) =
+  (if x < a then Sorting.insort1 x xs @ (a#ys) else xs @ Sorting.insort1 x (a#ys))"
 proof(induction xs)
   case Nil
   then show ?case by auto
@@ -31,11 +31,11 @@ next
 qed
 
 corollary insort_list_sorted1: "sorted (xs @ [a]) \<Longrightarrow> a \<le> x \<Longrightarrow>
-  Sorting.insort x (xs @ a # ys) = xs @ Sorting.insort x (a#ys)"
+  Sorting.insort1 x (xs @ a # ys) = xs @ Sorting.insort1 x (a#ys)"
 by(auto simp add: insort_list_sorted)
 
 corollary insort_list_sorted2: "sorted (xs @ [a]) \<Longrightarrow> x < a \<Longrightarrow>
-  Sorting.insort x (xs @ a # ys) = Sorting.insort x xs @ (a#ys)"
+  Sorting.insort1 x (xs @ a # ys) = Sorting.insort1 x xs @ (a#ys)"
   by(auto simp: insort_list_sorted)
 
 lemmas insort_list_simps = sorted_lems insort_list_sorted1 insort_list_sorted2
@@ -43,7 +43,7 @@ lemmas insort_list_simps = sorted_lems insort_list_sorted1 insort_list_sorted2
 lemma insort_leq:
   assumes "\<forall>k \<in> set xs. x \<ge> k"
   and "sorted xs"
-  shows "Sorting.insort x xs = xs @ [x]"
+  shows "Sorting.insort1 x xs = xs @ [x]"
   using assms
 proof (induction xs)
   case Nil
@@ -263,7 +263,7 @@ lemma inorder_rotateR:
   by (induction l a r rule: rotateR.induct) (auto simp add: inorder_rot2 not_Leaf_if_not_single)
 
 lemma inorder_insert:
-  "sorted(inorder t) \<Longrightarrow> inorder(insert x t) = Sorting.insort x (inorder t)"
+  "sorted(inorder t) \<Longrightarrow> inorder(insert x t) = Sorting.insort1 x (inorder t)"
   by (induction t) (auto simp: insort_list_simps insort_leq sorted_wrt_append le_less inorder_rotateL inorder_rotateR not_Leaf_if_not_balanced1)
 
 lemma split_minD:
@@ -748,7 +748,7 @@ qed
 
 lemma bulk_insert_insort:
   assumes "sorted (inorder (((insert a) ^^ n) t))"
-  shows "inorder (((insert a) ^^ n) t) = (insort a ^^ n) (inorder t)"
+  shows "inorder (((insert a) ^^ n) t) = (insort1 a ^^ n) (inorder t)"
   using assms
 proof(induction n)
   case 0
@@ -756,15 +756,15 @@ proof(induction n)
 next
   case (Suc n)
   have "sorted (inorder ((insert a ^^ n) t))" using sorted_insort_rev Suc(2) by auto
-  then have "inorder (insert a ((insert a ^^ n) t)) = insort a ((Sorting.insort a ^^ n) (Tree2.inorder t))"
+  then have "inorder (insert a ((insert a ^^ n) t)) = insort1 a ((Sorting.insort1 a ^^ n) (Tree2.inorder t))"
     using Suc.IH inorder_insert by fastforce
   then show ?case using inorder_insert by(auto)
 qed
 
 lemma sorted_wrt_sorted_insort:
   assumes "sorted xs"
-  shows "sorted (insort a (xs))"
-  using Sorting.sorted_insort[of a xs] assms by simp
+  shows "sorted (insort1 a (xs))"
+  using Sorting.sorted_insort1[of a xs] assms by simp
 
 lemma sorted_wrt_sorted_delete:
   assumes "sorted xs"
@@ -779,10 +779,10 @@ next
   then show ?case using 2 by auto
 qed
 
-lemma insort_eq: "Sorting.insort a xs = linorder_class.insort a xs"
+lemma insort_eq: "Sorting.insort1 a xs = linorder_class.insort a xs"
   by(induction xs) auto
 
-lemma insort_eq2: "Sorting.insort a = linorder_class.insort a"
+lemma insort_eq2: "Sorting.insort1 a = linorder_class.insort a"
   using insort_eq by auto
 
 lemma valid_wbt_mset_sorted:
@@ -842,7 +842,7 @@ next
       case empty then show ?case by auto
     next
       case (add x s)
-      then show ?case using sorted_insort by (auto simp:insort_eq[symmetric])
+      then show ?case using sorted_insort1 by (auto simp:insort_eq[symmetric])
     qed
     then show ?thesis using add insort_del_comm False by(auto)
   qed
