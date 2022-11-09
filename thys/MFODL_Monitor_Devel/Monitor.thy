@@ -1264,9 +1264,9 @@ definition (in mtaux) "init_and_trigger minit0 n agg \<phi> \<phi>' I \<psi>' =
   (let args = (\<lambda>b. (init_args I n (Formula.fv \<phi>') (Formula.fv \<psi>') b agg)) in
     if (safe_formula \<phi>') then
       MAndTrigger (fv \<phi>) (minit0 n \<phi>) ([], []) (args True) (minit0 n \<phi>') (minit0 n \<psi>') ([], []) [] (init_mtaux (args True))
-    else (case \<phi>' of (Formula.Neg \<phi>') \<Rightarrow>
-      MAndTrigger (fv \<phi>) (minit0 n \<phi>) ([], []) (args False) (minit0 n \<phi>') (minit0 n \<psi>') ([], []) [] (init_mtaux (args False))
-    ))"
+    else (case \<phi>' of 
+      Formula.Neg \<phi>' \<Rightarrow> MAndTrigger (fv \<phi>) (minit0 n \<phi>) ([], []) (args False) (minit0 n \<phi>') (minit0 n \<psi>') ([], []) [] (init_mtaux (args False))
+      | _ \<Rightarrow> MRel empty_table))"
 
 lemma (in mtaux) init_and_trigger_cong[fundef_cong]:
   assumes "\<And>\<alpha> m. size' \<alpha> \<le> size' \<phi> + size' \<phi>' + size' \<psi>' \<Longrightarrow> minit0 m \<alpha> = minit0' m \<alpha>"
@@ -1280,7 +1280,7 @@ definition (in mtaux) "init_trigger minit0 n agg \<phi> I \<psi> =
     then MTrigger (args True) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] (init_mtaux (args True))
     else (case \<phi> of
       Formula.Neg \<phi> \<Rightarrow> MTrigger (args False) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] (init_mtaux (args False))
-    | _ \<Rightarrow> MRel empty_table))"
+      | _ \<Rightarrow> MRel empty_table))"
 
 lemma (in mtaux) init_trigger_cong[fundef_cong]:
   assumes "\<And>\<alpha> m. size' \<alpha> \<le> size' \<phi> + size' \<psi> \<Longrightarrow> minit0 m \<alpha> = minit0' m \<alpha>"
@@ -1349,7 +1349,7 @@ function (in maux) (sequential) minit0 :: "nat \<Rightarrow> ty Formula.formula 
 | "minit0 n _ = MRel empty_table"
   by pat_completeness auto
 
-termination (in maux)
+termination (in maux) minit0
 proof ((relation "measure (\<lambda>(_, \<phi>). size' \<phi>)"; clarsimp), goal_cases)
   case (1 \<phi> \<psi>)
   then show ?case

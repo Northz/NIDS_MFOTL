@@ -87,32 +87,35 @@ lemma mbuf_t_cases_code[code]: "mbuf_t_cases (MBuf2_t xs) = (case safe_hd xs of 
   by transfer' (auto simp: tl_queue_rep split: list.splits prod.splits option.splits dest: safe_hd_rep)
 
 type_synonym 'a mebuf2 = "'a table mbuf_t \<times> 'a table mbuf_t"
+type_synonym 'a mebuft2 = "('a table) mbuf_t \<times> (nat set \<times> 'a table) mbuf_t"
 type_synonym 'a mebufn = "'a table mbuf_t list"
 type_synonym 'a mebuf2S = "'a table mbuf_t \<times> 'a table mbuf_t \<times> ts mbuf_t \<times> bool"
 
-datatype (dead 'msaux, dead 'muaux) meformula =
+datatype (dead 'msaux, dead 'muaux, dead 'mtaux) meformula =
   MRel "event_data table"
   | MPred Formula.name "Formula.trm list" pred_mode
-  | MLet Formula.name nat "('msaux, 'muaux) meformula" "('msaux, 'muaux) meformula"
-  | MLetPast Formula.name nat "('msaux, 'muaux) meformula" "('msaux, 'muaux) meformula" nat "event_data table option"
-  | MAnd "nat set" "('msaux, 'muaux) meformula" bool "nat set" "('msaux, 'muaux) meformula" "event_data mebuf2"
-  | MAndAssign "('msaux, 'muaux) meformula" "nat \<times> Formula.trm"
-  | MAndRel "('msaux, 'muaux) meformula" "Formula.trm \<times> bool \<times> mconstraint \<times> Formula.trm"
-  | MAnds "nat set list" "nat set list" "('msaux, 'muaux) meformula list" "event_data mebufn"
-  | MOr "('msaux, 'muaux) meformula" "('msaux, 'muaux) meformula" "event_data mebuf2"
-  | MNeg "('msaux, 'muaux) meformula"
-  | MExists "('msaux, 'muaux) meformula"
-  | MAgg aggargs "('msaux, 'muaux) meformula"
-  | MPrev \<I> "('msaux, 'muaux) meformula" bool "event_data table mbuf_t" "ts mbuf_t"
-  | MNext \<I> "('msaux, 'muaux) meformula" bool "ts mbuf_t"
-  | MSince args "('msaux, 'muaux) meformula" "('msaux, 'muaux) meformula" "event_data mebuf2S" "'msaux"
-  | MUntil args "('msaux, 'muaux) meformula" "('msaux, 'muaux) meformula" "event_data mebuf2" "ts mbuf_t" ts "'muaux"
-  | MMatchP \<I> "mregex" "mregex list" "('msaux, 'muaux) meformula list" "event_data mebufn" "ts mbuf_t" "event_data mr\<delta>aux"
-  | MMatchF \<I> "mregex" "mregex list" "('msaux, 'muaux) meformula list" "event_data mebufn" "ts mbuf_t" ts "event_data ml\<delta>aux"
+  | MLet Formula.name nat "('msaux, 'muaux, 'mtaux) meformula" "('msaux, 'muaux, 'mtaux) meformula"
+  | MLetPast Formula.name nat "('msaux, 'muaux, 'mtaux) meformula" "('msaux, 'muaux, 'mtaux) meformula" nat "event_data table option"
+  | MAnd "nat set" "('msaux, 'muaux, 'mtaux) meformula" bool "nat set" "('msaux, 'muaux, 'mtaux) meformula" "event_data mebuf2"
+  | MAndAssign "('msaux, 'muaux, 'mtaux) meformula" "nat \<times> Formula.trm"
+  | MAndRel "('msaux, 'muaux, 'mtaux) meformula" "Formula.trm \<times> bool \<times> mconstraint \<times> Formula.trm"
+  | MAndTrigger "nat set" "('msaux, 'muaux, 'mtaux) meformula" "event_data mebuft2" args "('msaux, 'muaux, 'mtaux) meformula" "('msaux, 'muaux, 'mtaux) meformula" "event_data mebuf2" "ts mbuf_t" "'mtaux"
+  | MAnds "nat set list" "nat set list" "('msaux, 'muaux, 'mtaux) meformula list" "event_data mebufn"
+  | MOr "('msaux, 'muaux, 'mtaux) meformula" "('msaux, 'muaux, 'mtaux) meformula" "event_data mebuf2"
+  | MNeg "('msaux, 'muaux, 'mtaux) meformula"
+  | MExists "('msaux, 'muaux, 'mtaux) meformula"
+  | MAgg aggargs "('msaux, 'muaux, 'mtaux) meformula"
+  | MPrev \<I> "('msaux, 'muaux, 'mtaux) meformula" bool "event_data table mbuf_t" "ts mbuf_t"
+  | MNext \<I> "('msaux, 'muaux, 'mtaux) meformula" bool "ts mbuf_t"
+  | MSince args "('msaux, 'muaux, 'mtaux) meformula" "('msaux, 'muaux, 'mtaux) meformula" "event_data mebuf2S" "'msaux"
+  | MUntil args "('msaux, 'muaux, 'mtaux) meformula" "('msaux, 'muaux, 'mtaux) meformula" "event_data mebuf2" "ts mbuf_t" ts "'muaux"
+  | MTrigger args "('msaux, 'muaux, 'mtaux) meformula" "('msaux, 'muaux, 'mtaux) meformula" "event_data mebuf2" "ts mbuf_t" "'mtaux"
+  | MMatchP \<I> "mregex" "mregex list" "('msaux, 'muaux, 'mtaux) meformula list" "event_data mebufn" "ts mbuf_t" "event_data mr\<delta>aux"
+  | MMatchF \<I> "mregex" "mregex list" "('msaux, 'muaux, 'mtaux) meformula list" "event_data mebufn" "ts mbuf_t" ts "event_data ml\<delta>aux"
   | MTP mtrm nat
   | MTS mtrm
 
-fun Rep_meformula :: "('msaux, 'muaux) meformula \<Rightarrow> ('msaux, 'muaux) mformula" where
+fun Rep_meformula :: "('msaux, 'muaux, 'mtaux) meformula \<Rightarrow> ('msaux, 'muaux, 'mtaux) mformula" where
   "Rep_meformula (MRel rel) = mformula.MRel rel"
 | "Rep_meformula (MPred e tms mode) = mformula.MPred e tms mode"
 | "Rep_meformula (MLet p m \<phi> \<psi>) = mformula.MLet p m (Rep_meformula \<phi>) (Rep_meformula \<psi>)"
@@ -120,6 +123,7 @@ fun Rep_meformula :: "('msaux, 'muaux) meformula \<Rightarrow> ('msaux, 'muaux) 
 | "Rep_meformula (MAnd A_\<phi> \<phi> pos A_\<psi> \<psi> buf) = mformula.MAnd A_\<phi> (Rep_meformula \<phi>) pos A_\<psi> (Rep_meformula \<psi>) (map_prod Rep_mbuf_t Rep_mbuf_t buf)"
 | "Rep_meformula (MAndAssign \<phi> conf) = mformula.MAndAssign (Rep_meformula \<phi>) conf"
 | "Rep_meformula (MAndRel \<phi> conf) = mformula.MAndRel (Rep_meformula \<phi>) conf"
+| "Rep_meformula (MAndTrigger fv\<phi> \<phi> buf1 args \<phi>' \<psi>' buf2 nts aux) = mformula.MAndTrigger fv\<phi> (Rep_meformula \<phi>) (map_prod Rep_mbuf_t Rep_mbuf_t buf1) args (Rep_meformula \<phi>') (Rep_meformula \<psi>') (map_prod Rep_mbuf_t Rep_mbuf_t buf2) (Rep_mbuf_t nts) aux"
 | "Rep_meformula (MAnds A_pos A_neg L buf) = mformula.MAnds A_pos A_neg (map Rep_meformula L) (map Rep_mbuf_t buf)"
 | "Rep_meformula (MOr \<phi> \<psi> buf) = mformula.MOr (Rep_meformula \<phi>) (Rep_meformula \<psi>) (map_prod Rep_mbuf_t Rep_mbuf_t buf)"
 | "Rep_meformula (MNeg \<phi>) = mformula.MNeg (Rep_meformula \<phi>)"
@@ -131,6 +135,8 @@ fun Rep_meformula :: "('msaux, 'muaux) meformula \<Rightarrow> ('msaux, 'muaux) 
     (case buf of (a, b, c, d) \<Rightarrow> (Rep_mbuf_t a, Rep_mbuf_t b, Rep_mbuf_t c, d)) aux"
 | "Rep_meformula (MUntil args \<phi> \<psi> buf nts t aux) = mformula.MUntil args (Rep_meformula \<phi>) (Rep_meformula \<psi>)
     (map_prod Rep_mbuf_t Rep_mbuf_t buf) (Rep_mbuf_t nts) t aux"
+| "Rep_meformula (MTrigger args \<phi> \<psi> buf nts aux) = mformula.MTrigger args (Rep_meformula \<phi>) (Rep_meformula \<psi>)
+    (map_prod Rep_mbuf_t Rep_mbuf_t buf) (Rep_mbuf_t nts) aux"
 | "Rep_meformula (MMatchP I mr mrs \<phi>s buf nts aux) = mformula.MMatchP I mr mrs (map Rep_meformula \<phi>s)
     (map Rep_mbuf_t buf) (Rep_mbuf_t nts) aux"
 | "Rep_meformula (MMatchF I mr mrs \<phi>s buf nts t aux) = mformula.MMatchF I mr mrs (map Rep_meformula \<phi>s)
@@ -148,7 +154,63 @@ code_datatype Rep_meformula
 
 abbreviation (input) "init_mebuf2S \<equiv> (mbuf_t_empty, mbuf_t_empty, mbuf_t_empty, False)"
 
-function (in maux) (sequential) meinit0 :: "nat \<Rightarrow> ty Formula.formula \<Rightarrow> ('msaux, 'muaux) meformula" where
+definition (in msaux) "init_since' meinit0 n agg \<phi> I \<psi> =
+  (let args = (\<lambda>b. (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) b agg)) in
+   if safe_formula \<phi>
+   then MSince (args True) (meinit0 n \<phi>) (meinit0 n \<psi>) init_mebuf2S (init_msaux (args True))
+   else (case \<phi> of
+     Formula.Neg \<phi>' \<Rightarrow> MSince (args False) (meinit0 n \<phi>') (meinit0 n \<psi>) init_mebuf2S (init_msaux (args False))
+   | _ \<Rightarrow> MRel empty_table))"
+
+lemma (in msaux) init_since'_cong[fundef_cong]:
+  assumes "\<And>\<alpha> m. size' \<alpha> \<le> size' \<phi> + size' \<psi> \<Longrightarrow> meinit0 m \<alpha> = meinit0' m \<alpha>"
+  shows "init_since' meinit0 n agg \<phi> I \<psi> = init_since' meinit0' n agg \<phi> I \<psi>"
+  using assms
+  by (auto simp: init_since'_def split: formula.splits)
+
+definition (in muaux) "init_until' meinit0 n agg \<phi> I \<psi> =
+  (let args = (\<lambda>b. (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) b agg)) in
+   if safe_formula \<phi>
+   then MUntil (args True) (meinit0 n \<phi>) (meinit0 n \<psi>) (mbuf_t_empty, mbuf_t_empty) mbuf_t_empty 0 (init_muaux (args True))
+   else (case \<phi> of
+     Formula.Neg \<phi>' \<Rightarrow> MUntil (args False) (meinit0 n \<phi>') (meinit0 n \<psi>) (mbuf_t_empty, mbuf_t_empty) mbuf_t_empty 0 (init_muaux (args False))
+   | _ \<Rightarrow> MRel empty_table))"
+
+lemma (in muaux) init_until'_cong[fundef_cong]:
+  assumes "\<And>\<alpha> m. size' \<alpha> \<le> size' \<phi> + size' \<psi> \<Longrightarrow> meinit0 m \<alpha> = meinit0' m \<alpha>"
+  shows "init_until' meinit0 n agg \<phi> I \<psi> = init_until' meinit0' n agg \<phi> I \<psi>"
+  using assms
+  by (auto simp: init_until'_def split: formula.splits)
+
+definition (in mtaux) "init_trigger' meinit0 n agg \<phi> I \<psi> =
+  (let args = (\<lambda>b. (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) b agg)) in
+   if safe_formula \<phi>
+    then MTrigger (args True) (meinit0 n \<phi>) (meinit0 n \<psi>) (mbuf_t_empty, mbuf_t_empty) mbuf_t_empty (init_mtaux (args True))
+    else (case \<phi> of
+      Formula.Neg \<phi> \<Rightarrow> MTrigger (args False) (meinit0 n \<phi>) (meinit0 n \<psi>) (mbuf_t_empty, mbuf_t_empty) mbuf_t_empty (init_mtaux (args False))
+    | _ \<Rightarrow> MRel empty_table))"
+
+lemma (in mtaux) init_trigger'_cong[fundef_cong]:
+  assumes "\<And>\<alpha> m. size' \<alpha> \<le> size' \<phi> + size' \<psi> \<Longrightarrow> meinit0 m \<alpha> = meinit0' m \<alpha>"
+  shows "init_trigger' meinit0 n agg \<phi> I \<psi> = init_trigger' meinit0' n agg \<phi> I \<psi>"
+  using assms
+  by (auto simp: init_trigger'_def split: formula.splits)
+
+definition (in mtaux) "init_and_trigger' meinit0 n agg \<phi> \<phi>' I \<psi>' =
+  (let args = (\<lambda>b. (init_args I n (Formula.fv \<phi>') (Formula.fv \<psi>') b agg)) in
+    if (safe_formula \<phi>') then
+      MAndTrigger (fv \<phi>) (meinit0 n \<phi>) (mbuf_t_empty, mbuf_t_empty) (args True) (meinit0 n \<phi>') (meinit0 n \<psi>') (mbuf_t_empty, mbuf_t_empty) mbuf_t_empty (init_mtaux (args True))
+    else (case \<phi>' of 
+      (Formula.Neg \<phi>') \<Rightarrow> MAndTrigger (fv \<phi>) (meinit0 n \<phi>) (mbuf_t_empty, mbuf_t_empty) (args False) (meinit0 n \<phi>') (meinit0 n \<psi>') (mbuf_t_empty, mbuf_t_empty) mbuf_t_empty (init_mtaux (args False))
+      | _ \<Rightarrow> MRel empty_table))"
+
+lemma (in mtaux) init_and_trigger'_cong[fundef_cong]:
+  assumes "\<And>\<alpha> m. size' \<alpha> \<le> size' \<phi> + size' \<phi>' + size' \<psi>' \<Longrightarrow> meinit0 m \<alpha> = meinit0' m \<alpha>"
+  shows "init_and_trigger' meinit0 n agg \<phi> \<phi>' I \<psi>' = init_and_trigger' meinit0' n agg \<phi> \<phi>' I \<psi>'"
+  using assms
+  by (clarsimp simp: init_and_trigger'_def split: formula.splits)
+
+function (in maux) (sequential) meinit0 :: "nat \<Rightarrow> ty Formula.formula \<Rightarrow> ('msaux, 'muaux, 'mtaux) meformula" where
   "meinit0 n (Formula.Neg \<phi>) = (if fv \<phi> = {} then MNeg (meinit0 n \<phi>) else MRel empty_table)"
 | "meinit0 n (Formula.Eq t1 t2) = MRel (eq_rel n t1 t2)"
 | "meinit0 n (Formula.Pred e ts) = MPred e ts (pred_mode_of n ts)"
@@ -163,6 +225,8 @@ function (in maux) (sequential) meinit0 :: "nat \<Rightarrow> ty Formula.formula
       MAndRel (meinit0 n \<phi>) (split_constraint \<psi>)
     else (case \<psi> of Formula.Neg \<psi> \<Rightarrow>
       MAnd (fv \<phi>) (meinit0 n \<phi>) False (fv \<psi>) (meinit0 n \<psi>) (mbuf_t_empty, mbuf_t_empty)
+      | (Formula.Trigger \<phi>' I \<psi>') \<Rightarrow> init_and_trigger' meinit0 n None \<phi> \<phi>' I \<psi>'
+      | (Formula.Release \<phi>' I \<psi>') \<Rightarrow> meinit0 n (and_release_safe_bounded \<phi> \<phi>' I \<psi>')
       | _ \<Rightarrow> MRel empty_table))"
 | "meinit0 n (Formula.Ands l) = (let (pos, neg) = partition safe_formula l in
     let mpos = map (meinit0 n) pos in
@@ -172,38 +236,25 @@ function (in maux) (sequential) meinit0 :: "nat \<Rightarrow> ty Formula.formula
     MAnds vpos vneg (mpos @ mneg) (replicate (length l) mbuf_t_empty))"
 | "meinit0 n (Formula.Exists t \<phi>) = MExists (meinit0 (Suc n) \<phi>)"
 | "meinit0 n (Formula.Agg y \<omega> tys f \<phi>) = 
-    (let default = MAgg (init_aggargs (fv \<phi>) n (fv \<phi> \<subseteq> {0..<length tys}) y \<omega> tys f) (meinit0 ((length tys) + n) \<phi>) in
+    (let default = MAgg (init_aggargs (fv \<phi>) n (fv \<phi> \<subseteq> {0..<length tys}) y \<omega> tys f) (meinit0 (length tys + n) \<phi>) in
     (case \<phi> of Formula.Since \<phi>' I \<psi>' \<Rightarrow>
         let agg = Some (init_aggargs (fv \<phi>) n (fv \<phi> \<subseteq> {0..<length tys}) y \<omega> tys f) in
-        (let args = (\<lambda>k. (init_args I ((length tys) + n) (Formula.fv \<phi>') (Formula.fv \<psi>') k agg)) in
-            if safe_formula \<phi>'
-            then MSince (args True) (meinit0 ((length tys) + n) \<phi>') (meinit0 ((length tys) + n) \<psi>') init_mebuf2S (init_msaux (args True))
-            else (case \<phi>' of
-              Formula.Neg \<phi>'' \<Rightarrow> MSince (args False) (meinit0 ((length tys) + n) \<phi>'') (meinit0 ((length tys) + n) \<psi>') init_mebuf2S (init_msaux (args False))
-              | _ \<Rightarrow> MRel empty_table))
+          init_since' meinit0 (length tys + n) agg \<phi>' I \<psi>'
      | Formula.Until \<phi>' I \<psi>' \<Rightarrow>
         let agg = Some (init_aggargs (fv \<phi>) n (fv \<phi> \<subseteq> {0..<length tys}) y \<omega> tys f) in
-        (let args = (\<lambda>k. (init_args I ((length tys) + n) (Formula.fv \<phi>') (Formula.fv \<psi>') k agg)) in
-            if safe_formula \<phi>'
-            then MUntil (args True) (meinit0 ((length tys) + n) \<phi>') (meinit0 ((length tys) + n) \<psi>') (mbuf_t_empty, mbuf_t_empty) mbuf_t_empty 0 (init_muaux (args True))
-             else (case \<phi>' of
-              Formula.Neg \<phi>'' \<Rightarrow> MUntil (args False) (meinit0 ((length tys) + n) \<phi>'') (meinit0 ((length tys) + n) \<psi>') (mbuf_t_empty, mbuf_t_empty) mbuf_t_empty 0 (init_muaux (args False))
-              | _ \<Rightarrow> MRel empty_table))
+          init_until' meinit0 (length tys + n) agg \<phi>' I \<psi>'
      | _ \<Rightarrow> default))"
 | "meinit0 n (Formula.Prev I \<phi>) = MPrev I (meinit0 n \<phi>) True mbuf_t_empty mbuf_t_empty"
 | "meinit0 n (Formula.Next I \<phi>) = MNext I (meinit0 n \<phi>) True mbuf_t_empty"
-| "meinit0 n (Formula.Since \<phi> I \<psi>) = 
-    (if safe_formula \<phi>
-    then MSince (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True None) (meinit0 n \<phi>) (meinit0 n \<psi>) init_mebuf2S (init_msaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True None))
-    else (case \<phi> of
-      Formula.Neg \<phi>' \<Rightarrow> MSince (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False None) (meinit0 n \<phi>') (meinit0 n \<psi>) init_mebuf2S (init_msaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False None))
-    | _ \<Rightarrow> MRel empty_table))"
-| "meinit0 n (Formula.Until \<phi> I \<psi>) = 
-    (if safe_formula \<phi>
-    then MUntil (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True None) (meinit0 n \<phi>) (meinit0 n \<psi>) (mbuf_t_empty, mbuf_t_empty) mbuf_t_empty 0 (init_muaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True None))
-    else (case \<phi> of
-      Formula.Neg \<phi>' \<Rightarrow> MUntil (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False None) (meinit0 n \<phi>') (meinit0 n \<psi>) (mbuf_t_empty, mbuf_t_empty) mbuf_t_empty 0 (init_muaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False None))
-    | _ \<Rightarrow> MRel empty_table))"
+| "meinit0 n (Formula.Since \<phi> I \<psi>) = init_since' meinit0 n None \<phi> I \<psi>"
+| "meinit0 n (Formula.Until \<phi> I \<psi>) = init_until' meinit0 n None \<phi> I \<psi>"
+| "meinit0 n (Formula.Trigger \<phi> I \<psi>) = init_trigger' meinit0 n None \<phi> I \<psi>"
+| "meinit0 n (Formula.Release \<phi> I \<psi>) = (
+  if mem I 0
+    then
+      meinit0 n (release_safe_0 \<phi> I \<psi>)
+    else
+      meinit0 n (release_safe_bounded \<phi> I \<psi>))"
 | "meinit0 n (Formula.MatchP I r) =
     (let (mr, \<phi>s) = to_mregex r
     in MMatchP I mr (sorted_list_of_set (RPDs mr)) (map (meinit0 n) \<phi>s) (replicate (length \<phi>s) mbuf_t_empty) mbuf_t_empty [])"
@@ -213,17 +264,103 @@ function (in maux) (sequential) meinit0 :: "nat \<Rightarrow> ty Formula.formula
 | "meinit0 n (Formula.TP t) = MTP (mtrm_of_trm t) 0"
 | "meinit0 n (Formula.TS t) = MTS (mtrm_of_trm t)"
 | "meinit0 n _ = MRel empty_table"
-  by pat_completeness auto 
-termination (in maux)
-  by (relation "measure (\<lambda>(_, \<phi>). size \<phi>)") (auto simp: less_Suc_eq_le size_list_estimation' size_remove_neg
-      dest!: to_mregex_ok[OF sym] atms_size) 
+  by pat_completeness auto
+
+termination (in maux) meinit0
+proof ((relation "measure (\<lambda>(_, \<phi>). size' \<phi>)"; clarsimp), goal_cases)
+  case (1 \<phi> \<psi>)
+  then show ?case
+    by (cases \<psi>; clarsimp)
+next
+  case (2 \<phi> \<psi>)
+  then show ?case
+    by (cases \<psi>; clarsimp)
+next
+  case (3 \<phi> \<psi>)
+  then show ?case 
+    by (cases \<psi>; clarsimp)
+next
+  case (4 \<phi> \<psi>)
+  then show ?case 
+    by (cases \<psi>; clarsimp)
+next
+  case (5 \<phi> \<phi>' I \<psi>')
+  then show ?case
+    using size'_and_release[of \<phi> \<phi>' I \<psi>']
+    by simp
+next
+  case (6 \<phi>s \<phi>)
+  then show ?case
+    unfolding less_Suc_eq_le
+    using size_list_estimation'[of \<phi> \<phi>s]
+    by (simp add: sum_list_mem_leq)
+next
+  case (7 n \<phi>s \<phi>)
+  then show ?case
+    unfolding less_Suc_eq_le
+    using sum_list_mem_leq[of \<phi> \<phi>s size']
+      size'_remove_neg le_trans by metis
+next
+  case (8 \<phi> I \<psi>)
+  then show ?case 
+    using size'_release_aux(4)[of \<phi> I \<psi>]
+    by simp
+next
+  case (9 \<phi> I \<psi>)
+  then show ?case 
+    using size'_release_aux(3)[of \<phi> I \<psi>]
+    by simp
+next
+  case (10 r r' \<phi>s r'' \<phi>s' \<phi>)
+  then show ?case 
+    by (clarsimp  dest!: to_mregex_ok[OF sym] atms_size')
+next
+  case (11 r r' \<phi>s r'' \<phi>s' \<phi>)
+  then show ?case 
+    by (clarsimp  dest!: to_mregex_ok[OF sym] atms_size')
+qed
+
+lemma (in maux) init_since_code:
+  assumes "(\<And>\<alpha> m. size' \<alpha> \<le> size' \<phi>' + size' \<psi>' \<Longrightarrow> minit0 m \<alpha> = Monitor_Impl.Rep_meformula (meinit0 m \<alpha>))"
+  shows "init_since minit0 n agg \<phi>' I \<psi>' 
+  = Rep_meformula (init_since' meinit0 n agg \<phi>' I \<psi>')"
+  apply (cases \<phi>')
+  using assms[of \<phi>' n] assms[of \<psi>' n] assms
+  by (auto simp: init_since_def init_since'_def mbuf_t_empty.rep_eq)
+
+lemma (in maux) init_until_code:
+  assumes "(\<And>\<alpha> m. size' \<alpha> \<le> size' \<phi>' + size' \<psi>' \<Longrightarrow> minit0 m \<alpha> = Monitor_Impl.Rep_meformula (meinit0 m \<alpha>))"
+  shows "init_until minit0 n agg \<phi>' I \<psi>' 
+  = Rep_meformula (init_until' meinit0 n agg \<phi>' I \<psi>')"
+  apply (cases \<phi>')
+  using assms[of \<phi>' n] assms[of \<psi>' n] assms
+  by (auto simp: init_until_def init_until'_def mbuf_t_empty.rep_eq)
+
+lemma (in maux) init_and_trigger_code:
+  assumes "(\<And>\<alpha> m. size' \<alpha> \<le> size' \<phi> + size' \<phi>' + size' \<psi>' \<Longrightarrow> minit0 m \<alpha> = Monitor_Impl.Rep_meformula (meinit0 m \<alpha>))"
+  shows "init_and_trigger minit0 n agg \<phi> \<phi>' I \<psi>' 
+  = Rep_meformula (init_and_trigger' meinit0 n agg \<phi> \<phi>' I \<psi>')"
+  apply (cases \<phi>')
+  using assms[of \<phi> n] assms[of \<phi>' n] assms[of \<psi>' n] assms
+  by (auto simp: init_and_trigger_def init_and_trigger'_def mbuf_t_empty.rep_eq)
+
+lemma (in maux) init_trigger_code:
+  assumes "(\<And>\<alpha> m. size' \<alpha> \<le> size' \<phi>' + size' \<psi>' \<Longrightarrow> minit0 m \<alpha> = Monitor_Impl.Rep_meformula (meinit0 m \<alpha>))"
+  shows "init_trigger minit0 n agg \<phi>' I \<psi>' 
+  = Rep_meformula (init_trigger' meinit0 n agg \<phi>' I \<psi>')"
+  apply (cases \<phi>')
+  using assms[of \<phi>' n] assms[of \<psi>' n] assms
+  by (auto simp: init_trigger_def init_trigger'_def mbuf_t_empty.rep_eq)
 
 lemma (in maux) minit0_code[code]: "minit0 n \<phi> = Rep_meformula (meinit0 n \<phi>)"
-  by (induction n \<phi> rule: meinit0.induct) (auto simp: init_since_def init_until_def
-      mbuf_t_empty.rep_eq Let_def split: formula.splits prod.splits)
+  apply (induction n \<phi> rule: meinit0.induct; clarsimp simp: Let_def 
+    mbuf_t_empty.rep_eq split: prod.splits if_splits)
+  using init_and_trigger_code init_since_code init_until_code init_trigger_code
+  by (auto simp: mbuf_t_empty.rep_eq split: formula.splits)
 
-definition mestate :: "nat \<Rightarrow> nat \<Rightarrow> ('a, 'b) mformula \<Rightarrow> nat \<Rightarrow> ts queue \<Rightarrow> 'c \<Rightarrow> ('a, 'b, 'c) mstate_ext" where
-  "mestate i j m n t \<zeta> =
+definition mestate :: "nat \<Rightarrow> nat \<Rightarrow> ('a, 'b, 'c) mformula \<Rightarrow> nat \<Rightarrow> ts queue 
+  \<Rightarrow> 'd \<Rightarrow> ('a, 'b, 'c, 'd) mstate_ext" 
+  where "mestate i j m n t \<zeta> =
     \<lparr>mstate_i = i, mstate_j = j, mstate_m = m, mstate_n = n, mstate_t = linearize t, \<dots> = \<zeta>\<rparr>"
 
 code_datatype mestate
@@ -263,6 +400,12 @@ lemma mbuf2_add: "mbuf2_add xs ys (map_prod Rep_mbuf_t Rep_mbuf_t buf) = map_pro
 fun mebuf2S_add :: "event_data table list \<Rightarrow> event_data table list \<Rightarrow> ts list \<Rightarrow> event_data mebuf2S \<Rightarrow> event_data mebuf2S" where
   "mebuf2S_add xs' ys' ts' (xs, ys, ts, skew) = (xs @@ xs', ys @@ ys', ts @@ ts', skew)"
 
+(*
+fun mbuf2_take where
+  "mbuf2_take f (x # xs, y # ys) = (let (zs, buf) = mbuf2_take f (xs, ys) in (f x y # zs, buf))"
+| "mbuf2_take f (xs, ys) = ([], (xs, ys))"
+*)
+
 fun mebuf2_take :: "(event_data table \<Rightarrow> event_data table \<Rightarrow> 'b) \<Rightarrow> event_data mebuf2 \<Rightarrow> 'b list \<times> event_data mebuf2" where
   "mebuf2_take f (xs, ys) = (case mbuf_t_cases xs of (None, xs') \<Rightarrow> ([], (xs', ys)) | (Some x, xs') \<Rightarrow>
     (case mbuf_t_cases ys of (None, ys') \<Rightarrow> ([], (x ## xs', ys')) | (Some y, ys') \<Rightarrow>
@@ -285,6 +428,13 @@ lemma mebuf2_take: "mebuf2_take f buf = (zs, buf') \<Longrightarrow>
   mbuf2_take f (map_prod Rep_mbuf_t Rep_mbuf_t buf) = (zs, (map_prod Rep_mbuf_t Rep_mbuf_t buf'))"
   using mebuf2_take_aux
   by (cases buf; cases buf') fastforce
+
+(*
+fun mbuf2t_take :: "(event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'b \<Rightarrow>
+    event_data mbuf2 \<Rightarrow> ts \<Rightarrow> ts list \<Rightarrow> 'b \<times> event_data mbuf2 \<times> ts \<times> ts list" where
+  "mbuf2t_take f z (x # xs, y # ys) t0 (t # ts) = mbuf2t_take f (f x y t z) (xs, ys) t ts"
+| "mbuf2t_take f z (xs, ys) t0 ts = (z, (xs, ys), (case ts of [] \<Rightarrow> t0 | t # _ \<Rightarrow> t), ts)"
+*)
 
 fun mebuf2t_take :: "(event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'b \<Rightarrow>
     event_data mebuf2 \<Rightarrow> ts \<Rightarrow> ts mbuf_t \<Rightarrow> 'b \<times> event_data mebuf2 \<times> ts \<times> ts mbuf_t" where
@@ -313,6 +463,20 @@ lemma mebuf2t_take: "mebuf2t_take f z buf t ts = (zs, buf', nt, nts) \<Longright
   mbuf2t_take f z (map_prod Rep_mbuf_t Rep_mbuf_t buf) t (Rep_mbuf_t ts) = (zs, (map_prod Rep_mbuf_t Rep_mbuf_t buf'), nt, Rep_mbuf_t nts)"
   using mebuf2t_take_aux
   by (cases buf; cases buf') fastforce
+
+(*
+fun mbuf2T_take where
+  "mbuf2T_take f z (x # xs, y # ys) (t # ts) = mbuf2T_take f (f x y t z) (xs, ys) ts"
+| "mbuf2T_take f z (xs, ys) ts = (z, (xs, ys), ts)"
+*)
+
+fun mebuf2T_take :: "(event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'b \<Rightarrow>
+    event_data mebuf2 \<Rightarrow> ts mbuf_t \<Rightarrow> 'b \<times> event_data mebuf2 \<times> ts \<times> ts mbuf_t" where
+  "mebuf2t_take f z (xs, ys) ts =
+    (case mbuf_t_cases ts of (None, ts') \<Rightarrow> (z, (xs, ys), t0, ts') | (Some t, ts') \<Rightarrow>
+    (case mbuf_t_cases xs of (None, xs') \<Rightarrow> (z, (xs', ys), t, t ## ts') | (Some x, xs') \<Rightarrow>
+    (case mbuf_t_cases ys of (None, ys') \<Rightarrow> (z, (x ## xs', ys'), t, t ## ts') | (Some y, ys') \<Rightarrow>
+    mebuf2t_take f (f x y t z) (xs', ys') t ts')))"
 
 context maux begin
 context fixes args :: args begin
@@ -520,8 +684,8 @@ context
   fixes j :: nat
 begin
 
-function (sequential) meeval :: "nat \<Rightarrow> ts list \<Rightarrow> database \<Rightarrow> ('msaux, 'muaux) meformula \<Rightarrow>
-  event_data table list \<times> ('msaux, 'muaux) meformula" where
+function (sequential) meeval :: "nat \<Rightarrow> ts list \<Rightarrow> database \<Rightarrow> ('msaux, 'muaux, 'mtaux) meformula \<Rightarrow>
+  event_data table list \<times> ('msaux, 'muaux, 'mtaux) meformula" where
   "meeval n ts db (MRel rel) = (replicate (length ts) rel, MRel rel)"
 | "meeval n ts db (MPred e tms mode) =
     ((case Mapping.lookup db (e, length tms) of
@@ -547,6 +711,21 @@ function (sequential) meeval :: "nat \<Rightarrow> ts list \<Rightarrow> databas
     (let (xs, \<phi>) = meeval n ts db \<phi> in (map (\<lambda>r. eval_assignment conf ` r) xs, MAndAssign \<phi> conf))"
 | "meeval n ts db (MAndRel \<phi> conf) =
     (let (xs, \<phi>) = meeval n ts db \<phi> in (map (Set.filter (eval_constraint conf)) xs, MAndRel \<phi> conf))"
+| "meeval n ts db (MAndTrigger V_\<phi> \<phi> buf1 args \<phi>' \<psi>' buf2 nts aux) = (let
+    (as, \<phi>) = meeval n ts db \<phi>;
+    (xs, \<phi>') = meeval n ts db \<phi>';
+    (ys, \<psi>') = meeval n ts db \<psi>';
+    ((zs_trigger, aux), buf2, nts) = mbuf2T_take (\<lambda>r1 r2 t (zs, aux).
+        let aux       = update_mtaux args t r1 r2 aux;
+            (fv_z, z) = result_mtaux args aux
+        in (zs @ [(fv_z, z)], aux)) ([], aux) (mebuf2_add xs ys buf2) (nts @ ts);
+     \<comment> \<open>analogous to MAnd\<close>
+    (zs, buf1) = mebuf2_take (\<lambda>r1 (V_trigger, r2).
+        bin_join n V_\<phi> r1 True V_trigger r2 \<comment> \<open>fix pos=True for the and join\<close>
+    ) (mebuf2_add as zs_trigger buf1)
+    in
+    (zs, MAndTrigger V_\<phi> \<phi> buf1 args \<phi>' \<psi>' buf2 nts aux)
+)"
 | "meeval n ts db (MAnds A_pos A_neg L buf) =
     (let R = map (meeval n ts db) L in
     let buf = mebufn_add (map fst R) buf in
@@ -686,10 +865,11 @@ end
 
 section \<open>Instantiation of the generic algorithm and code setup\<close>
 
-<<<<<<< HEAD
+(* <<<<<<< HEAD
 lemma [code_unfold del, symmetric, code_post del]: "card \<equiv> Code_Cardinality.card'" by simp
 declare [[code drop: card]] Set_Impl.card_code[code]
-=======
+======= *)
+
 (*
   The following snippet (context \<dots> end) is taken from HOL-Library.Code_Cardinality.
   We do not include the entire theory because the remaining code setup is superseded
@@ -710,7 +890,6 @@ lemma card_UNIV'_code [code]:
 by(simp add: card_UNIV card_UNIV'_def)
 
 end
->>>>>>> master
 
 instantiation enat :: set_impl begin
 definition set_impl_enat :: "(enat, set_impl) phantom" where
@@ -1312,14 +1491,14 @@ qed
 lemma eval_agg_code[code]: "eval_agg n g0 y \<omega> tys f rel = (if g0 \<and> rel = empty_table
   then singleton_table n y (eval_agg_op \<omega> {})
   else (\<lambda>(k, group). let M = (\<lambda>(e, ts). (e, ecard ts)) ` images ((\<lambda>t. (meval_trm f t, t)) ` group) in
-    k[y:=Some (eval_agg_op \<omega> M)]) ` images ((\<lambda>t. (drop (length tys) t, t)) ` rel))"
+    k[y:=Some (eval_agg_op \<omega> M)]) ` images ((\<lambda>t. (drop length tys t, t)) ` rel))"
 proof -
-  have "(\<lambda>k. let group = Set.filter (\<lambda>x. drop (length tys) x = k) rel;
+  have "(\<lambda>k. let group = Set.filter (\<lambda>x. drop length tys x = k) rel;
       M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group in
-      k[y:=Some (eval_agg_op \<omega> M)]) ` (drop (length tys)) ` rel =
+      k[y:=Some (eval_agg_op \<omega> M)]) ` (drop length tys) ` rel =
     (\<lambda>(k, group). let M = (\<lambda>(e, ts). (e, ecard ts)) ` images ((\<lambda>t. (meval_trm f t, t)) ` group) in
-      k[y:=Some (eval_agg_op \<omega> M)]) ` images ((\<lambda>t. (drop (length tys) t, t)) ` rel)"
-    unfolding Let_def group_images[of "drop (length tys)" rel
+      k[y:=Some (eval_agg_op \<omega> M)]) ` images ((\<lambda>t. (drop length tys t, t)) ` rel)"
+    unfolding Let_def group_images[of "drop length tys" rel
       "(\<lambda>k g. k[y := Some (eval_agg_op \<omega> ((\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) g))) ` meval_trm f ` g))])", unfolded Let_def]
     unfolding group_images[of "meval_trm f" _ "(\<lambda>y g. (y, ecard g))", unfolded Let_def]
     by simp
