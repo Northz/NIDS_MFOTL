@@ -14,13 +14,9 @@ export_code
   (*term, formula, and regex constructors*)
   EInt Formula.Var Formula.Agg_Cnt Formula.Pred Regex.Skip Regex.Wild Typing.TAny Formula.TInt
   (*main functions*)
-<<<<<<< HEAD
-  convert_multiway vminit_safe minit_safe vmstep mstep mmonitorable_exec
+  convert_multiway mmonitorable_exec minit_safe mstep type_check vminit_safe vmstep  
   (*rewrite functions*)
   rewrite_trigger
-=======
-  convert_multiway mmonitorable_exec minit_safe mstep type_check
->>>>>>> master
   in OCaml module_name Monitor file_prefix "verified"
 
 (*<*)
