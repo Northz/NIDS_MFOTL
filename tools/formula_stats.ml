@@ -15,6 +15,22 @@ type result = {
   nlet: int;
 }
 
+let print_csv_header () =
+  Printf.printf "formula,predicates,lets,operators,operators_unfolded,\
+    temporal_ops,temporal_ops_unfolded,height,temporal_height\n"
+
+let print_csv formula r_orig r_unfolded =
+  Printf.printf "%s,%d,%d,%d,%d,%d,%d,%d,%d\n"
+    formula
+    (Pred_set.cardinal r_orig.log_preds)
+    r_orig.nlet
+    r_orig.conn
+    r_unfolded.conn
+    r_orig.ntemp
+    r_unfolded.ntemp
+    r_unfolded.height
+    r_unfolded.temp_height
+
 let print_result r =
   Printf.printf "log_predicates:  %4d\n" (Pred_set.cardinal r.log_preds);
   Printf.printf "connectives:     %4d\n" r.conn;
@@ -105,31 +121,45 @@ let rec analyze lets f =
 
 let formulafile = ref ""
 let sigfile = ref "" 
+let csv_output = ref false
 
 let analyse_formulafile ic = 
   let ic = open_in !formulafile in
   Formula_parser.formula Formula_lexer.token (Lexing.from_channel ic) 
 
 let main () = 
-  let sign = Log_parser.parse_signature_file !sigfile in
-  let f = analyse_formulafile !formulafile in
-  Rewriting.unfold_let := None;
-  let _, pf_orig, _ = Rewriting.check_formula sign f in
-  Rewriting.unfold_let := Some (Rewriting.ExpandAll);
-  let _, pf_unfolded, _ = Rewriting.check_formula sign f in
-  print_string "# without unfolding\n";
-  print_result (analyze [] pf_orig);
-  print_string "\n# with unfolding\n";
-  print_result (analyze [] pf_unfolded)
+  if !csv_output && !formulafile = "" then
+    print_csv_header ()
+  else
+    begin
+      let sign = Log_parser.parse_signature_file !sigfile in
+      let f = analyse_formulafile !formulafile in
+      Rewriting.unfold_let := None;
+      let _, pf_orig, _ = Rewriting.check_formula sign f in
+      let r_orig = analyze [] pf_orig in
+      Rewriting.unfold_let := Some (Rewriting.ExpandAll);
+      let _, pf_unfolded, _ = Rewriting.check_formula sign f in
+      let r_unfolded = analyze [] pf_unfolded in
+      if !csv_output then
+        print_csv (!formulafile) r_orig r_unfolded
+      else
+        begin
+          print_string "# without unfolding\n";
+          print_result r_orig;
+          print_string "\n# with unfolding\n";
+          print_result r_unfolded
+        end
+    end
 
 let usage_string = "Usage: formula_stats -sig <file> -formula <file> [-no_rw]"
 
 let _ = 
-  Arg.parse [
-    "-sig", Arg.Set_string sigfile, "\t\tChoose the signature file";
+  Arg.parse (Arg.align [
+    "-sig", Arg.Set_string sigfile, "\tChoose the signature file";
     "-formula", Arg.Set_string formulafile, "\tChoose the formula file"; 
     "-no_rw", Arg.Set Rewriting.no_rw, "\tNo formula rewrite";
-    ]
+    "-csv", Arg.Set csv_output, "\tOutput in csv format";
+    ])
     (fun _ -> ())
     usage_string;
   main ();
