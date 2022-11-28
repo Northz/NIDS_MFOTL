@@ -4,6 +4,7 @@ open Tuple
 type args = {
   a_intv: interval;
   a_bounded: bool;
+  a_gap: bool;
   a_pos: bool;
   a_prop1: bool;
   a_key2: int list;
@@ -70,6 +71,7 @@ let init_msaux pos intv attr1 attr2 =
     ms_args = {
       a_intv = intv;
       a_bounded = not (infinite_interval intv);
+      a_gap = not (in_right_ext ts_null intv);
       a_pos = pos;
       a_prop1 = (attr1 = []);
       a_key2 = List.map snd matches;
@@ -152,12 +154,14 @@ let join_msaux rel aux =
           if aux.ms_args.a_bounded then
             Hashtbl.remove aux.ms_in_map tup;
           Hashtbl.remove aux.ms_in_idx key;
-          Hashtbl.remove aux.ms_since tup
+          if aux.ms_args.a_gap then
+            Hashtbl.remove aux.ms_since tup
         )
         discard;
       aux.ms_in <- Relation.diff aux.ms_in discard
     end;
-  if not (in_left_ext (ts_minus aux.ms_t aux.ms_gc) aux.ms_args.a_intv) then
+  if aux.ms_args.a_gap &&
+    not (in_left_ext (ts_minus aux.ms_t aux.ms_gc) aux.ms_args.a_intv) then
     begin
       (*gc*)
       let keep = ref Relation.empty in
@@ -171,11 +175,15 @@ let join_msaux rel aux =
 
 let add_new_table_msaux rel aux =
   let t = aux.ms_t in
-  Relation.iter (fun tup ->
-    if not (Hashtbl.mem aux.ms_since tup) then
-      Hashtbl.add aux.ms_since tup t
-    ) rel;
-  if in_right_ext ts_null aux.ms_args.a_intv then
+  if aux.ms_args.a_gap then
+    begin
+      Relation.iter (fun tup ->
+        if not (Hashtbl.mem aux.ms_since tup) then
+          Hashtbl.add aux.ms_since tup t
+        ) rel;
+      Queue.add (t, rel) aux.ms_prevq
+    end
+  else
     begin
       if aux.ms_args.a_bounded then
         begin
@@ -186,7 +194,5 @@ let add_new_table_msaux rel aux =
         idx_table_insert aux.ms_args aux.ms_in_idx rel;
       aux.ms_in <- Relation.union aux.ms_in rel
     end
-  else
-    Queue.add (t, rel) aux.ms_prevq
 
 let result_msaux aux = aux.ms_in
