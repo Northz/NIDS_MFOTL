@@ -221,10 +221,7 @@ let earliest_cell lastev mf =
     | MAggreg (_, _, f1, _)
     | MAggOnce (_, _, f1, _)
     | MPrev (_, f1, _, _)
-    | MNext (_, f1, _, _)
-    | MOnceA (_, f1, _, _)
-    | MOnceZ (_, f1, _, _)
-    | MOnce (_, f1, _, _) -> go f1
+    | MNext (_, f1, _, _) -> go f1
 
     | MEventuallyZ (_, f1, inf, _) -> update inf.mezlastev; go f1
     | MEventually (_, f1, inf, _) -> update inf.melastev; go f1
@@ -320,17 +317,6 @@ let combine_muinfo c0 muinf1 muinf2 =
   { mulast = ulast; mufirst = muinf1.mufirst; mures = (rel_u muinf1.mures muinf2.mures);
     murel2 = murel2; mraux = mraux; msaux = (sklist muinf1.msaux muinf2.msaux) }
 
-let combine_ozinfo ozinf1 ozinf2 =
-  let mozauxrels = combine_dll1 ozinf1.mozauxrels ozinf2.mozauxrels in { mozauxrels = mozauxrels }
-
-let combine_oainfo oainf1 oainf2 =
-  let oaauxrels = combine_mq oainf1.oaauxrels oainf2.oaauxrels in
-  { ores = (rel_u oainf1.ores oainf2.ores); oaauxrels = oaauxrels }
-  
-let combine_oinfo moinf1 moinf2 =
-  let moauxrels = combine_dll2 moinf1.moauxrels moinf2.moauxrels in
-  { moauxrels = moauxrels; }
-
 let combine_ezinfo c0 mezinf1 mezinf2 =
   let mezlastev = combine_cells c0 mezinf1.mezlastev mezinf2.mezlastev in
   let mezauxrels = combine_dll1 mezinf1.mezauxrels mezinf2.mezauxrels in
@@ -372,15 +358,6 @@ let comb_m lastev f1 f2 =
     | (MSince (f11, f12, sinf1, loc1), MSince(f21, f22, sinf2, loc2))
       when loc1 = loc2
       -> MSince         (comb_m f11 f21, comb_m f12 f22, combine_sinfo sinf1 sinf2, loc1)
-    | (MOnceA (dt, f11, oainf1, loc1), MOnceA ( _, f21, oainf2, loc2))
-      when loc1 = loc2
-      -> MOnceA         (dt, comb_m f11 f21, combine_oainfo oainf1 oainf2, loc1)
-    | (MOnceZ (dt, f11, ozinf1, loc1), MOnceZ ( _, f21, ozinf2, loc2))
-      when loc1 = loc2
-      -> MOnceZ         (dt, comb_m f11 f21, combine_ozinfo ozinf1 ozinf2, loc1)
-    | (MOnce (dt, f11, oinf1, loc1), MOnce ( _, f21, oinf2, loc2))
-      when loc1 = loc2
-      -> MOnce        (dt, comb_m f11 f21, combine_oinfo oinf1 oinf2, loc1)
     | (MNUntil (c1, dt, f11, f12, muninf1, loc1), MNUntil  ( _, _, f21, f22, muninf2, loc2))
       when loc1 = loc2
       -> MNUntil        (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muninfo c0 muninf1 muninf2, loc1)
@@ -553,19 +530,6 @@ let split_state mapping mf size =
     (*let queues = split_mqueue sinf.sauxrels p2 in    
     Array.map2 (fun srel2 nq -> {srel2 = srel2; sauxrels = nq}) srels queues*)
   in
-  let split_oainfo oainf p =
-    let queues = split_mqueue oainf.oaauxrels p in   
-    let ores = split oainf.ores p in 
-    Array.map2 (fun ores nq ->  {ores = ores; oaauxrels = nq}) ores queues
-  in
-  let split_mozinfo mozinf p =
-    let dllists = split_dll1 mozinf.mozauxrels p in
-    Array.map (fun e -> {mozauxrels = e }) dllists
-  in
-  let split_moinfo moinf p =
-    let dllists = split_dll2 moinf.moauxrels p in
-    Array.map (fun e -> { moauxrels = e }) dllists
-  in
   let split_muninfo muninf p1 p2 =
     let listrels1 = split_dll1 muninf.mlistrel1 p1 in
     let listrels2 = split_dll1 muninf.mlistrel2 p2 in
@@ -656,16 +620,6 @@ let split_state mapping mf size =
       (*print_endline "since";*)
       (*let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MSince(c, dt, a1.(i), a2.(i), e, loc)) (split_sinfo sinf (p1 f1) (p1 f2))*)
       failwith "not implemented"
-    | MOnceA         (dt, f1, oainf, loc)                            ->
-      (*print_endline "oncea";*)
-      let a1 = (split_f f1) in Array.mapi (fun i e -> MOnceA(dt, a1.(i), e, loc)) (split_oainfo oainf (p1 f1))                      
-    | MOnceZ         (dt, f1, ozinf, loc)                            ->
-      (*print_endline "oncez";
-      let vars = (p1 f1) in List.iter(fun v -> Printf.printf "%s, " (Predicate.string_of_var v)) vars; print_endline "";*)
-      let a1 = (split_f f1) in Array.mapi (fun i e -> MOnceZ(dt, a1.(i), e, loc)) (split_mozinfo ozinf (p1 f1))                                
-    | MOnce          (dt, f1, oinf, loc)                             ->
-      (*print_endline "once";*)
-      let a1 = (split_f f1) in Array.mapi (fun i e -> MOnce(dt, a1.(i), e, loc)) (split_moinfo oinf (p1 f1)) 
     | MNUntil        (c, dt, f1, f2, muninf, loc)                    ->
       (*print_endline "nuntil"; *)
       let a1 = (split_f f1) in let a2 = (split_f f2) in Array.mapi (fun i e -> MNUntil(c, dt, a1.(i), a2.(i), e, loc)) (split_muninfo muninf (p1 f1) (p1 f2))   
@@ -750,9 +704,6 @@ let rec print_ef = function
   | EPrev          (dt, f1, pinf, _)                             -> print_endline "Prev";print_ef f1
   | ENext          (dt, f1, ninf, _)                             -> print_endline "Next";print_ef f1
   | ESince         (f1, f2, sinf, _)                             -> print_endline "Since";print_ef f1;print_ef f2
-  | EOnceA         (dt, f1, oainf, _)                            -> print_endline "OnceA";print_ef f1
-  | EOnceZ         (dt, f1, ozinf, _)                            -> print_endline "OnceZ";print_ef f1
-  | EOnce          (dt, f1, oinf, _)                             -> print_endline "Once";print_ef f1
   | ENUntil        (c1, dt, f1, f2, muninf, _)                   -> print_endline "NUntil";print_ef f1;print_ef f2
   | EUntil         (c1, dt, f1, f2, muinf, _)                    -> print_endline "Until";print_ef f1;print_ef f2
   | EEventuallyZ   (dt, f1, mezinf, _)                           -> print_endline "EventuallyZ";print_ef f1

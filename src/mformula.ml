@@ -5,10 +5,6 @@ open Tuple
 open MFOTL
 
 (* Immutable version of types used in eformula *)
-type mozinfo = { mozauxrels: (int * timestamp * relation) Dllist.dllist}
-
-type moinfo  = { moauxrels: (timestamp * relation) Dllist.dllist}
-
 type msinfo  = { msrel2: relation option;
                  msaux: Optimized_mtl.msaux}
 
@@ -51,9 +47,6 @@ type mformula =
   | MPrev of interval * mformula * pinfo * int
   | MNext of interval * mformula * ninfo * int
   | MSince of mformula * mformula * sinfo * int
-  | MOnceA of interval * mformula * oainfo * int
-  | MOnceZ of interval * mformula * mozinfo * int
-  | MOnce of interval * mformula  * moinfo * int
   | MNUntil of comp_two * interval * mformula * mformula * muninfo * int
   | MUntil of comp_two * interval * mformula * mformula * muinfo * int
   | MEventuallyZ of interval * mformula * mezinfo * int
@@ -76,9 +69,6 @@ let free_vars f =
   | MPrev          (_, f1, _, _)             -> get_pred f1
   | MNext          (_, f1, _, _)             -> get_pred f1
   | MSince         (f1, f2, _, _)            -> Misc.union (get_pred f1) (get_pred f2)
-  | MOnceA         (_, f1, _, _)             -> get_pred f1
-  | MOnceZ         (_, f1, _, _)             -> get_pred f1
-  | MOnce          (_, f1, _, _)             -> get_pred f1
   | MNUntil        (c, _, f1, f2, _, _)      -> Misc.union (get_pred f1) (get_pred f2)
   | MUntil         (c, _, f1, f2, _, _)      -> Misc.union (get_pred f1) (get_pred f2)
   | MEventuallyZ   (_, f1, _, _)             -> get_pred f1
@@ -103,9 +93,6 @@ let predicates f =
   | MPrev          (_, f1, _, _)             -> get_pred f1
   | MNext          (_, f1, _, _)             -> get_pred f1
   | MSince         (f1, f2, _, _)            -> Misc.union (get_pred f1) (get_pred f2)
-  | MOnceA         (_, f1, _, _)             -> get_pred f1
-  | MOnceZ         (_, f1, _, _)             -> get_pred f1
-  | MOnce          (_, f1, _, _)             -> get_pred f1
   | MNUntil        (_, _, f1, f2, _, _)      -> Misc.union (get_pred f1) (get_pred f2)
   | MUntil         (_, _, f1, f2, _, _)      -> Misc.union (get_pred f1) (get_pred f2)
   | MEventuallyZ   (_, f1, _, _)             -> get_pred f1

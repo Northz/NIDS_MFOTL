@@ -129,136 +129,6 @@ let dllist_add_last auxrels tsq rel2 =
     else
       Dllist.add_last (tsq,rel2) auxrels
 
-let update_once_all intv tsq inf =
-  let auxrels = inf.oaauxrels in
-  let rec comp () =
-    if not (Mqueue.is_empty auxrels) then
-      let (tsj,relj) = Mqueue.top auxrels in
-      if MFOTL.in_right_ext (MFOTL.ts_minus tsq tsj) intv then
-        begin
-          ignore (Mqueue.pop auxrels);
-          inf.ores <- Relation.union inf.ores relj;
-          comp ()
-        end
-  in
-  comp ()
-
-(* Remark: we could remove all auxrels that are covered by the tree and
-   gain some memory (sooner). However detecting [lw] would be harder. *)
-let update_once_zero intv q tsq inf rel2 discard =
-  let auxrels = inf.ozauxrels in
-
-  let rec elim_old_ozauxrels () =
-    (* remove old elements that fell out of the interval *)
-    if not (Dllist.is_empty auxrels) then
-      let (_, tsj, arel) = Dllist.get_first auxrels in
-      if not (MFOTL.in_left_ext (MFOTL.ts_minus tsq tsj) intv) then
-        begin
-          if inf.ozlast != Dllist.void && inf.ozlast == Dllist.get_first_cell auxrels then
-            inf.ozlast <- Dllist.void;
-          ignore(Dllist.pop_first auxrels);
-          elim_old_ozauxrels()
-        end
-  in
-  elim_old_ozauxrels ();
-
-  if not (Relation.is_empty rel2) then
-    Dllist.add_last (q,tsq,rel2) inf.ozauxrels;
-
-  if Dllist.is_empty auxrels || discard then
-    Relation.empty
-  else
-    let cond = fun _ -> true in
-    let f = fun (j,_,rel) -> (j,rel) in
-    let subseq, new_last = get_new_elements auxrels inf.ozlast cond f in
-    let lw,_,_ = Dllist.get_first auxrels in
-    let rw =
-      if subseq = [] then
-        let j,_,_ = Dllist.get_data inf.ozlast in j
-      else
-        begin
-          assert (new_last != Dllist.void);
-          inf.ozlast <- new_last;
-          let rw = fst (List.hd subseq) in
-          assert (rw = let j,_,_ = Dllist.get_data new_last in j);
-          rw
-        end
-    in
-    if Misc.debugging Dbg_eval then
-      begin
-        Printf.eprintf "[update_once_zero] lw = %d rw = %d " lw rw;
-        Misc.prerrnl_list "subseq = " prerr_auxel subseq;
-      end;
-    let newt = Sliding.slide string_of_int Relation.union subseq (lw, rw) inf.oztree in
-    inf.oztree <- newt;
-    Sliding.stree_res newt
-
-
-let update_once intv tsq inf discard =
-  let auxrels = inf.oauxrels in
-  let rec elim_old_oauxrels () =
-    (* remove old elements that fell out of the interval *)
-    if not (Dllist.is_empty auxrels) then
-      let (tsj,_) = Dllist.get_first auxrels in
-      if not (MFOTL.in_left_ext (MFOTL.ts_minus tsq tsj) intv) then
-        begin
-          if inf.olast != Dllist.void && inf.olast == Dllist.get_first_cell auxrels then
-            inf.olast <- Dllist.void;
-          ignore(Dllist.pop_first auxrels);
-          elim_old_oauxrels()
-        end
-  in
-  elim_old_oauxrels ();
-
-  (* In the following we distiguish between the new window and the new
-     elements: the new window may contain old elements (the old and new
-     windows may overlap). *)
-
-  if Dllist.is_empty auxrels || discard then
-    Relation.empty
-  else
-    let lw = fst (Dllist.get_first auxrels) in
-    if MFOTL.in_right_ext (MFOTL.ts_minus tsq lw) intv then
-      (* the new window is not empty *)
-      let cond = fun (tsj,_) -> MFOTL.in_right_ext (MFOTL.ts_minus tsq tsj) intv in
-      let subseq, new_last = get_new_elements auxrels inf.olast cond (fun x -> x) in
-      let rw =
-        if subseq = [] then
-          fst (Dllist.get_data inf.olast)
-        else
-          begin
-            assert (new_last != Dllist.void);
-            inf.olast <- new_last;
-            let rw = fst (List.hd subseq) in
-            assert (rw = fst (Dllist.get_data new_last));
-            rw
-          end
-      in
-      if Misc.debugging Dbg_eval then
-        begin
-          Printf.eprintf "[update_once] lw = %s rw = %s "
-            (MFOTL.string_of_ts lw)
-            (MFOTL.string_of_ts rw);
-          Misc.prerrnl_list "subseq = " prerr_sauxel subseq;
-        end;
-      let newt = Sliding.slide MFOTL.string_of_ts Relation.union subseq (lw, rw) inf.otree in
-      inf.otree <- newt;
-      Sliding.stree_res newt
-    else
-      begin
-        (* the new window is empty,
-           because not even the oldest element satisfies the constraint *)
-        inf.otree <- LNode {l = MFOTL.ts_invalid;
-                            r = MFOTL.ts_invalid;
-                            res = Some (Relation.empty)};
-        inf.olast <- Dllist.void;
-        Relation.empty
-      end
-
-
-
-
-
 let update_old_until q tsq i intv inf discard  =
   (* eliminate those entries (q-1,reli) from rels;
      return the tuples which hold at q *)
@@ -444,9 +314,6 @@ let add_let_index f n rels =
     | EAggreg (_,_,f1,_)
     | ENext (_,f1,_,_)
     | EPrev (_,f1,_,_)
-    | EOnceA (_,f1,_,_)
-    | EOnceZ (_,f1,_,_)
-    | EOnce (_,f1,_,_)
     | EEventuallyZ (_,f1,_,_)
     | EEventually (_,f1,_,_) ->
       update f1
@@ -689,34 +556,6 @@ let rec eval f crt discard =
        )
     ), loc
 
-
-  | EOnceA ((c,_) as intv, f2, inf, loc) ->
-    (match eval f2 crt false with
-     | None -> None
-     | Some rel2 ->
-       if Misc.debugging Dbg_eval then
-         Printf.eprintf "[eval,OnceA] q=%d\n" q;
-
-       Perf.profile_enter ~tp:q ~loc;
-       let result =
-         if c = CBnd MFOTL.ts_null then
-           begin
-             inf.ores <- Relation.union inf.ores rel2;
-             Some inf.ores
-           end
-         else
-           begin
-             if not (Relation.is_empty rel2) then
-               mqueue_add_last inf.oaauxrels tsq rel2;
-
-             update_once_all intv tsq inf;
-             Some inf.ores
-           end
-       in
-       Perf.profile_exit ~tp:q ~loc;
-       result
-    ), loc
-
   | EAggOnce (inf, state, f, loc) ->
     (match eval f crt false with
      | Some rel ->
@@ -727,41 +566,6 @@ let rec eval f crt discard =
        Perf.profile_exit ~tp:q ~loc;
        result
      | None -> None
-    ), loc
-
-  (* We distinguish between whether the left margin of [intv] is
-     zero or not, as we need to have two different ways of
-     representing the margins of the windows in the tree: when 0
-     is not included we can use the timestamps and merge
-     relations at equal timestamps; otherwise, when 0 is not
-     included, we need to use the timepoints. *)
-  | EOnceZ (intv,f2,inf,loc) ->
-    (match eval f2 crt false with
-     | None -> None
-     | Some rel2 ->
-       if Misc.debugging Dbg_eval then
-         Printf.eprintf "[eval,OnceZ] q=%d\n" q;
-
-       Perf.profile_enter ~tp:q ~loc;
-       let result = update_once_zero intv q tsq inf rel2 discard in
-       Perf.profile_exit ~tp:q ~loc;
-       Some result
-    ), loc
-
-  | EOnce (intv,f2,inf,loc) ->
-    (match eval f2 crt false with
-     | None -> None
-     | Some rel2 ->
-       if Misc.debugging Dbg_eval then
-         Printf.eprintf "[eval,Once] q=%d\n" q;
-
-       Perf.profile_enter ~tp:q ~loc;
-       if not (Relation.is_empty rel2) then
-         dllist_add_last inf.oauxrels tsq rel2;
-
-       let result = update_once intv tsq inf discard in
-       Perf.profile_exit ~tp:q ~loc;
-       Some result
     ), loc
 
   | EUntil (comp,intv,f1,f2,inf,loc) ->
@@ -1194,9 +998,6 @@ let add_index f i tsi db =
     | EAggreg (_,_,f1,_)
     | ENext (_,f1,_,_)
     | EPrev (_,f1,_,_)
-    | EOnceA (_,f1,_,_)
-    | EOnceZ (_,f1,_,_)
-    | EOnce (_,f1,_,_)
     | EEventuallyZ (_,f1,_,_)
     | EEventually (_,f1,_,_) ->
       update lets f1
@@ -1373,25 +1174,13 @@ let add_ext neval f =
     let inf = {srel2 = None; saux} in
     ESince (ff1,ff2,inf, next_loc())
 
-  | Once ((_, Inf) as intv, f) ->
-    let ff = add_ext f in
-    EOnceA (intv,ff,{ores = Relation.empty;
-                     oaauxrels = Mqueue.create()}, next_loc())
-
   | Once (intv,f) ->
-    let ff = add_ext f in
-    if fst intv = CBnd MFOTL.ts_null then
-      EOnceZ (intv,ff,{oztree = LNode {l = -1;
-                                       r = -1;
-                                       res = Some (Relation.empty)};
-                       ozlast = Dllist.void;
-                       ozauxrels = Dllist.empty()}, next_loc())
-    else
-      EOnce (intv,ff,{otree = LNode {l = MFOTL.ts_invalid;
-                                     r = MFOTL.ts_invalid;
-                                     res = Some (Relation.empty)};
-                      olast = Dllist.void;
-                      oauxrels = Dllist.empty()}, next_loc())
+    let attr = MFOTL.free_vars f in
+    let ff1 = ERel (Relation.make_relation [Tuple.make_tuple []], next_loc()) in
+    let ff2 = add_ext f in
+    let saux = Optimized_mtl.init_msaux true intv [] attr in
+    let inf = {srel2 = None; saux} in
+    ESince (ff1,ff2,inf, next_loc())
 
   | Until (intv,f1,f2) ->
     let attr1 = MFOTL.free_vars f1 in

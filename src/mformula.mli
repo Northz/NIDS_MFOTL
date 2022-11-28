@@ -5,10 +5,6 @@ open Tuple
 open MFOTL
 
 (* Immutable version of types used in eformula *)
-type mozinfo = { mozauxrels: (int * timestamp * relation) Dllist.dllist}
-
-type moinfo  = { moauxrels: (timestamp * relation) Dllist.dllist}
-
 type msinfo  = { msrel2: relation option;
                  msaux: Optimized_mtl.msaux}
 
@@ -43,9 +39,6 @@ type mformula =
   | MPrev of interval * mformula * pinfo * int
   | MNext of interval * mformula * ninfo * int
   | MSince of mformula * mformula * sinfo * int
-  | MOnceA of interval * mformula * oainfo * int
-  | MOnceZ of interval * mformula * mozinfo * int
-  | MOnce of interval * mformula  * moinfo * int
   | MNUntil of comp_two * interval * mformula * mformula * muninfo * int
   | MUntil of comp_two * interval * mformula * mformula * muinfo * int
   | MEventuallyZ of interval * mformula * mezinfo * int

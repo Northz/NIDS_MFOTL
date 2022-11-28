@@ -11,17 +11,9 @@ type linfo = {mutable llast: Neval.cell}
 type ainfo = {mutable arel: relation option}
 type pinfo = {mutable plast: Neval.cell}
 type ninfo = {mutable init: bool}
-type oainfo = {mutable ores: relation;
-         oaauxrels: (timestamp * relation) Mqueue.t}
 
 type agg_info = {op: agg_op; default: cst}
 
-type ozinfo = {mutable oztree: (int, relation) Sliding.stree;
-               mutable ozlast: (int * timestamp * relation) Dllist.cell;
-               ozauxrels: (int * timestamp * relation) Dllist.dllist}
-type oinfo = {mutable otree: (timestamp, relation) Sliding.stree;
-              mutable olast: (timestamp * relation) Dllist.cell;
-              oauxrels: (timestamp * relation) Dllist.dllist}
 type sinfo = {mutable srel2: relation option;
               saux: Optimized_mtl.msaux}
 type ezinfo = {mutable ezlastev: Neval.cell;
@@ -59,9 +51,6 @@ type extformula =
   | EPrev of interval * extformula * pinfo * int
   | ENext of interval * extformula * ninfo * int
   | ESince of extformula * extformula * sinfo * int
-  | EOnceA of interval * extformula * oainfo * int
-  | EOnceZ of interval * extformula * ozinfo * int
-  | EOnce of interval * extformula * oinfo * int
   | ENUntil of comp_two * interval * extformula * extformula * uninfo * int
   | EUntil of comp_two * interval * extformula * extformula * uinfo * int
   | EEventuallyZ of interval * extformula * ezinfo * int

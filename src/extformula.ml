@@ -13,17 +13,9 @@ type linfo = {
 type ainfo = {mutable arel: relation option}
 type pinfo = {mutable plast: Neval.cell}
 type ninfo = {mutable init: bool}
-type oainfo = {mutable ores: relation;
-         oaauxrels: (timestamp * relation) Mqueue.t}
 
 type agg_info = {op: agg_op; default: cst}
 
-type ozinfo = {mutable oztree: (int, relation) Sliding.stree;
-               mutable ozlast: (int * timestamp * relation) Dllist.cell;
-               ozauxrels: (int * timestamp * relation) Dllist.dllist}
-type oinfo = {mutable otree: (timestamp, relation) Sliding.stree;
-              mutable olast: (timestamp * relation) Dllist.cell;
-              oauxrels: (timestamp * relation) Dllist.dllist}
 type sinfo = {mutable srel2: relation option;
               saux: Optimized_mtl.msaux}
 type ezinfo = {mutable ezlastev: Neval.cell;
@@ -61,9 +53,6 @@ type extformula =
   | EPrev of interval * extformula * pinfo * int
   | ENext of interval * extformula * ninfo * int
   | ESince of extformula * extformula * sinfo * int
-  | EOnceA of interval * extformula * oainfo * int
-  | EOnceZ of interval * extformula * ozinfo * int
-  | EOnce of interval * extformula * oinfo * int
   | ENUntil of comp_two * interval * extformula * extformula * uninfo * int
   | EUntil of comp_two * interval * extformula * extformula * uinfo * int
   | EEventuallyZ of interval * extformula * ezinfo * int
@@ -83,9 +72,6 @@ type extformula =
   | EPrev          (dt, f1, pinf, _)                             -> contains_eventually f1
   | ENext          (dt, f1, ninf, _)                             -> contains_eventually f1
   | ESince         (f1, f2, sinf, _)                             -> contains_eventually f1 || contains_eventually f2
-  | EOnceA         (dt, f1, oainf, _)                            -> contains_eventually f1
-  | EOnceZ         (dt, f1, ozinf, _)                            -> contains_eventually f1
-  | EOnce          (dt, f1, oinf, _)                             -> contains_eventually f1
   | ENUntil        (c1, dt, f1, f2, muninf, _)                   -> contains_eventually f1 || contains_eventually f2
   | EUntil         (c1, dt, f1, f2, muinf, _)                    -> contains_eventually f1 || contains_eventually f2
   | EEventuallyZ   (dt, f1, mezinf, _)                           -> true
@@ -143,37 +129,6 @@ let prerr_predinf str inf =
 
 let prerr_linf str inf =
   Printf.eprintf "%s{llast=%s}\n" str (Neval.string_of_cell inf.llast)
-
-let prerr_ozinf str inf =
-  prerr_string str;
-  if inf.ozlast == Dllist.void then
-    prerr_string "ozlast = None; "
-  else
-    begin
-      let (j,_,_) = Dllist.get_data inf.ozlast in
-      Printf.eprintf "ozlast (index) = %d; " j
-    end;
-  Dllist.iter prerr_aauxel inf.ozauxrels;
-  Sliding.prerr_stree
-    string_of_int
-    (Relation.prerr_rel " ztree = ")
-    "; ozinf.ztree = "
-    inf.oztree
-
-let prerr_oinf str inf =
-  prerr_string (str ^ "{");
-  if inf.olast == Dllist.void then
-    prerr_string "last = None; "
-  else
-    begin
-      let (ts,_) = Dllist.get_data inf.olast in
-      Printf.eprintf "last (ts) = %s; " (MFOTL.string_of_ts ts)
-    end;
-  prerr_string "oauxrels = ";
-  Dllist.iter prerr_sauxel inf.oauxrels;
-  Sliding.prerr_stree MFOTL.string_of_ts (Relation.prerr_rel "") ";\n oinf.tree = " inf.otree;
-  prerr_string "}"
-
 
 let prerr_sinf str inf =
   prerr_string str;
@@ -275,28 +230,6 @@ let prerr_extf str ff =
           MFOTL.prerr_interval intv;
           prerr_string ": init=";
           prerr_bool ninf.init;
-          prerr_string "\n";
-          prerr_f_rec (d+1) f
-
-        | EOnceA (intv,f,inf,loc) ->
-          prerr_string "ONCE";
-          MFOTL.prerr_interval intv;
-          Relation.prerr_rel ": rel = " inf.ores;
-          prerr_string "; oaauxrels = ";
-          Misc.prerr_mqueue prerr_sauxel inf.oaauxrels;
-          prerr_string "\n";
-          prerr_f_rec (d+1) f
-
-        | EOnceZ (intv,f,oinf,loc) ->
-          prerr_string "ONCE";
-          MFOTL.prerr_interval intv;
-          prerr_ozinf ": ozinf=" oinf;
-          prerr_f_rec (d+1) f
-
-        | EOnce (intv,f,oinf,loc) ->
-          prerr_string "ONCE";
-          MFOTL.prerr_interval intv;
-          prerr_oinf ": oinf = " oinf;
           prerr_string "\n";
           prerr_f_rec (d+1) f
 
@@ -425,9 +358,6 @@ let rec pp_structure ppf ff =
   | EPrev (_, f1, _, loc) -> pp_unary "PREV" loc f1
   | ENext (_, f1, _, loc) -> pp_unary "NEXT" loc f1
   | ESince (f1, f2, _, loc) -> pp_binary "SINCE" loc f1 f2
-  | EOnceA (_, f1, _, loc) -> pp_unary "ONCE(A)" loc f1
-  | EOnceZ (_, f1, _, loc) -> pp_unary "ONCE(Z)" loc f1
-  | EOnce (_, f1, _, loc) -> pp_unary "ONCE" loc f1
   | ENUntil (_, _, f1, f2, _, loc) -> pp_binary "NUNTIL" loc f1 f2
   | EUntil (_, _, f1, f2, _, loc) -> pp_binary "UNTIL" loc f1 f2
   | EEventuallyZ (_, f1, _, loc) -> pp_unary "EVENTUALLY(Z)" loc f1
