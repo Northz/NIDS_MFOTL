@@ -385,8 +385,8 @@ fun safe_letpast :: "Formula.name \<times> nat \<Rightarrow> 't Formula.formula 
   | "safe_letpast p (\<phi> \<^bold>S I \<psi>) = safe_letpast p \<phi> \<squnion>
         ((if memL I 0 then NonFutuRec else PastRec) * safe_letpast p \<psi>)"
   | "safe_letpast p (\<phi> \<^bold>U I \<psi>) = AnyRec * (safe_letpast p \<phi> \<squnion> safe_letpast p \<psi>)"
-  | "safe_letpast p (\<phi> \<^bold>T I \<psi>) = safe_letpast p \<phi> \<squnion>
-        ((if memL I 0 then NonFutuRec else PastRec) * safe_letpast p \<psi>)"
+  | "safe_letpast p (\<phi> \<^bold>T I \<psi>) = safe_letpast p \<phi> \<squnion> safe_letpast p \<psi>"
+        (* ((if memL I 0 then NonFutuRec else PastRec) * safe_letpast p \<psi>)" *)
   | "safe_letpast p (\<phi> \<^bold>R I \<psi>) = AnyRec * (safe_letpast p \<phi> \<squnion> safe_letpast p \<psi>)"
   | "safe_letpast p (Formula.MatchP I r) = \<Squnion>(safe_letpast p ` Regex.atms r)"
   | "safe_letpast p (Formula.MatchF I r) =  AnyRec * \<Squnion>(safe_letpast p ` Regex.atms r)"

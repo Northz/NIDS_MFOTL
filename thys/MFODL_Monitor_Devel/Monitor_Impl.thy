@@ -459,7 +459,28 @@ fun mebuf2T_take :: "(event_data table \<Rightarrow> event_data table \<Rightarr
     (case mbuf_t_cases ts of (None, ts') \<Rightarrow> (z, (xs, ys), ts') | (Some t, ts') \<Rightarrow>
     (case mbuf_t_cases xs of (None, xs') \<Rightarrow> (z, (xs', ys), t ## ts') | (Some x, xs') \<Rightarrow>
     (case mbuf_t_cases ys of (None, ys') \<Rightarrow> (z, (x ## xs', ys'), t ## ts') | (Some y, ys') \<Rightarrow>
-    mebuf2T_take f (f x y t z) (xs', ys') ts')))"
+    mebuf2T_take f (f x y t z) (xs', ys') ts')))" (* TODO: replace with mebuf2t_take *)
+
+lemma mebuf2T_take_aux: "mebuf2T_take f z (xs, ys) ts = (zs, (xs', ys'), ts') \<Longrightarrow>
+  mbuf2T_take f z (Rep_mbuf_t xs, Rep_mbuf_t ys) (Rep_mbuf_t ts) = (zs, (Rep_mbuf_t xs', Rep_mbuf_t ys'), Rep_mbuf_t ts')"
+proof (induction f z "(xs, ys)" ts arbitrary: xs ys rule: mebuf2T_take.induct)
+  case (1 f z xs ys ts)
+  obtain x xs'' where xs_def: "mbuf_t_cases xs = (x, xs'')"
+    by fastforce
+  obtain y ys'' where ys_def: "mbuf_t_cases ys = (y, ys'')"
+    by fastforce
+  obtain t ts'' where ts_def: "mbuf_t_cases ts = (t, ts'')"
+    by fastforce
+  show ?case
+    using 1 xs_def ys_def ts_def
+    by (cases x; cases y; cases t) (auto simp: mbuf_t_Cons.rep_eq split: prod.splits list.splits)
+qed
+
+lemma mebuf2T_take: "mebuf2T_take f z buf ts = (zs, buf', nts) \<Longrightarrow>
+  mbuf2T_take f z (map_prod Rep_mbuf_t Rep_mbuf_t buf) (Rep_mbuf_t ts) = (zs, (map_prod Rep_mbuf_t Rep_mbuf_t buf'), Rep_mbuf_t nts)"
+  using mebuf2T_take_aux
+  by (cases buf; cases buf') 
+    fastforce
 
 context maux begin
 context fixes args :: args begin
@@ -792,10 +813,6 @@ proof (induction n ts db \<phi> rule: meeval.induct)
        (auto simp: letpast_meval_def mbuf_t_empty.rep_eq split: prod.splits
         dest!: letpast_meval0_cong_f[where ?eval="meval j m" and ?eval'="meeval m" and \<phi>=\<phi>, OF IH size_Rep_meformula, simplified] letpast_meeval0)
 next
-  case (8 a b c)
-  then show ?case
-    sorry
-next
   case (9 n ts db A_pos A_neg L buf)
   have "map fst (map (meeval n ts db) L) = map fst (map (meval j n ts db) (map Monitor_Impl.Rep_meformula L))"
     "map snd (map (meval j n ts db) (map Monitor_Impl.Rep_meformula L)) = map Monitor_Impl.Rep_meformula (map snd (map (meeval n ts db) L))"
@@ -804,10 +821,6 @@ next
     using 9
     by (auto simp only: Let_def meval.simps meeval.simps mbufn_add Rep_meformula.simps mbuf_t_empty.rep_eq
         split: prod.splits dest!: mebufn_take mbufn_take_app)
-next
-  case (18 a b c d)
-  then show ?case
-    sorry
 next
   case (19 n ts db I mr mrs \<phi>s buf nts aux)
   have IH: "zs = zs' \<and> \<phi>s' = map Rep_meformula \<phi>s''" if
@@ -832,7 +845,7 @@ next
         split: prod.splits dest!: mebufnt_take IH)
 qed (auto simp: mbuf2_add mbuf_t_empty.rep_eq mbuf_t_append.rep_eq
     simp del: mprev_next.simps meprev_next.simps eval_since.simps eeval_since.simps
-    split: prod.splits dest!: mebuf2_take mebuf2t_take meprev_next eeval_since)
+    split: prod.splits dest!: mebuf2_take mebuf2t_take mebuf2T_take meprev_next eeval_since)
 
 end (* fixes j :: nat *)
 
@@ -865,10 +878,8 @@ end (* maux *)
 
 section \<open>Instantiation of the generic algorithm and code setup\<close>
 
-(* <<<<<<< HEAD
 lemma [code_unfold del, symmetric, code_post del]: "card \<equiv> Code_Cardinality.card'" by simp
 declare [[code drop: card]] Set_Impl.card_code[code]
-======= *)
 
 (*
   The following snippet (context \<dots> end) is taken from HOL-Library.Code_Cardinality.
@@ -910,6 +921,17 @@ derive (rbt) set_impl string8
 derive (rbt) mapping_impl string8
 derive (rbt) set_impl event_data
 derive (rbt) mapping_impl event_data
+
+(* (* TODO: why was it used in dual-ops? *)
+
+definition add_new_mmuaux' :: "args \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> event_data mmuaux \<Rightarrow>
+  event_data mmuaux" where
+  "add_new_mmuaux' = add_new_mmuaux"
+
+interpretation muaux valid_mmuaux init_mmuaux add_new_mmuaux' length_mmuaux eval_mmuaux
+  using valid_init_mmuaux valid_add_new_mmuaux valid_length_mmuaux valid_eval_mmuaux
+  unfolding add_new_mmuaux'_def
+  by unfold_locales assumption+ *)
 
 type_synonym 'a vmsaux = "nat \<times> (nat \<times> 'a table) list"
 
@@ -1058,7 +1080,7 @@ global_interpretation default_maux: maux
   and meeval_since = "maux.eeval_since add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> event_data table)"
   and meval = "maux.meval add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> _) add_new_mmauaux (eval_mmauaux' :: _ \<Rightarrow> _ \<Rightarrow> mmauaux \<Rightarrow> _) update_mmtaux result_mmtaux"
   and meeval = "maux.meeval add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> _) add_new_mmauaux (eval_mmauaux' :: _ \<Rightarrow> _ \<Rightarrow> mmauaux \<Rightarrow> _) update_mmtaux result_mmtaux"
-  and letpast_meval = "maux.letpast_meval add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> _) add_new_mmauaux (eval_mmauaux' :: _ \<Rightarrow> _ \<Rightarrow> mmauaux \<Rightarrow> _)"
+  and letpast_meval = "maux.letpast_meval add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> _) add_new_mmauaux (eval_mmauaux' :: _ \<Rightarrow> _ \<Rightarrow> mmauaux \<Rightarrow> _) update_mmtaux result_mmtaux"
   and mstep = "maux.mstep add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> _) add_new_mmauaux (eval_mmauaux' :: _ \<Rightarrow> _ \<Rightarrow> mmauaux \<Rightarrow> _) update_mmtaux result_mmtaux"
   and msteps0_stateless = "maux.msteps0_stateless add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> _) add_new_mmauaux (eval_mmauaux' :: _ \<Rightarrow> _ \<Rightarrow> mmauaux \<Rightarrow> _) update_mmtaux result_mmtaux"
   and msteps_stateless = "maux.msteps_stateless add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> _) add_new_mmauaux (eval_mmauaux' :: _ \<Rightarrow> _ \<Rightarrow> mmauaux \<Rightarrow> _) update_mmtaux result_mmtaux"
@@ -1351,9 +1373,9 @@ lemma upd_nested_max_tstp_code[code]:
     else Code.abort (STR ''upd_nested_max_tstp: infinite'') (\<lambda>_. upd_nested_max_tstp m d X))"
   by transfer (auto simp add: upd_nested_max_tstp_fold)
 
-
+(* (* TODO: why was it used in dual-ops? *)
 declare [[code drop: add_new_mmuaux']]
-declare add_new_mmuaux'_def[unfolded add_new_mmuaux.simps, folded upd_nested_max_tstp_def, code]
+declare add_new_mmuaux'_def[unfolded add_new_mmuaux.simps, folded upd_nested_max_tstp_def, code] *)
 
 definition "filter_join pos X m = Mapping.filter (join_filter_cond pos X) m"
 
@@ -1438,12 +1460,10 @@ lemma mapping_delete_set_code[code]:
   "mapping_delete_set m A = (if finite A then set_fold_cfi mapping_delete_set_cfi m A else Code.abort (STR ''mapping_delete_set: infinite'') (\<lambda>_. mapping_delete_set m A))"
   using mapping_delete_fold[of A m] by (simp add: mapping_delete_set_cfi.rep_eq set_fold_cfi.rep_eq)
 
-<<<<<<< HEAD
+
 declare [[code drop: join_mmsaux]]
 declare join_mmsaux.simps[folded filter_join_def, code]
 
-=======
->>>>>>> master
 (*
 definition set_minus :: "'a set \<Rightarrow> 'a set \<Rightarrow> 'a set" where
   "set_minus X Y = X - Y"
@@ -1633,6 +1653,11 @@ lemma [code_unfold]: "Finite_Set.fold (insert_rank args type) (v, m) data = set_
 
 definition finite' :: "'a set \<Rightarrow> bool" where
   "finite' = finite"
+
+lemma finite'_code [code]: (* do we need it? *)
+  "finite' (set (xs::'a :: finite_UNIV list)) \<longleftrightarrow> True"
+  "finite' (List.coset xs) \<longleftrightarrow> of_phantom (finite_UNIV :: 'a finite_UNIV)"
+  by (simp_all add: finite'_def card_gt_0_iff finite_UNIV)
 
 declare insert_maggaux'.simps [code del]
 declare insert_maggaux'.simps [folded finite'_def, code]

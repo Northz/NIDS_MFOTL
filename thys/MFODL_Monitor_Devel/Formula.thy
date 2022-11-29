@@ -3042,16 +3042,18 @@ lemma map_formula_sat:
   assumes "\<And>b \<phi>. Formula.fvi b (f \<phi>) = Formula.fvi b \<phi>"
   assumes "\<And>\<sigma> V v i \<phi>. Formula.sat \<sigma> V v i (f \<phi>) = Formula.sat \<sigma> V v i \<phi>"
   shows "\<And>\<sigma> V v i. Formula.sat \<sigma> V v i \<phi> = Formula.sat \<sigma> V v i (map_formula f \<phi>)"
-using assms proof (induction \<phi>)
+  using assms 
+proof (induction \<phi>)
   case assm: (Let p \<phi>' \<psi>')
   from assms have nfv_eq: "\<forall>\<phi>. Formula.nfv (map_formula f \<phi>) = Formula.nfv \<phi>"
     using Formula.nfv_def map_formula_fvi
     by (simp add: Formula.nfv_def map_formula_fvi)
   {
     fix \<sigma> V v i
-    have "Formula.sat \<sigma> V v i (formula.Let p \<phi>' \<psi>') = Formula.sat \<sigma> (V(p \<mapsto> \<lambda>i. {v. length v = Formula.nfv \<phi>' \<and> Formula.sat \<sigma> V v i \<phi>'})) v i \<psi>'"
+    let ?V' = "V((p, Formula.nfv \<phi>') \<mapsto> \<lambda>w j. Formula.sat \<sigma> V w j \<phi>')"
+    have "Formula.sat \<sigma> V v i (formula.Let p \<phi>' \<psi>') = Formula.sat \<sigma> ?V' v i \<psi>'"
       by auto
-    then have "Formula.sat \<sigma> V v i (formula.Let p \<phi>' \<psi>') = Formula.sat \<sigma> (V(p \<mapsto> \<lambda>i. {v. length v = Formula.nfv \<phi>' \<and> Formula.sat \<sigma> V v i \<phi>'})) v i (map_formula f \<psi>')"
+    then have "Formula.sat \<sigma> V v i (formula.Let p \<phi>' \<psi>') = Formula.sat \<sigma> ?V' v i (map_formula f \<psi>')"
       using assm
       by blast
     then have "Formula.sat \<sigma> V v i (formula.Let p \<phi>' \<psi>') = Formula.sat \<sigma> V v i (map_formula f (formula.Let p \<phi>' \<psi>'))"
@@ -3060,36 +3062,57 @@ using assms proof (induction \<phi>)
   }
   then show ?case by blast
 next
-  case assm: (Agg y \<omega> b f' \<phi>')
+  case assm: (LetPast p \<phi>' \<psi>')
+  from assms have nfv_eq: "\<forall>\<phi>. Formula.nfv (map_formula f \<phi>) = Formula.nfv \<phi>"
+    using Formula.nfv_def map_formula_fvi
+    by (simp add: Formula.nfv_def map_formula_fvi)
+  {
+    fix \<sigma> V v i
+    let ?V' = "V((p, Formula.nfv \<phi>') \<mapsto> letpast_sat (\<lambda>X u k. Formula.sat \<sigma> (V((p, Formula.nfv \<phi>') \<mapsto> X)) u k \<phi>'))"
+    have "Formula.sat \<sigma> V v i (formula.LetPast p \<phi>' \<psi>') = Formula.sat \<sigma> ?V' v i \<psi>'"
+      by (auto simp: Let_def)
+    then have "Formula.sat \<sigma> V v i (formula.LetPast p \<phi>' \<psi>') = Formula.sat \<sigma> ?V' v i (map_formula f \<psi>')"
+      using assm
+      by blast
+    then have "Formula.sat \<sigma> V v i (formula.LetPast p \<phi>' \<psi>') 
+      = Formula.sat \<sigma> V v i (map_formula f (formula.LetPast p \<phi>' \<psi>'))"
+      using assm nfv_eq assms
+      by auto
+  }
+  then show ?case by blast
+next
+  case assm: (Agg y \<omega> tys f' \<phi>')
   {
     fix \<sigma> V v i
     define M where "M = {(x, ecard Zs) |
-        x Zs. Zs = {zs. length zs = b \<and>
+        x Zs. Zs = {zs. length zs = length tys \<and>
         Formula.sat \<sigma> V (zs @ v) i \<phi>' \<and>
         Formula.eval_trm (zs @ v) f' = x} \<and> Zs \<noteq> {}
     }"
     define M' where "M' = {(x, ecard Zs) |
-        x Zs. Zs = {zs. length zs = b \<and>
+        x Zs. Zs = {zs. length zs = length tys \<and>
         Formula.sat \<sigma> V (zs @ v) i (map_formula f \<phi>') \<and>
         Formula.eval_trm (zs @ v) f' = x} \<and> Zs \<noteq> {}
     }"
     have M_eq: "M = M'" using M_def M'_def assm by auto
     have nfv_eq: "\<forall>\<phi>. Formula.nfv (map_formula f \<phi>) = Formula.nfv \<phi>"
-      using assms Formula.nfv_def map_formula_fvi
-      by auto
-    have "Formula.sat \<sigma> V v i (formula.Agg y \<omega> b f' \<phi>') = (
-      (M = {} \<longrightarrow> fv \<phi>' \<subseteq> {0..<b}) \<and> v ! y = eval_agg_op \<omega> M
+      using assms
+      by (simp add: Formula.nfv_def map_formula_fvi)
+
+    have "Formula.sat \<sigma> V v i (formula.Agg y \<omega> tys f' \<phi>') = (
+      (M = {} \<longrightarrow> fv \<phi>' \<subseteq> {0..<(length tys)}) \<and> v ! y = eval_agg_op \<omega> M
     )"
       using M_def
       by auto
-    then have "Formula.sat \<sigma> V v i (formula.Agg y \<omega> b f' \<phi>') = (
-      (M' = {} \<longrightarrow> fv (map_formula f \<phi>') \<subseteq> {0..<b}) \<and> v ! y = eval_agg_op \<omega> M')"
-      using assms assm M_eq nfv_eq map_formula_fvi
-      by auto
-    then have "Formula.sat \<sigma> V v i (formula.Agg y \<omega> b f' \<phi>') = Formula.sat \<sigma> V v i (formula.Agg y \<omega> b f' (map_formula f \<phi>'))"
+    then have "Formula.sat \<sigma> V v i (formula.Agg y \<omega> tys f' \<phi>') = (
+      (M' = {} \<longrightarrow> fv (map_formula f \<phi>') \<subseteq> {0..<(length tys)}) \<and> v ! y = eval_agg_op \<omega> M')"
+      using assms assm
+      by (auto simp: M_eq nfv_eq map_formula_fvi)
+    then have "Formula.sat \<sigma> V v i (formula.Agg y \<omega> tys f' \<phi>') 
+    = Formula.sat \<sigma> V v i (formula.Agg y \<omega> tys f' (map_formula f \<phi>'))"
       using M'_def
       by auto
-    then have "Formula.sat \<sigma> V v i (formula.Agg y \<omega> b f' \<phi>') = Formula.sat \<sigma> V v i (map_formula f (formula.Agg y \<omega> b f' \<phi>'))"
+    then have "Formula.sat \<sigma> V v i (formula.Agg y \<omega> tys f' \<phi>') = Formula.sat \<sigma> V v i (map_formula f (formula.Agg y \<omega> tys f' \<phi>'))"
       using assms by auto
   }
   then show ?case by blast

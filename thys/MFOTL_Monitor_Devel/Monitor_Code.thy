@@ -39,7 +39,7 @@ definition db_code :: "(char list \<times> 'a list) list \<Rightarrow> (char lis
 definition verdict_code :: "_ \<Rightarrow> (nat \<times> 'a :: ccompare option list) list" where
   "verdict_code = RBT_Set2.keys"
 
-export_code HOL.equal Collection_Eq.ceq Collection_Order.ccompare Eq Lt Gt set_RBT set_impl phantom
+(*export_code HOL.equal Collection_Eq.ceq Collection_Order.ccompare Eq Lt Gt set_RBT set_impl phantom
   nat_of_integer integer_of_nat enat literal.explode db_code set interval RBT_set verdict_code
   MFOTL.Var MFOTL.Const
   MFOTL.Pred MFOTL.Eq MFOTL.Neg MFOTL.Or MFOTL.Exists
@@ -51,7 +51,7 @@ export_code HOL.equal Collection_Eq.ceq Collection_Order.ccompare Eq Lt Gt set_R
   MFOTL.Var MFOTL.Const
   MFOTL.Pred MFOTL.Eq MFOTL.Neg MFOTL.Or MFOTL.Exists
   MFOTL.Prev MFOTL.Next MFOTL.Since MFOTL.Until
-  minit_safe mstep in OCaml module_name Monitor file_prefix "verified"
+  minit_safe mstep in OCaml module_name Monitor file_prefix "verified"*)
 
 (*<*)
 end

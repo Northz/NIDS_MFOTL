@@ -4,6 +4,24 @@ theory Monitor_Code
 begin
 (*>*)
 
+(* understanding error from code generation *)
+
+lemma "List.coset xs = {x. x \<notin> set xs}"
+  using List.coset_def[unfolded uminus_set_def]
+  thm bool_Compl_def
+  by (simp add: set_eqI)
+
+find_theorems "List.coset _"
+typ "('a, bool) phantom"
+thm insert_maggaux'.simps insert_maggaux'.simps [folded finite'_def]
+
+lemma "Code_Cardinality.finite' (List.coset (xs::'a list)) 
+  \<equiv> of_phantom (finite_UNIV:: ('a::finite_UNIV, bool) phantom)"
+  apply simp
+  unfolding finite_UNIV
+  apply clarsimp
+  done
+
 export_code convert_multiway mmonitorable_exec vminit_safe minit_safe vmstep mstep
    checking OCaml?
 
