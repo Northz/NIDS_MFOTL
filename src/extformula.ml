@@ -18,6 +18,9 @@ type agg_info = {op: agg_op; default: cst}
 
 type sinfo = {mutable srel2: relation option;
               saux: Optimized_mtl.msaux}
+type uinfo = {mutable ulast: Neval.cell;
+              mutable urel2: relation option;
+              uaux: Optimized_mtl.muaux}
 type ezinfo = {mutable ezlastev: Neval.cell;
                mutable eztree: (int, relation) Sliding.stree;
                mutable ezlast: (int * timestamp * relation) Dllist.cell;
@@ -26,16 +29,6 @@ type einfo = {mutable elastev: Neval.cell;
               mutable etree: (timestamp, relation) Sliding.stree;
               mutable elast: (timestamp * relation) Dllist.cell;
               eauxrels: (timestamp * relation) Dllist.dllist}
-type uinfo = {mutable ulast: Neval.cell;
-              mutable ufirst: bool;
-              mutable ures: relation;
-              mutable urel2: relation option;
-              raux: (int * timestamp * (int * relation) Sk.dllist) Sj.dllist;
-              mutable saux: (int * relation) Sk.dllist}
-type uninfo = {mutable last1: Neval.cell;
-               mutable last2: Neval.cell;
-               mutable listrel1: (int * timestamp * relation) Dllist.dllist;
-               mutable listrel2: (int * timestamp * relation) Dllist.dllist}
 
 type comp_one = relation -> relation
 type comp_two = relation -> relation -> relation
@@ -53,8 +46,7 @@ type extformula =
   | EPrev of interval * extformula * pinfo * int
   | ENext of interval * extformula * ninfo * int
   | ESince of extformula * extformula * sinfo * int
-  | ENUntil of comp_two * interval * extformula * extformula * uninfo * int
-  | EUntil of comp_two * interval * extformula * extformula * uinfo * int
+  | EUntil of extformula * extformula * uinfo * int
   | EEventuallyZ of interval * extformula * ezinfo * int
   | EEventually of interval * extformula * einfo * int
 
@@ -72,8 +64,7 @@ type extformula =
   | EPrev          (dt, f1, pinf, _)                             -> contains_eventually f1
   | ENext          (dt, f1, ninf, _)                             -> contains_eventually f1
   | ESince         (f1, f2, sinf, _)                             -> contains_eventually f1 || contains_eventually f2
-  | ENUntil        (c1, dt, f1, f2, muninf, _)                   -> contains_eventually f1 || contains_eventually f2
-  | EUntil         (c1, dt, f1, f2, muinf, _)                    -> contains_eventually f1 || contains_eventually f2
+  | EUntil         (f1, f2, uinf, _)                             -> contains_eventually f1 || contains_eventually f2
   | EEventuallyZ   (dt, f1, mezinf, _)                           -> true
   | EEventually    (dt, f1, meinf, _)                            -> true
 
@@ -133,29 +124,17 @@ let prerr_linf str inf =
 let prerr_sinf str inf =
   prerr_string str;
   prerr_ainf "{srel2=" inf.srel2  ;
-  prerr_string ", saux=???";
+  prerr_string "; saux=???";
   (* TODO(JS): print saux *)
   prerr_string "}"
 
 
 let prerr_uinf str inf =
-  Printf.eprintf "%s{first=%b; last=%s; " str inf.ufirst
-    (Neval.string_of_cell inf.ulast);
-  Relation.prerr_rel "res=" inf.ures;
-  prerr_string "; raux=";
-  Dllist.iter prerr_rauxel inf.raux;
-  prerr_string "; saux=";
-  Dllist.iter prerr_auxel inf.saux;
-  prerr_endline "}"
-
-let prerr_uninf str uninf =
-  Printf.eprintf "%s{last1=%s; last2=%s; " str
-    (Neval.string_of_cell uninf.last1) (Neval.string_of_cell uninf.last2);
-  prerr_string "listrel1=";
-  Dllist.iter prerr_aauxel uninf.listrel1;
-  prerr_string "; listrel2=";
-  Dllist.iter prerr_aauxel uninf.listrel2;
-  prerr_string "}\n"
+  Printf.eprintf "%s{ulast=%s; " str (Neval.string_of_cell inf.ulast);
+  prerr_ainf "urel2=" inf.urel2;
+  prerr_string "; uaux=???";
+  (* TODO(JS): print uaux *)
+  prerr_string "}"
 
 let prerr_ezinf str inf =
   Printf.eprintf "%s{ezlastev=%s; " str (Neval.string_of_cell inf.ezlastev);
@@ -291,17 +270,10 @@ let prerr_extf str ff =
               prerr_f_rec (d+1) f1;
               prerr_f_rec (d+1) f2
 
-            | EUntil (_,intv,f1,f2,uinf,loc) ->
-              prerr_string "UNTIL";
-              MFOTL.prerr_interval intv;
+            | EUntil (f1,f2,uinf,loc) ->
+              prerr_string "UNTIL[???]"; (*TODO(JS): print interval*)
               prerr_uinf ": uinf=" uinf;
-              prerr_f_rec (d+1) f1;
-              prerr_f_rec (d+1) f2
-
-            | ENUntil (_,intv,f1,f2,uninf,loc) ->
-              prerr_string "NUNTIL";
-              MFOTL.prerr_interval intv;
-              prerr_uninf ": uninf=" uninf;
+              prerr_string "\n";
               prerr_f_rec (d+1) f1;
               prerr_f_rec (d+1) f2
 
@@ -358,8 +330,7 @@ let rec pp_structure ppf ff =
   | EPrev (_, f1, _, loc) -> pp_unary "PREV" loc f1
   | ENext (_, f1, _, loc) -> pp_unary "NEXT" loc f1
   | ESince (f1, f2, _, loc) -> pp_binary "SINCE" loc f1 f2
-  | ENUntil (_, _, f1, f2, _, loc) -> pp_binary "NUNTIL" loc f1 f2
-  | EUntil (_, _, f1, f2, _, loc) -> pp_binary "UNTIL" loc f1 f2
+  | EUntil (f1, f2, _, loc) -> pp_binary "UNTIL" loc f1 f2
   | EEventuallyZ (_, f1, _, loc) -> pp_unary "EVENTUALLY(Z)" loc f1
   | EEventually (_, f1, _, loc) -> pp_unary "EVENTUALLY" loc f1
 

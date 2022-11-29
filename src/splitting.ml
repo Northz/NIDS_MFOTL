@@ -223,17 +223,9 @@ let earliest_cell lastev mf =
     | MPrev (_, f1, _, _)
     | MNext (_, f1, _, _) -> go f1
 
+    | MUntil (f1, f2, inf, _) -> update inf.ulast; go f1; go f2
     | MEventuallyZ (_, f1, inf, _) -> update inf.mezlastev; go f1
     | MEventually (_, f1, inf, _) -> update inf.melastev; go f1
-
-    | MNUntil (_, _, f1, f2, inf, _) ->
-      update inf.mlast1;
-      update inf.mlast2;
-      go f1; go f2
-
-    | MUntil (_, _, f1, f2, inf, _) ->
-      update inf.mulast;
-      go f1; go f2
 
     | MAnd (_, f1, f2, _, _)
     | MOr (_, f1, f2, _, _)
@@ -289,33 +281,7 @@ let combine_sinfo sinf1 sinf2  =
   in
   {srel2 = srel2; saux = failwith "not implemented"}
 
-let combine_muninfo c0 muninf1 muninf2 =
-  let mlast1 = combine_cells c0 muninf1.mlast1 muninf2.mlast1 in
-  let mlast2 = combine_cells c0 muninf1.mlast2 muninf2.mlast2 in
-  let mlistrel1 = combine_dll1 muninf1.mlistrel1 muninf2.mlistrel1 in 
-  let mlistrel2 = combine_dll1 muninf1.mlistrel2 muninf2.mlistrel2 in 
-  { mlast1 = mlast1; mlast2 = mlast2; mlistrel1 = mlistrel1; mlistrel2 = mlistrel2 }
-
-let combine_muinfo c0 muinf1 muinf2 =
-  let ulast = combine_cells c0 muinf1.mulast muinf2.mulast in
-  (* Helper function to combine raux and saux fields *)
-  let sklist l1 l2 =
-    let nl = Sk.empty() in
-    comb_dll2 l1 l2 nl;
-    nl
-  in
-  let mraux =
-    let nl = Sj.empty() in
-    comb_dll1 muinf1.mraux muinf2.mraux nl sklist;
-    nl
-  in
-  let murel2 = match (muinf1.murel2, muinf2.murel2) with
-  | (Some r1, Some r2) -> Some (rel_u r1 r2)
-  | (None, None) -> None
-  | _ -> raise (Type_error ("Mismatched states in ainfo"))
-  in
-  { mulast = ulast; mufirst = muinf1.mufirst; mures = (rel_u muinf1.mures muinf2.mures);
-    murel2 = murel2; mraux = mraux; msaux = (sklist muinf1.msaux muinf2.msaux) }
+let combine_uinfo uinf1 uinf2 = failwith "not implemented"
 
 let combine_ezinfo c0 mezinf1 mezinf2 =
   let mezlastev = combine_cells c0 mezinf1.mezlastev mezinf2.mezlastev in
@@ -358,12 +324,9 @@ let comb_m lastev f1 f2 =
     | (MSince (f11, f12, sinf1, loc1), MSince(f21, f22, sinf2, loc2))
       when loc1 = loc2
       -> MSince         (comb_m f11 f21, comb_m f12 f22, combine_sinfo sinf1 sinf2, loc1)
-    | (MNUntil (c1, dt, f11, f12, muninf1, loc1), MNUntil  ( _, _, f21, f22, muninf2, loc2))
+    | (MUntil (f11, f12, uinf1, loc1), MUntil (f21, f22, uinf2, loc2))
       when loc1 = loc2
-      -> MNUntil        (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muninfo c0 muninf1 muninf2, loc1)
-    | (MUntil (c1, dt, f11, f12, muinf1, loc1), MUntil ( _, _, f21, f22, muinf2, loc2))
-      when loc1 = loc2
-      -> MUntil         (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muinfo c0 muinf1 muinf2, loc1)
+      -> MUntil         (comb_m f11 f21, comb_m f12 f22, combine_uinfo uinf1 uinf2, loc1)
     | (MEventuallyZ (dt, f11, ezinf1, loc1), MEventuallyZ (_, f21, ezinf2, loc2))
       when loc1 = loc2
       -> MEventuallyZ   (dt, comb_m f11 f21, combine_ezinfo c0 ezinf1 ezinf2, loc1)
@@ -530,42 +493,6 @@ let split_state mapping mf size =
     (*let queues = split_mqueue sinf.sauxrels p2 in    
     Array.map2 (fun srel2 nq -> {srel2 = srel2; sauxrels = nq}) srels queues*)
   in
-  let split_muninfo muninf p1 p2 =
-    let listrels1 = split_dll1 muninf.mlistrel1 p1 in
-    let listrels2 = split_dll1 muninf.mlistrel2 p2 in
-    Array.map2 (fun listrel1 listrel2 -> { mlast1 = muninf.mlast1; mlast2 = muninf.mlast2; mlistrel1 = listrel1;  mlistrel2 = listrel2 }) listrels1 listrels2
-  in
-  let split_muinfo muinf p1 p2 =
-    (* Helper function for raux and saux fields, creates split Sk.dllist *)
-    let sklist l p =
-      let sklists = Array.init size (fun i -> Sk.empty()) in 
-      Sk.iter (fun e ->
-        let i, r = e in
-        let states = split r p in 
-        Array.iteri (fun index s -> Sk.add_last (i, s) sklists.(i)) states
-      ) l;
-      sklists
-    in
-    (* Split mraux with p2 *)
-    let mraux = Array.init size (fun i -> Sj.empty()) in 
-      Sj.iter (fun e ->
-        let (i, ts, l) = e in
-        let lists = sklist l p2 in
-        Array.iteri (fun index l -> Sj.add_last (i, ts, l) mraux.(i)) lists
-      ) muinf.mraux;
-    let arr = Array.make size None in 
-    let murels = match muinf.murel2 with
-    | Some r -> let states = (split r p2) in Array.map (fun s ->  Some s) states
-    | None -> arr
-    in
-    (* Split msaux with p1 *)
-    let msaux = sklist muinf.msaux p1 in
-    let mures = split muinf.mures p1 in
-    Array.mapi (fun i e -> 
-    { mulast = muinf.mulast; mufirst = muinf.mufirst; mures = mures.(i);
-      murel2 = e; mraux = mraux.(i); msaux = msaux.(i) })
-    murels   
-  in
   let split_mezinfo mezinf p =
     let dllists = split_dll1 mezinf.mezauxrels p in
     Array.map (fun e -> { mezlastev = mezinf.mezlastev; mezauxrels = e }) dllists
@@ -620,13 +547,12 @@ let split_state mapping mf size =
       (*print_endline "since";*)
       (*let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MSince(c, dt, a1.(i), a2.(i), e, loc)) (split_sinfo sinf (p1 f1) (p1 f2))*)
       failwith "not implemented"
-    | MNUntil        (c, dt, f1, f2, muninf, loc)                    ->
-      (*print_endline "nuntil"; *)
-      let a1 = (split_f f1) in let a2 = (split_f f2) in Array.mapi (fun i e -> MNUntil(c, dt, a1.(i), a2.(i), e, loc)) (split_muninfo muninf (p1 f1) (p1 f2))   
-    | MUntil         (c, dt, f1, f2, muinf, loc)                     ->
+    | MUntil         (f1, f2, uinf, loc)                     ->
       (*print_endline "until";*)
-      let a1 = (split_f f1) in
-      let a2 = (split_f f2) in Array.mapi (fun i e -> MUntil(c, dt, a1.(i), a2.(i), e, loc)) (split_muinfo muinf (p1 f1) (p1 f2))   
+      (*let a1 = (split_f f1) in
+      let a2 = (split_f f2) in
+      Array.mapi (fun i e -> MUntil(a1.(i), a2.(i), e, loc)) (split_muinfo muinf (p1 f1) (p1 f2)) *)
+      failwith "not implemented"
     | MEventuallyZ   (dt, f1, mezinf, loc)                           ->
       (*print_endline "eventuallyz";
       let vars = (p1 f1) in List.iter(fun v -> Printf.printf "%s, " (Predicate.string_of_var v)) vars; print_endline "";*)
@@ -704,7 +630,6 @@ let rec print_ef = function
   | EPrev          (dt, f1, pinf, _)                             -> print_endline "Prev";print_ef f1
   | ENext          (dt, f1, ninf, _)                             -> print_endline "Next";print_ef f1
   | ESince         (f1, f2, sinf, _)                             -> print_endline "Since";print_ef f1;print_ef f2
-  | ENUntil        (c1, dt, f1, f2, muninf, _)                   -> print_endline "NUntil";print_ef f1;print_ef f2
-  | EUntil         (c1, dt, f1, f2, muinf, _)                    -> print_endline "Until";print_ef f1;print_ef f2
+  | EUntil         (f1, f2, uinf, _)                             -> print_endline "Until";print_ef f1;print_ef f2
   | EEventuallyZ   (dt, f1, mezinf, _)                           -> print_endline "EventuallyZ";print_ef f1
   | EEventually    (dt, f1, meinf, _)                            -> print_endline "Eventually";print_ef f1

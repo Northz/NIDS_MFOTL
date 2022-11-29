@@ -129,138 +129,6 @@ let dllist_add_last auxrels tsq rel2 =
     else
       Dllist.add_last (tsq,rel2) auxrels
 
-let update_old_until q tsq i intv inf discard  =
-  (* eliminate those entries (q-1,reli) from rels;
-     return the tuples which hold at q *)
-  let elim_old j rels =
-    assert(j>=q-1);
-    if not (Sk.is_empty rels) then
-      let (k,relk) = Sk.get_first rels in
-      if k=q-1 then
-        begin
-          ignore(Sk.pop_first rels);
-          if not (Sk.is_empty rels) && fst (Sk.get_first rels) = q then
-            let (k',relk') = Sk.pop_first rels in
-            assert(k'=q && j>=q);
-            let newrelk' = Relation.union relk relk' in
-            Sk.add_first (k',newrelk') rels;
-            newrelk'
-          else
-          if (j>q-1) then
-            begin
-              Sk.add_first (k+1,relk) rels;
-              relk
-            end
-          else
-            Relation.empty
-        end
-      else
-        begin
-          assert(k>q-1);
-          if k=q then
-            relk
-          else
-            Relation.empty
-        end
-    else (* Sk.is_empty rels = true *)
-      Relation.empty
-  in
-
-
-  let rec elim_old_raux () =
-    (* remove old elements that fell out of the interval *)
-    if not (Sj.is_empty inf.raux) then
-      let (j,tsj,_) = Sj.get_first inf.raux in
-      if j<q || not (MFOTL.in_right_ext (MFOTL.ts_minus tsj tsq) intv) then
-        begin
-          ignore(Sj.pop_first inf.raux);
-          elim_old_raux()
-        end
-  in
-
-  elim_old_raux ();
-
-  Sj.iter (
-    fun (j,tsj,rrels) ->
-      assert(j>=q);
-      assert(MFOTL.in_right_ext (MFOTL.ts_minus tsj tsq) intv);
-      let relq = elim_old j rrels in
-      if (not discard) && not (Relation.is_empty relq) then
-        inf.ures <- Relation.union inf.ures relq;
-      if Misc.debugging Dbg_eval then
-        Relation.prerr_reln "[update_aux] res: " inf.ures;
-  ) inf.raux;
-
-  (* saux holds elements (k,relk) for the last seen index,
-     i.e. [i] *)
-  assert(i>=q-1);
-  if i=q-1 then
-    Sk.clear inf.saux
-  else
-    ignore(elim_old i inf.saux)
-
-
-(* Auxiliary functions for the f1 Until_I f2 case.
-
-   The saux list contains tuples (k,Sk) (ordered incrementally by k),
-   with q <= k <= i, such that the tuples in Sk satisfy f1
-   continuously between k and i, and k is minimal (that is, if a tuple
-   is in Sk it will not also be in Sk' with k'>k.)
-
-   The raux list contains tuples (j,tj,Lj) (ordered incrementaly by
-   j), with q <= j <= i, where Lj is a list of tuples (k,Rk) (ordered
-   incrementaly by k), with q <= k <= j, such that the tuples in Rk
-   satisfy f2 at j and satisfy f1 continuously between k and j-1, and
-   k is minimal (that is, if a tuple is in Rk it will not also be in
-   Rk' with j>=k'>k.)
-
-   NOTE: The iteration through raux to eliminate those tuples <k,Sk>
-   with k<q (ie. k=q-1) seems unnecessary. If a tuple in Sk satisfies
-   f1 continuously from k to j, then it also satisfies f1 continuously
-   from q to j.
-*)
-
-
-let combine2 comp j rels rel2 =
-  let nrels = Sk.empty() in
-  let curr_rel2 = ref rel2 in
-  Sk.iter
-    (fun (k,rel) ->
-       let nrel = comp !curr_rel2 rel in
-       if not (Relation.is_empty nrel) then
-         Sk.add_last (k,nrel) nrels;
-       curr_rel2 := Relation.diff !curr_rel2 nrel;
-    ) rels;
-  if not (Relation.is_empty !curr_rel2) then
-    Sk.add_last (j,!curr_rel2) nrels;
-  nrels
-
-let get_relq q rels =
-  if not (Sj.is_empty rels) then
-    let (k,relk) = Sj.get_first rels in
-    if k = q then Some relk
-    else None
-  else
-    None
-
-let update_until q tsq i tsi intv rel1 rel2 inf comp discard =
-  if Misc.debugging Dbg_eval then
-    prerr_uinf "[update_until] inf: " inf;
-  assert(i >= q);
-  let nsaux = combine2 Relation.inter i inf.saux rel1 in
-  if (MFOTL.in_right_ext (MFOTL.ts_minus tsi tsq) intv) &&
-     not (Relation.is_empty rel2) then
-    begin
-      let rrels = combine2 comp i inf.saux rel2 in
-      Sj.add_last (i,tsi,rrels) inf.raux;
-      if not discard then
-        match get_relq q rrels with
-        | Some rel -> inf.ures <- Relation.union inf.ures rel
-        | None -> ()
-    end;
-  inf.saux <- nsaux
-
-
 let elim_old_eventually q tsq intv inf =
   let auxrels = inf.eauxrels in
 
@@ -321,8 +189,7 @@ let add_let_index f n rels =
     | EAnd (_,f1,f2,_,_)
     | EOr (_,f1,f2,_,_)
     | ESince (f1,f2,_,_)
-    | ENUntil (_,_,f1,f2,_,_)
-    | EUntil (_,_,f1,f2,_,_) ->
+    | EUntil (f1,f2,_,_) ->
       update f1;
       update f2
   in
@@ -568,201 +435,43 @@ let rec eval f crt discard =
      | None -> None
     ), loc
 
-  | EUntil (comp,intv,f1,f2,inf,loc) ->
-    (* contents of inf:  (f = f1 UNTIL_intv f2)
-       ulast:        last cell of neval for which both f1 and f2 are evaluated
-       ufirst:       boolean flag indicating if we are at the first
-                     iteration after the evaluation of f (i.e. q was
-                     just moved); in this case we remove auxiliary
-                     relations at old q
-       ures:         the current partial result (for f)
-       urel2:        the evaluation of f2 at ulast
-       raux, saux:   the auxiliary relations
-    *)
-
+  | EUntil (f1,f2,inf,loc) ->
     if Misc.debugging Dbg_eval then
-      begin
-        let str = Printf.sprintf "[eval,Until] q=%d inf: " q in
-        prerr_uinf str inf
-      end;
+      Printf.eprintf "[eval,Until] q=%d\n" q;
 
-    if inf.ufirst then
-      begin
-        Perf.profile_enter ~tp:q ~loc;
-        inf.ufirst <- false;
-        let (i,_) = Neval.get_data inf.ulast in
-        update_old_until q tsq i intv inf discard;
-        if Misc.debugging Dbg_eval then
-          prerr_uinf "[eval,Until,after_update] inf: " inf;
-        Perf.profile_exit ~tp:q ~loc
-      end;
-
-    (* we first evaluate f2, and then f1 *)
-
-    let rec evalf1 i tsi rel2 ncrt =
-      (match eval f1 ncrt false with
-       | Some rel1 ->
-         Perf.profile_enter ~tp:q ~loc;
-         update_until q tsq i tsi intv rel1 rel2 inf comp discard;
-         Perf.profile_exit ~tp:q ~loc;
-         inf.urel2 <- None;
-         inf.ulast <- ncrt;
-         evalf2 ()
-       | None ->
-         inf.urel2 <- (Some rel2);
-         None
-      )
-
-    and evalf2 () =
+    let rec update () =
       if Neval.is_last inf.ulast then
-        None
+        ()
       else
-        let ncrt = Neval.get_next inf.ulast in
-        let (i,tsi) = Neval.get_data ncrt in
-        if not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv) then
-          (* we have the lookahead, we can compute the result *)
-          begin
-            if Misc.debugging Dbg_eval then
-              Printf.eprintf "[eval,Until] evaluation possible q=%d tsq=%s\n"
-                q (MFOTL.string_of_ts tsq);
-            let res = inf.ures in
-            inf.ures <- Relation.empty;
-            inf.ufirst <- true;
-            Some res
-          end
-        else
-          begin
-            (match inf.urel2 with
-             | Some rel2 -> evalf1 i tsi rel2 ncrt
-             | None ->
-               (match eval f2 ncrt false with
-                | None -> None
-                | Some rel2 -> evalf1 i tsi rel2 ncrt
-               )
-            )
-          end
-    in
-    evalf2(), loc
-
-  | ENUntil (comp,intv,f1,f2,inf,loc) ->
-    (* contents of inf:  (f = NOT f1 UNTIL_intv f2)
-       ulast1:       last cell of neval for which f1 is evaluated
-       ulast2:       last cell of neval for which f2 is evaluated
-       listrel1:     list of evaluated relations for f1
-       listrel2:     list of evaluated relations for f2
-
-       NOTE: a possible optimization would be to not store empty relations
-    *)
-
-    (* evaluates the subformula f as much as possible *)
-    let rec eval_subf f list last  =
-      if Neval.is_last last then
-        last
-      else
-        let ncrt = Neval.get_next last in
-        match eval f ncrt false with
-        | None -> last
-        | Some rel ->
-          (* store the result and try the next time point *)
-          let i, tsi = Neval.get_data ncrt in
-          Dllist.add_last (i, tsi, rel) list;
-          eval_subf f list ncrt
-    in
-
-    (* evaluate the two subformulas *)
-    inf.last1 <- eval_subf f1 inf.listrel1 inf.last1;
-    inf.last2 <- eval_subf f2 inf.listrel2 inf.last2;
-
-    (* checks whether the position to be evaluated is beyond the interval *)
-    let has_lookahead last =
-      let ncrt =
-        if Neval.is_last last then
-          last
-        else
-          Neval.get_next last
-      in
-      let _, tsi = Neval.get_data ncrt in
-      not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv)
-    in
-
-    if has_lookahead inf.last1 && has_lookahead inf.last2 then
-      (* we have the lookahead for both f1 and f2 (to be consistent with Until),
-        we can compute the result
-
-        NOTE: we could evaluate earlier with respect to f1, also in Until *)
-      begin
+        begin
+          let ncrt = Neval.get_next inf.ulast in
+          let (i, tsi) = Neval.get_data ncrt in
+          Perf.profile_enter ~tp:q ~loc;
+          Optimized_mtl.update_lookahead_muaux i tsi inf.uaux;
+          Perf.profile_exit ~tp:q ~loc;
+          match inf.urel2 with
+           | Some rel2 -> eval_f1 rel2 ncrt
+           | None ->
+             (match eval f2 ncrt false with
+              | None -> ()
+              | Some rel2 -> eval_f1 rel2 ncrt
+             )
+        end
+    and eval_f1 rel2 ncrt =
+      match eval f1 ncrt false with
+      | Some rel1 ->
+        inf.urel2 <- None;
+        inf.ulast <- ncrt;
         Perf.profile_enter ~tp:q ~loc;
-        (* we iteratively compute the union of the relations [f1]_j
-          with q <= j <= j0-1, where j0 is the first index which
-          satisfies the temporal constraint relative to q *)
-        let f1union = ref Relation.empty in
-        let crt1_j = ref (Dllist.get_first_cell inf.listrel1) in
-        let rec iter1 () =
-          let j,tsj,relj = Dllist.get_data !crt1_j in
-          if j < q then
-            begin (* clean up from previous evaluation *)
-              assert (j = q-1);
-              ignore(Dllist.pop_first inf.listrel1);
-              crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
-              iter1 ()
-            end
-          else if not (MFOTL.in_right_ext (MFOTL.ts_minus tsj tsq) intv) then
-            begin
-              f1union := Relation.union !f1union relj;
-              if not (Dllist.is_last inf.listrel1 !crt1_j) then
-                begin
-                  crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
-                  iter1 ()
-                end
-            end
-        in
-        iter1 ();
-
-        (* we now iterate through the remaining indexes, updating the
-          union, and also computing the result *)
-        let res = ref Relation.empty in
-        let crt2_j = ref (Dllist.get_first_cell inf.listrel2) in
-        let rec iter2 () =
-          let j2,tsj2,rel2 = Dllist.get_data !crt2_j in
-          if j2 < q || not (MFOTL.in_right_ext (MFOTL.ts_minus tsj2 tsq) intv) then
-            begin (* clean up from previous evaluation *)
-              if not (Dllist.is_last inf.listrel2 !crt2_j) then
-                begin
-                  ignore(Dllist.pop_first inf.listrel2);
-                  crt2_j := Dllist.get_next inf.listrel2 !crt2_j;
-                  iter2 ()
-                end
-            end
-          else
-            begin
-              if MFOTL.in_left_ext (MFOTL.ts_minus tsj2 tsq) intv then
-                begin
-                  let resj = comp rel2 !f1union in
-                  res := Relation.union !res resj;
-                  let j1,tsj1,rel1 = Dllist.get_data !crt1_j in
-                  assert(j1 = j2);
-                  f1union := Relation.union !f1union rel1;
-                  let is_last1 = Dllist.is_last inf.listrel1 !crt1_j in
-                  let is_last2 = Dllist.is_last inf.listrel2 !crt2_j in
-                  if (not is_last1) && (not is_last2) then
-                    begin
-                      crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
-                      crt2_j := Dllist.get_next inf.listrel2 !crt2_j;
-                      iter2 ()
-                    end
-                end
-            end
-        in
-        iter2();
+        Optimized_mtl.add_new_tables_muaux rel1 rel2 inf.uaux;
         Perf.profile_exit ~tp:q ~loc;
-        Some !res, loc
-      end
-    else
-      None, loc
-
-
-
-
+        update ()
+      | None -> inf.urel2 <- Some rel2
+    in
+    (match Optimized_mtl.take_result_muaux inf.uaux with
+    | Some _ as x -> x
+    | None -> update (); Optimized_mtl.take_result_muaux inf.uaux
+    ), loc
 
   | EEventuallyZ (intv,f2,inf,loc) ->
     (* contents of inf:
@@ -1005,8 +714,7 @@ let add_index f i tsi db =
     | EAnd (_,f1,f2,_,_)
     | EOr (_,f1,f2,_,_)
     | ESince (f1,f2,_,_)
-    | ENUntil (_,_,f1,f2,_,_)
-    | EUntil (_,_,f1,f2,_,_) ->
+    | EUntil (f1,f2,_,_) ->
       update lets f1;
       update lets f2
   in
@@ -1185,41 +893,17 @@ let add_ext neval f =
   | Until (intv,f1,f2) ->
     let attr1 = MFOTL.free_vars f1 in
     let attr2 = MFOTL.free_vars f2 in
-    let ef1, neg =
+    let ef1, pos =
       (match f1 with
-       | Neg f1' -> f1',true
-       | _ -> f1,false
+       | Neg f1' -> f1', false
+       | _ -> f1, true
       )
     in
     let ff1 = add_ext ef1 in
     let ff2 = add_ext f2 in
-    if neg then
-      let comp =
-        let posl = List.map (fun v -> Misc.get_pos v attr2) attr1 in
-        assert(Misc.subset attr1 attr2);
-        fun relj rel1 -> Relation.minus posl relj rel1
-      in
-      let inf = {
-        last1 = neval0;
-        last2 = neval0;
-        listrel1 = Dllist.empty();
-        listrel2 = Dllist.empty()}
-      in
-      ENUntil (comp,intv,ff1,ff2,inf, next_loc())
-    else
-      let comp =
-        let matches2 = Table.get_matches attr2 attr1 in
-        fun relj rel1 -> Relation.natural_join_sc2 matches2 relj rel1
-      in
-      let inf = {ulast = neval0;
-                 ufirst = false;
-                 ures = Relation.empty;
-                 urel2 = None;
-                 raux = Sj.empty();
-                 saux = Sk.empty()}
-      in
-      EUntil (comp,intv,ff1,ff2,inf, next_loc())
-
+    let uaux = Optimized_mtl.init_muaux pos intv attr1 attr2 in
+    let inf = {ulast = neval0; urel2 = None; uaux} in
+    EUntil (ff1,ff2,inf, next_loc())
 
   | Eventually (intv,f) ->
     let ff = add_ext f in

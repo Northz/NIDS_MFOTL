@@ -31,24 +31,6 @@ let ext_to_m ff =
   let ee2m einf =
     {melastev = einf.elastev; meauxrels = einf.eauxrels}
   in
-  let mue2m uinf =
-    {mulast = uinf.ulast;
-     mufirst = uinf.ufirst;
-     mures = uinf.ures;
-     murel2 = uinf.urel2;
-     (* TODO: transform these too *)
-     mraux = uinf.raux;
-     msaux = uinf.saux;
-    }
-  in
-  let mune2m uninf =
-    {
-      mlast1 = uninf.last1;
-      mlast2 = uninf.last2;
-      mlistrel1 = uninf.listrel1;
-      mlistrel2 = uninf.listrel2;
-    }
-  in
   let rec e2m = function
     | ERel           (rel, loc)                         -> MRel         (rel, loc)
     | EPred          (pred, c1, inf, loc)               -> MPred        (pred, c1, inf, loc)
@@ -62,8 +44,7 @@ let ext_to_m ff =
     | EPrev          (intv, ext, pinf, loc)             -> MPrev        (intv, (e2m ext), pinf, loc)
     | ENext          (intv, ext, ninf, loc)             -> MNext        (intv, (e2m ext), ninf, loc)
     | ESince         (ext1, ext2, sinf, loc)            -> MSince       ((e2m ext1), (e2m ext2), sinf, loc)
-    | ENUntil        (c1, intv, ext1, ext2, uninf, loc) -> MNUntil      (c1, intv, (e2m ext1), (e2m ext2), (mune2m uninf), loc)
-    | EUntil         (c1, intv, ext1, ext2, uinf, loc)  -> MUntil       (c1, intv, (e2m ext1), (e2m ext2), (mue2m uinf), loc)
+    | EUntil         (ext1, ext2, uinf, loc)            -> MUntil       ((e2m ext1), (e2m ext2), uinf, loc)
     | EEventuallyZ   (intv, ext, ezinf, loc)            -> MEventuallyZ (intv, (e2m ext), (eze2m ezinf), loc)
     | EEventually    (intv, ext, einf, loc)             -> MEventually  (intv, (e2m ext), (ee2m einf), loc)
   in e2m ff
@@ -146,22 +127,6 @@ let m_to_ext mf =
       return_empty
     end
   in
-  let mu2e muinf =
-    {ulast  = muinf.mulast;
-     ufirst = muinf.mufirst;
-     ures   = muinf.mures;
-     urel2  = muinf.murel2;
-     raux   = muinf.mraux;
-     saux   = muinf.msaux;
-    }
-  in
-  let mun2e muninf =
-    {last1 = muninf.mlast1;
-     last2 = muninf.mlast2;
-     listrel1 = muninf.mlistrel1;
-     listrel2 = muninf.mlistrel2;
-    }
-  in
   let rec m2e = function
     | MRel           (rel, loc)                        -> ERel         (rel, loc)
     | MPred          (pred, c1, inf, loc)              -> EPred        (pred, c1, inf, loc)
@@ -175,8 +140,7 @@ let m_to_ext mf =
     | MPrev          (intv, mf, pinf, loc)             -> EPrev        (intv, (m2e mf), pinf, loc)
     | MNext          (intv, mf, ninf, loc)             -> ENext        (intv, (m2e mf), ninf, loc)
     | MSince         (mf1, mf2, sinf, loc)             -> ESince       ((m2e mf1), (m2e mf2), sinf, loc)
-    | MNUntil        (c1, intv, mf1, mf2, muninf, loc) -> ENUntil      (c1, intv, (m2e mf1), (m2e mf2), (mun2e muninf), loc)
-    | MUntil         (c1, intv, mf1, mf2, muinf, loc)  -> EUntil       (c1, intv, (m2e mf1), (m2e mf2), (mu2e muinf), loc)
+    | MUntil         (mf1, mf2, uinf, loc)             -> EUntil       ((m2e mf1), (m2e mf2), uinf, loc)
     | MEventuallyZ   (intv, mf, mezinf, loc)           -> EEventuallyZ (intv, (m2e mf), (mez2e intv mezinf), loc)
     | MEventually    (intv, mf, meinf, loc)            -> EEventually  (intv, (m2e mf), (me2e  intv meinf), loc)
   in m2e mf

@@ -16,6 +16,9 @@ type agg_info = {op: agg_op; default: cst}
 
 type sinfo = {mutable srel2: relation option;
               saux: Optimized_mtl.msaux}
+type uinfo = {mutable ulast: Neval.cell;
+              mutable urel2: relation option;
+              uaux: Optimized_mtl.muaux}
 type ezinfo = {mutable ezlastev: Neval.cell;
                mutable eztree: (int, relation) Sliding.stree;
                mutable ezlast: (int * timestamp * relation) Dllist.cell;
@@ -24,16 +27,6 @@ type einfo = {mutable elastev: Neval.cell;
               mutable etree: (timestamp, relation) Sliding.stree;
               mutable elast: (timestamp * relation) Dllist.cell;
               eauxrels: (timestamp * relation) Dllist.dllist}
-type uinfo = {mutable ulast: Neval.cell;
-              mutable ufirst: bool;
-              mutable ures: relation;
-              mutable urel2: relation option;
-              raux: (int * timestamp * (int * relation) Sk.dllist) Sj.dllist;
-              mutable saux: (int * relation) Sk.dllist}
-type uninfo = {mutable last1: Neval.cell;
-               mutable last2: Neval.cell;
-               mutable listrel1: (int * timestamp * relation) Dllist.dllist;
-               mutable listrel2: (int * timestamp * relation) Dllist.dllist}
 
 type comp_one = relation -> relation
 type comp_two = relation -> relation -> relation
@@ -51,8 +44,7 @@ type extformula =
   | EPrev of interval * extformula * pinfo * int
   | ENext of interval * extformula * ninfo * int
   | ESince of extformula * extformula * sinfo * int
-  | ENUntil of comp_two * interval * extformula * extformula * uninfo * int
-  | EUntil of comp_two * interval * extformula * extformula * uinfo * int
+  | EUntil of extformula * extformula * uinfo * int
   | EEventuallyZ of interval * extformula * ezinfo * int
   | EEventually of interval * extformula * einfo * int
 
