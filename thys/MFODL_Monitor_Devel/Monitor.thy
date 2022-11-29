@@ -12476,27 +12476,30 @@ next
         elim: mbuf2t_take_add'(1)[OF _ wf_envs_P_simps[OF MUntil.prems(2)] buf nts_snoc]
         mbuf2t_take_add'(2)[OF _ wf_envs_P_simps[OF MUntil.prems(2)] buf nts_snoc])
 next
-  case (MTrigger )
-(*
-next
-  case (Trigger_0 P V n R \<psi> \<beta> args \<alpha> \<gamma> \<phi> I buf nts aux)
+  case (MTrigger args \<phi> \<psi> buf nts aux db P P' V)
+  from MTrigger.prems obtain \<gamma> I \<alpha> \<beta>
+    where phi'_eq: "\<phi>' = Formula.Trigger \<alpha> I \<beta>"
+      and pos: "if args_pos args then \<alpha> = \<gamma> else \<alpha> = formula.Neg \<gamma>"
+      and pos_eq: "safe_formula \<alpha> = args_pos args"
+      and \<phi>: "wf_mformula \<sigma> j P V n R \<phi> \<gamma>"
+      and \<psi>: "wf_mformula \<sigma> j P V n R \<psi> \<beta>"
+      and fvi_subset: "if mem I 0 then fv \<gamma> \<subseteq> fv \<beta> else fv \<gamma> = fv \<beta>"
+      and buf: "wf_mbuf2' \<sigma> P V j n R \<gamma> \<beta> buf"
+      and nts: "wf_ts \<sigma> P j \<gamma> \<beta> nts"
+      and aux: "wf_trigger_aux \<sigma> V R args \<gamma> \<beta> aux (Monitor.progress \<sigma> P (formula.Trigger \<alpha> I \<beta>) j)"
+      and args_ivl: "args_ivl args = I"
+      and args_n: "args_n args = n"
+      and args_L: "args_L args = fv \<gamma>"
+      and args_R: "args_R args = fv \<beta>"
+      and fv_l_n: "\<forall>x\<in>fv \<beta>. x < n"
+      and mem0: "mem I 0"
+    by (cases rule: wf_mformula.cases)
+      (auto dest: wf_mformula_and_release_safe_bddE wf_mformula_and_release_safe0E)
 
-  from Trigger_0 have
-        pos: "if args_pos args then \<alpha> = \<gamma> else \<alpha> = formula.Neg \<gamma>"
-    and pos_eq: "safe_formula \<alpha> = args_pos args"
-    and \<phi>: "wf_mformula \<sigma> j P V n R \<phi> \<gamma>"
-    and \<psi>: "wf_mformula \<sigma> j P V n R \<psi> \<beta>"
-    and fvi_subset: "if mem I 0 then fv \<gamma> \<subseteq> fv \<beta> else fv \<gamma> = fv \<beta>"
-    and buf: "wf_mbuf2' \<sigma> P V j n R \<gamma> \<beta> buf"
-    and nts: "wf_ts \<sigma> P j \<gamma> \<beta> nts"
-    and aux: "wf_trigger_aux \<sigma> V R args \<gamma> \<beta> aux (Monitor.progress \<sigma> P (formula.Trigger \<alpha> I \<beta>) j)"
-    and args_ivl: "args_ivl args = I"
-    and args_n: "args_n args = n"
-    and args_L: "args_L args = fv \<gamma>"
-    and args_R: "args_R args = fv \<beta>"
-    and fv_l_n: "\<forall>x\<in>fv \<beta>. x < n"
-    and mem0: "mem I 0"
-    by auto
+  have "S, E \<turnstile> \<alpha>" "S, E \<turnstile> \<beta>" "S, E \<turnstile> \<gamma>"
+    using wty_formula_TriggerD[OF MTrigger.prems(3)[unfolded phi'_eq]] 
+      pos wty_formula_NegD[of S E \<gamma>]
+    by (auto elim!: wty_formulaD split: if_splits)
 
   have args_props:
     "args_n args = n"
@@ -12505,16 +12508,16 @@ next
     using pos args_n args_L args_R fvi_subset
     by (auto split: if_splits)
 
-  note IH_\<phi> = Trigger_0.IH(2)[OF Trigger_0.prems(1)]
-  note IH_\<psi> = Trigger_0.IH(1)[OF Trigger_0.prems(1)]
+  note IH_\<phi> = MTrigger.IH(1)[OF \<phi> MTrigger.prems(2) \<open>S, E \<turnstile> \<gamma>\<close>]
+  note IH_\<psi> = MTrigger.IH(2)[OF \<psi> MTrigger.prems(2) \<open>S, E \<turnstile> \<beta>\<close>]
 
-  define zs where "zs = fst (meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db (MTrigger args \<phi> \<psi> buf nts aux))"
-  define \<eta> where "\<eta> = snd (meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db (MTrigger args \<phi> \<psi> buf nts aux))"
+  define zs where "zs = fst (meval (j + \<delta>) n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db (MTrigger args \<phi> \<psi> buf nts aux))"
+  define \<eta> where "\<eta> = snd (meval (j + \<delta>) n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db (MTrigger args \<phi> \<psi> buf nts aux))"
 
-  define xs where "xs = fst (meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<phi>)"
-  define \<gamma>' where "\<gamma>' = snd (meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<phi>)"
+  define xs where "xs = fst (meval (j + \<delta>) n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<phi>)"
+  define \<gamma>' where "\<gamma>' = snd (meval (j + \<delta>) n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<phi>)"
 
-  have \<phi>_pair_eq: "meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<phi> = (xs, \<gamma>')"
+  have \<phi>_pair_eq: "meval (j + \<delta>) n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<phi> = (xs, \<gamma>')"
     unfolding xs_def \<gamma>'_def
     by auto
 
@@ -12525,10 +12528,10 @@ next
     unfolding \<phi>_pair_eq
     by auto
 
-  define ys where "ys = fst (meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<psi>)"
-  define \<beta>' where "\<beta>' = snd (meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<psi>)"
+  define ys where "ys = fst (meval (j + \<delta>) n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<psi>)"
+  define \<beta>' where "\<beta>' = snd (meval (j + \<delta>) n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<psi>)"
 
-  have \<psi>_pair_eq: "meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<psi> = (ys, \<beta>')"
+  have \<psi>_pair_eq: "meval (j + \<delta>) n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<psi> = (ys, \<beta>')"
     unfolding ys_def \<beta>'_def
     by auto
 
@@ -12539,7 +12542,7 @@ next
     unfolding \<psi>_pair_eq
     by auto
 
-  define tuple where "tuple = mbuf2t_take (\<lambda>r1 r2 t (zs, aux). let
+  define tuple where "tuple = mbuf2T_take (\<lambda>r1 r2 t (zs, aux). let
     aux = update_mtaux args t r1 r2 aux;
     (fv_z, z) = result_mtaux args aux
     in
@@ -12566,10 +12569,10 @@ next
     "pred_mapping (\<lambda>i. i \<le> j) P"
     "pred_mapping (\<lambda>i. i \<le> j + \<delta>) P'"
     "rel_mapping (\<le>) P P'"
-    using Trigger_0.prems(1)
+    using MTrigger.prems(2)
     by auto
 
-  from Trigger_0.prems(1) have nts_snoc: "list_all2 (\<lambda>i t. t = \<tau> \<sigma> i)
+  from MTrigger.prems(2) have nts_snoc: "list_all2 (\<lambda>i t. t = \<tau> \<sigma> i)
     [min (progress \<sigma> P \<gamma> j) (progress \<sigma> P \<beta> j)..< j + \<delta>] (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>])"
     using nts
     unfolding wf_ts_def
@@ -12579,7 +12582,7 @@ next
   have wf_buf_ts:
     "wf_mbuf2' \<sigma> P' V (j + \<delta>) n R \<gamma> \<beta> buf'"
     "wf_ts \<sigma> P' (j + \<delta>) \<gamma> \<beta> nts'"
-    using mbuf2t_take_add'[OF tuple_eq[unfolded tuple_def] pred_mapping buf nts_snoc \<gamma>_props(2) \<beta>_props(2)]
+    using mbuf2T_take_add'[OF tuple_eq[unfolded tuple_def] pred_mapping buf nts_snoc \<gamma>_props(2) \<beta>_props(2)]
     by auto
 
   have \<alpha>_\<gamma>_props: "Formula.fv \<alpha> = Formula.fv \<gamma>" "progress \<sigma> P \<alpha> j = progress \<sigma> P \<gamma> j"
@@ -12592,8 +12595,8 @@ next
     (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>)))
     [progress \<sigma> P (formula.Trigger \<alpha> I \<beta>) j..<progress \<sigma> P' (formula.Trigger \<alpha> I \<beta>) (j + \<delta>)] (fst (zs, aux'))"
   unfolding progress_simps \<alpha>_\<gamma>_props
-  proof (rule mbuf2t_take_add_induct'[where j=j and j'="j + \<delta>" and z'="(zs, aux')",
-      OF tuple_eq[unfolded tuple_def] wf_envs_P_simps[OF Trigger_0.prems(1)] buf nts_snoc],
+  proof (rule mbuf2T_take_add_induct'[where j=j and j'="j + \<delta>" and z'="(zs, aux')",
+      OF tuple_eq[unfolded tuple_def] wf_envs_P_simps[OF MTrigger.prems(2)] buf nts_snoc],
       goal_cases xs ys _ base step)
     case xs
     then show ?case using \<gamma>_props(2) by auto
@@ -12825,7 +12828,7 @@ next
 
   have "wf_mformula \<sigma> (j + \<delta>) P' V n R \<eta> (formula.Trigger \<alpha> I \<beta>)"
     unfolding \<eta>_eq
-    using wf_mformula.Trigger_0[OF \<beta>_props(1) pos \<gamma>_props(1) pos_eq args_ivl args_n args_L args_R fv_l_n fvi_subset wf_buf_ts aux mem0]
+    using wf_mformula.Trigger_0[OF \<beta>_props(1) pos \<gamma>_props(1) pos_eq args_ivl args_n args_L args_R fv_l_n mem0 fvi_subset wf_buf_ts aux]
     by auto
 
   moreover have "list_all2 (\<lambda>i. qtable n (fv (formula.Trigger \<alpha> I \<beta>)) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>))) [Monitor.progress \<sigma> P (formula.Trigger \<alpha> I \<beta>) j..<Monitor.progress \<sigma> P' (formula.Trigger \<alpha> I \<beta>) (j + \<delta>)] zs"
@@ -12833,11 +12836,8 @@ next
     by auto
 
   ultimately show ?case
-    unfolding zs_def \<eta>_def
+    unfolding zs_def \<eta>_def phi'_eq
     by auto
-*)
-  then show ?case
-    sorry
 (*
 next
   case (Release_0 I \<phi>' \<psi>' P V n R aux)
