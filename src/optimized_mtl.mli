@@ -14,5 +14,5 @@ type muaux
 
 val init_muaux: bool -> interval -> var list -> var list -> muaux
 val update_lookahead_muaux: int -> timestamp -> muaux -> unit
-val add_new_tables_muaux: relation -> relation -> muaux -> unit
 val take_result_muaux: muaux -> relation option
+val add_new_tables_muaux: relation -> relation -> muaux -> unit

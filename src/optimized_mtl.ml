@@ -207,30 +207,80 @@ type muaux = {
   mutable mu_in_ts: timestamp; (** current lookahead time-stamp *)
   mutable mu_ts_cnt: int; (** occurrences of lookahead time-stamp *)
   mutable mu_out_tp: int; (** next result time-point *)
-  mutable mu_lb_tp: int;
-  (** highest time-point for which the lookahead satisfies the lower
-      interval bound *)
-  mutable mu_buf1: Relation.relation option;
-  (** buffer to delay insertion of left operand's result by one step
-      (used to get the next time-stamp in the case of a negated operand) *)
-  mutable mu_gc: timestamp;
-  (** last gc run of mu_seq1 in the case of a negated operand *)
-  mu_prevq: (int * timestamp * int) Queue.t;
-  (** compressed sequence (highest tp, ts, count) of time-points for which the
-      lookahead does not yet satisfy the lower interval bound *)
-  mu_inq: (int * timestamp * int) Queue.t;
-  (** compressed sequence (highest tp, ts, count) of time-points relative to
-      which the lookahead is in the interval *)
-  mu_seq1: (tuple, int * timestamp) Hashtbl.t;
-  (** mapping of keys (tuples projected to the common free variables) to the
-      earliest time-point from which on the left operand (including any
-      negation) is satisfied *)
-  mu_useq: (int, (tuple, int) Hashtbl.t) Hashtbl.t;
-  (** mapping from the earliest, not yet evaluated time-point to mappings from
-      tuples to the latest time-point in between which the tuple is in the
-      result *)
-  mutable mu_resq: Relation.relation Queue.t; (** result buffer *)
+  mutable mu_out_cnt: int; (** number of consecutive time-points that are ready
+    to be returned without consulting [mu_inq] *)
+  mutable mu_lb_tp: int; (** highest time-point for which the lookahead
+    satisfies the lower interval bound *)
+  mutable mu_buf1: Relation.relation option; (** buffer to delay insertion of
+    left operand's result by one step (used to get the next time-stamp in the
+    case of a negated operand) *)
+  mutable mu_gc: timestamp; (** last gc run of mu_seq1 in the case of a negated
+    operand *)
+  mu_prevq: (int * timestamp * int) Queue.t; (** compressed sequence (highest
+    tp, ts, count) of time-points for which the lookahead does not yet satisfy
+    the lower interval bound *)
+  mu_inq: (int * timestamp * int) Queue.t; (** compressed sequence (highest tp,
+    ts, count) of time-points relative to which the lookahead is in the interval
+    *)
+  mu_seq1: (tuple, int * timestamp) Hashtbl.t; (** mapping of keys (tuples
+    projected to the common free variables) to the earliest time-point from
+    which on the left operand (including a possible negation) is satisfied *)
+  mu_useq: (int, (tuple, int) Hashtbl.t) Hashtbl.t; (** mapping from the
+    earliest, not yet evaluated time-point to mappings from tuples to the latest
+    time-point in between which the tuple is in the result *)
+  mu_acc: (tuple, int) Hashtbl.t; (** accumulator to be merged with the next
+    mapping in [mu_useq] *)
+  mutable mu_res: Relation.relation; (** most recent result *)
+  mutable mu_delmap: (int, Tuple.tuple list) Hashtbl.t; (** canidates for
+    deletion from [mu_res] *)
 }
+
+let debug_muaux aux =
+  let string_of_list f = Misc.string_of_list_ext "(" ")" ", " f in
+  let string_of_queue q =
+    let l = List.of_seq (Queue.to_seq q) in
+    string_of_list (fun (jn, t, n) ->
+      Printf.sprintf "%d * %s [.. %d]" n (MFOTL.string_of_ts t) jn) l
+  in
+  let string_of_tbl1 f tbl =
+    let l = List.of_seq (Hashtbl.to_seq tbl) in
+    let l = List.sort (fun (a,_) (b,_) -> Stdlib.compare a b) l in
+    string_of_list (fun (tup, x) ->
+      Printf.sprintf "%s -> %d" (Tuple.string_of_tuple tup) (f x)) l
+  in
+  let string_of_seq1 = string_of_tbl1 (fun (j,_) -> j) in
+  let string_of_useq tbl =
+    let l = List.of_seq (Hashtbl.to_seq tbl) in
+    let l = List.sort (fun (a,_) (b,_) -> Stdlib.compare a b) l in
+    string_of_list (fun (j, tbl1) ->
+      Printf.sprintf "%d -> %s" j (string_of_tbl1 (fun k -> k) tbl1)) l
+  in
+  let string_of_delmap tbl =
+    let l = List.of_seq (Hashtbl.to_seq tbl) in
+    let l = List.sort (fun (a,_) (b,_) -> Stdlib.compare a b) l in
+    string_of_list (fun (k, tupl) ->
+      Printf.sprintf "%d -> %s" k (string_of_list Tuple.string_of_tuple tupl)) l
+  in
+  print_endline "[DEBUG] uaux = {";
+  Printf.printf "  mu_in_tp = %d\n" aux.mu_in_tp;
+  Printf.printf "  mu_in_ts = %s\n" (MFOTL.string_of_ts aux.mu_in_ts);
+  Printf.printf "  mu_ts_cnt = %d\n" aux.mu_ts_cnt;
+  Printf.printf "  mu_out_tp = %d\n" aux.mu_out_tp;
+  Printf.printf "  mu_out_cnt = %d\n" aux.mu_out_cnt;
+  Printf.printf "  mu_lb_tp = %d\n" aux.mu_lb_tp;
+  (match aux.mu_buf1 with
+  | None -> print_endline "  mu_buf1 = None"
+  | Some r -> Relation.print_reln "  mu_buf1 = " r
+  );
+  Printf.printf "  mu_gc = %s\n" (MFOTL.string_of_ts aux.mu_gc);
+  Printf.printf "  mu_prevq = %s\n" (string_of_queue aux.mu_prevq);
+  Printf.printf "  mu_inq = %s\n" (string_of_queue aux.mu_inq);
+  Printf.printf "  mu_seq1 = %s\n" (string_of_seq1 aux.mu_seq1);
+  Printf.printf "  mu_useq = %s\n" (string_of_useq aux.mu_useq);
+  Printf.printf "  mu_acc = %s\n" (string_of_tbl1 (fun j -> j) aux.mu_acc);
+  Relation.print_reln "  mu_res = " aux.mu_res;
+  Printf.printf "  mu_delmap = %s\n" (string_of_delmap aux.mu_delmap);
+  print_endline "}"
 
 let init_muaux pos intv attr1 attr2 =
   {
@@ -239,6 +289,7 @@ let init_muaux pos intv attr1 attr2 =
     mu_in_ts = ts_invalid;
     mu_ts_cnt = 0;
     mu_out_tp = 0;
+    mu_out_cnt = 0;
     mu_lb_tp = -1;
     mu_buf1 = None;
     mu_gc = ts_null;
@@ -246,7 +297,9 @@ let init_muaux pos intv attr1 attr2 =
     mu_inq = Queue.create();
     mu_seq1 = Hashtbl.create 1;
     mu_useq = Hashtbl.create 1;
-    mu_resq = Queue.create();
+    mu_acc = Hashtbl.create 1;
+    mu_res = Relation.empty;
+    mu_delmap = Hashtbl.create 1;
   }
 
 let apply_buf1 i tsi aux =
@@ -292,55 +345,70 @@ let shift_lookahead tsi aux =
       aux.mu_ts_cnt <- 1
     end
 
-let merge_useq_tables tbl1 tbl2 =
-  let merge src dest =
-    Hashtbl.iter (fun tup k -> Hashtbl.add dest tup k) src;
-    dest
-  in
-  if Hashtbl.length tbl1 < Hashtbl.length tbl2 then
-    merge tbl1 tbl2
-  else
-    merge tbl2 tbl1
-
-let collect_results tsi aux =
-  let acc = ref (Hashtbl.create 1) in
-  do_drop_while
-    (fun (_, t, _) -> not (in_left_ext (ts_minus tsi t) aux.mu_args.a_intv))
-    (fun (jn, _, n) ->
-      for j = aux.mu_out_tp to jn do
-        let res = ref Relation.empty in
-        Hashtbl.filter_map_inplace (fun tup k ->
-          res := Relation.add tup !res;
-          if k > j then Some k else None) !acc;
-        (match Hashtbl.find_opt aux.mu_useq j with
-        | None -> ()
-        | Some tbl ->
-            Hashtbl.remove aux.mu_useq j;
-            Hashtbl.filter_map_inplace (fun tup k ->
-              res := Relation.add tup !res;
-              if k > j then Some k else None) tbl;
-            acc := merge_useq_tables !acc tbl
-        );
-        Queue.add !res aux.mu_resq
-      done;
-      aux.mu_out_tp <- jn + 1
-    )
-    aux.mu_inq;
-  if Hashtbl.length !acc >= 1 then
-    begin
-      match Hashtbl.find_opt aux.mu_useq aux.mu_out_tp with
-      | None -> Hashtbl.add aux.mu_useq aux.mu_out_tp !acc
-      | Some tbl -> Hashtbl.replace aux.mu_useq aux.mu_out_tp
-          (merge_useq_tables !acc tbl)
-    end
-
 let update_lookahead_muaux i tsi aux =
   if i > aux.mu_in_tp then
     begin
       aux.mu_in_tp <- i;
       apply_buf1 i tsi aux;
-      shift_lookahead tsi aux;
-      collect_results tsi aux
+      shift_lookahead tsi aux
+    end
+
+let take_result_muaux aux =
+  if aux.mu_out_cnt = 0 && not (Queue.is_empty aux.mu_inq) &&
+    (let (_, t, _) = Queue.peek aux.mu_inq in
+      not (in_left_ext (ts_minus aux.mu_in_ts t) aux.mu_args.a_intv))
+  then
+    begin
+      let (_, _, n) = Queue.take aux.mu_inq in
+      aux.mu_out_cnt <- n
+    end;
+  if aux.mu_out_cnt = 0 then
+    None
+  else
+    begin
+      let j = aux.mu_out_tp in
+      let res1 = ref Relation.empty in
+      (match Hashtbl.find_opt aux.mu_useq j with
+      | None -> ()
+      | Some tbl ->
+          Hashtbl.remove aux.mu_useq j;
+          Hashtbl.iter (fun tup k ->
+            if k = j then
+              res1 := Relation.add tup !res1
+            else
+              begin
+                aux.mu_res <- Relation.add tup aux.mu_res;
+                (match Hashtbl.find_opt aux.mu_acc tup with
+                | None -> Hashtbl.add aux.mu_acc tup k
+                | Some k' -> if k' < k then Hashtbl.replace aux.mu_acc tup k
+                );
+                (match Hashtbl.find_opt aux.mu_delmap k with
+                | None -> Hashtbl.add aux.mu_delmap k [tup]
+                | Some tupl -> Hashtbl.replace aux.mu_delmap k (tup :: tupl)
+                )
+              end
+            )
+            tbl
+      );
+      let result = Relation.union aux.mu_res !res1 in
+      (match Hashtbl.find_opt aux.mu_delmap j with
+      | Some tupl ->
+          Hashtbl.remove aux.mu_delmap j;
+          let del = List.fold_left (fun del tup ->
+              match Hashtbl.find_opt aux.mu_acc tup with
+              | None -> Relation.add tup del
+              | Some k when k <= j ->
+                  Hashtbl.remove aux.mu_acc tup;
+                  Relation.add tup del
+              | _ -> del
+            ) Relation.empty tupl
+          in
+          aux.mu_res <- Relation.diff aux.mu_res del
+      | None -> ()
+      );
+      aux.mu_out_tp <- aux.mu_out_tp + 1;
+      aux.mu_out_cnt <- aux.mu_out_cnt - 1;
+      Some result
     end
 
 let add_new_tables_muaux rel1 rel2 aux =
@@ -396,4 +464,3 @@ let add_new_tables_muaux rel1 rel2 aux =
   else
     aux.mu_buf1 <- Some rel1
 
-let take_result_muaux aux = Queue.take_opt aux.mu_resq

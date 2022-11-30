@@ -439,23 +439,28 @@ let rec eval f crt discard =
     if Misc.debugging Dbg_eval then
       Printf.eprintf "[eval,Until] q=%d\n" q;
 
-    let rec update () =
+    let rec update_and_get_result () =
       if Neval.is_last inf.ulast then
-        ()
+        None
       else
         begin
           let ncrt = Neval.get_next inf.ulast in
           let (i, tsi) = Neval.get_data ncrt in
           Perf.profile_enter ~tp:q ~loc;
           Optimized_mtl.update_lookahead_muaux i tsi inf.uaux;
+          let result = Optimized_mtl.take_result_muaux inf.uaux in
           Perf.profile_exit ~tp:q ~loc;
-          match inf.urel2 with
-           | Some rel2 -> eval_f1 rel2 ncrt
-           | None ->
-             (match eval f2 ncrt false with
-              | None -> ()
-              | Some rel2 -> eval_f1 rel2 ncrt
-             )
+          match result with
+          | Some _ as x -> x
+          | None ->
+            (match inf.urel2 with
+             | Some rel2 -> eval_f1 rel2 ncrt
+             | None ->
+               (match eval f2 ncrt false with
+                | None -> None
+                | Some rel2 -> eval_f1 rel2 ncrt
+               )
+            )
         end
     and eval_f1 rel2 ncrt =
       match eval f1 ncrt false with
@@ -465,13 +470,10 @@ let rec eval f crt discard =
         Perf.profile_enter ~tp:q ~loc;
         Optimized_mtl.add_new_tables_muaux rel1 rel2 inf.uaux;
         Perf.profile_exit ~tp:q ~loc;
-        update ()
-      | None -> inf.urel2 <- Some rel2
+        update_and_get_result ()
+      | None -> inf.urel2 <- Some rel2; None
     in
-    (match Optimized_mtl.take_result_muaux inf.uaux with
-    | Some _ as x -> x
-    | None -> update (); Optimized_mtl.take_result_muaux inf.uaux
-    ), loc
+    update_and_get_result (), loc
 
   | EEventuallyZ (intv,f2,inf,loc) ->
     (* contents of inf:
