@@ -21,14 +21,6 @@ type sinfo = {mutable srel2: relation option;
 type uinfo = {mutable ulast: Neval.cell;
               mutable urel2: relation option;
               uaux: Optimized_mtl.muaux}
-type ezinfo = {mutable ezlastev: Neval.cell;
-               mutable eztree: (int, relation) Sliding.stree;
-               mutable ezlast: (int * timestamp * relation) Dllist.cell;
-               ezauxrels: (int * timestamp * relation) Dllist.dllist}
-type einfo = {mutable elastev: Neval.cell;
-              mutable etree: (timestamp, relation) Sliding.stree;
-              mutable elast: (timestamp * relation) Dllist.cell;
-              eauxrels: (timestamp * relation) Dllist.dllist}
 
 type comp_one = relation -> relation
 type comp_two = relation -> relation -> relation
@@ -47,8 +39,6 @@ type extformula =
   | ENext of interval * extformula * ninfo * int
   | ESince of extformula * extformula * sinfo * int
   | EUntil of extformula * extformula * uinfo * int
-  | EEventuallyZ of interval * extformula * ezinfo * int
-  | EEventually of interval * extformula * einfo * int
 
 
   let rec contains_eventually = function
@@ -65,8 +55,6 @@ type extformula =
   | ENext          (dt, f1, ninf, _)                             -> contains_eventually f1
   | ESince         (f1, f2, sinf, _)                             -> contains_eventually f1 || contains_eventually f2
   | EUntil         (f1, f2, uinf, _)                             -> contains_eventually f1 || contains_eventually f2
-  | EEventuallyZ   (dt, f1, mezinf, _)                           -> true
-  | EEventually    (dt, f1, meinf, _)                            -> true
 
 (* 
   Print functions used for debugging
@@ -136,40 +124,6 @@ let prerr_uinf str inf =
   (* TODO(JS): print uaux *)
   prerr_string "}"
 
-let prerr_ezinf str inf =
-  Printf.eprintf "%s{ezlastev=%s; " str (Neval.string_of_cell inf.ezlastev);
-  if inf.ezlast == Dllist.void then
-    prerr_string "ezlast = None; "
-  else
-    begin
-      let (_,ts,_) = Dllist.get_data inf.ezlast in
-      Printf.eprintf "elast (ts) = %s; " (MFOTL.string_of_ts ts)
-    end;
-  prerr_string "eauxrels=";
-  Dllist.iter prerr_aauxel inf.ezauxrels;
-  Sliding.prerr_stree string_of_int (Relation.prerr_rel "") "; ezinf.eztree = " inf.eztree;
-  prerr_string "}\n"
-
-
-let prerr_einf str inf =
-  Printf.eprintf "%s{elastev=%s; " str (Neval.string_of_cell inf.elastev);
-  if inf.elast == Dllist.void then
-    prerr_string "elast = None; "
-  else
-    begin
-      let ts = fst (Dllist.get_data inf.elast) in
-      Printf.eprintf "elast (ts) = %s; " (MFOTL.string_of_ts ts)
-    end;
-  prerr_string "eauxrels=";
-  Dllist.iter prerr_sauxel inf.eauxrels;
-  Sliding.prerr_stree MFOTL.string_of_ts (Relation.prerr_rel "") "; einf.etree = " inf.etree;
-  prerr_string "}"
-
-let prerr_einfn str inf =
-  prerr_einf str inf;
-  prerr_newline()
-
-
 let prerr_extf str ff =
   let prerr_spaces d =
     for i = 1 to d do prerr_string " " done
@@ -209,19 +163,6 @@ let prerr_extf str ff =
           MFOTL.prerr_interval intv;
           prerr_string ": init=";
           prerr_bool ninf.init;
-          prerr_string "\n";
-          prerr_f_rec (d+1) f
-
-        | EEventuallyZ (intv,f,einf,loc) ->
-          prerr_string "EVENTUALLY";
-          MFOTL.prerr_interval intv;
-          prerr_ezinf ": ezinf=" einf;
-          prerr_f_rec (d+1) f
-
-        | EEventually (intv,f,einf,loc) ->
-          prerr_string "EVENTUALLY";
-          MFOTL.prerr_interval intv;
-          prerr_einf ": einf=" einf;
           prerr_string "\n";
           prerr_f_rec (d+1) f
 
@@ -331,8 +272,6 @@ let rec pp_structure ppf ff =
   | ENext (_, f1, _, loc) -> pp_unary "NEXT" loc f1
   | ESince (f1, f2, _, loc) -> pp_binary "SINCE" loc f1 f2
   | EUntil (f1, f2, _, loc) -> pp_binary "UNTIL" loc f1 f2
-  | EEventuallyZ (_, f1, _, loc) -> pp_unary "EVENTUALLY(Z)" loc f1
-  | EEventually (_, f1, _, loc) -> pp_unary "EVENTUALLY" loc f1
 
 let extf_structure ff =
   pp_structure Format.str_formatter ff;

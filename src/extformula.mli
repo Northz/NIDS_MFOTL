@@ -19,14 +19,6 @@ type sinfo = {mutable srel2: relation option;
 type uinfo = {mutable ulast: Neval.cell;
               mutable urel2: relation option;
               uaux: Optimized_mtl.muaux}
-type ezinfo = {mutable ezlastev: Neval.cell;
-               mutable eztree: (int, relation) Sliding.stree;
-               mutable ezlast: (int * timestamp * relation) Dllist.cell;
-               ezauxrels: (int * timestamp * relation) Dllist.dllist}
-type einfo = {mutable elastev: Neval.cell;
-              mutable etree: (timestamp, relation) Sliding.stree;
-              mutable elast: (timestamp * relation) Dllist.cell;
-              eauxrels: (timestamp * relation) Dllist.dllist}
 
 type comp_one = relation -> relation
 type comp_two = relation -> relation -> relation
@@ -45,8 +37,6 @@ type extformula =
   | ENext of interval * extformula * ninfo * int
   | ESince of extformula * extformula * sinfo * int
   | EUntil of extformula * extformula * uinfo * int
-  | EEventuallyZ of interval * extformula * ezinfo * int
-  | EEventually of interval * extformula * einfo * int
 
 val contains_eventually: extformula -> bool
 
@@ -55,9 +45,6 @@ val prerr_sauxel: MFOTL.timestamp * Relation.relation -> unit
 
 val prerr_predinf: string -> info -> unit
 val prerr_uinf: string -> uinfo -> unit
-
-val prerr_einfn: string -> einfo -> unit
-val prerr_ezinf: string -> ezinfo -> unit
 
 val prerr_extf: string -> extformula -> unit
 

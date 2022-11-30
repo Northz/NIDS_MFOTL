@@ -224,8 +224,6 @@ let earliest_cell lastev mf =
     | MNext (_, f1, _, _) -> go f1
 
     | MUntil (f1, f2, inf, _) -> update inf.ulast; go f1; go f2
-    | MEventuallyZ (_, f1, inf, _) -> update inf.mezlastev; go f1
-    | MEventually (_, f1, inf, _) -> update inf.melastev; go f1
 
     | MAnd (_, f1, f2, _, _)
     | MOr (_, f1, f2, _, _)
@@ -283,17 +281,6 @@ let combine_sinfo sinf1 sinf2  =
 
 let combine_uinfo uinf1 uinf2 = failwith "not implemented"
 
-let combine_ezinfo c0 mezinf1 mezinf2 =
-  let mezlastev = combine_cells c0 mezinf1.mezlastev mezinf2.mezlastev in
-  let mezauxrels = combine_dll1 mezinf1.mezauxrels mezinf2.mezauxrels in
-  {mezlastev = mezlastev; mezauxrels = mezauxrels }
-
-let combine_einfo c0 meinf1 meinf2 =
-  let melastev = combine_cells c0 meinf1.melastev meinf2.melastev in
-  let meauxrels = combine_dll2 meinf1.meauxrels meinf2.meauxrels in
-  {melastev = melastev; meauxrels = meauxrels}
-
-
 (*
   Combine two mformulas recursively. We must assume they have the same structure. 
   If they do not, we raise an error.
@@ -327,12 +314,6 @@ let comb_m lastev f1 f2 =
     | (MUntil (f11, f12, uinf1, loc1), MUntil (f21, f22, uinf2, loc2))
       when loc1 = loc2
       -> MUntil         (comb_m f11 f21, comb_m f12 f22, combine_uinfo uinf1 uinf2, loc1)
-    | (MEventuallyZ (dt, f11, ezinf1, loc1), MEventuallyZ (_, f21, ezinf2, loc2))
-      when loc1 = loc2
-      -> MEventuallyZ   (dt, comb_m f11 f21, combine_ezinfo c0 ezinf1 ezinf2, loc1)
-    | (MEventually (dt, f11, einf1, loc1), MEventually (_, f21, einf2, loc2))
-      when loc1 = loc2
-      -> MEventually   (dt, comb_m f11 f21, combine_einfo c0 einf1 einf2, loc1)
     | _ -> raise (Type_error ("Mismatched formulas in combine_states")) 
   in
   comb_m f1 f2
@@ -493,14 +474,6 @@ let split_state mapping mf size =
     (*let queues = split_mqueue sinf.sauxrels p2 in    
     Array.map2 (fun srel2 nq -> {srel2 = srel2; sauxrels = nq}) srels queues*)
   in
-  let split_mezinfo mezinf p =
-    let dllists = split_dll1 mezinf.mezauxrels p in
-    Array.map (fun e -> { mezlastev = mezinf.mezlastev; mezauxrels = e }) dllists
-  in
-  let split_meinfo meinf p =
-    let dllists = split_dll2 meinf.meauxrels p in
-    Array.map (fun e -> { melastev = meinf.melastev; meauxrels = e }) dllists
-  in
   let p1 f1 = Mformula.free_vars f1 in
   let p2 f1 f2 = free_vars2 f1 f2 in
   (* Recursive split call: At each step 
@@ -553,13 +526,6 @@ let split_state mapping mf size =
       let a2 = (split_f f2) in
       Array.mapi (fun i e -> MUntil(a1.(i), a2.(i), e, loc)) (split_muinfo muinf (p1 f1) (p1 f2)) *)
       failwith "not implemented"
-    | MEventuallyZ   (dt, f1, mezinf, loc)                           ->
-      (*print_endline "eventuallyz";
-      let vars = (p1 f1) in List.iter(fun v -> Printf.printf "%s, " (Predicate.string_of_var v)) vars; print_endline "";*)
-      let a1 = (split_f f1) in Array.mapi (fun i e -> MEventuallyZ(dt, a1.(i), e, loc)) (split_mezinfo mezinf (p1 f1))            
-    | MEventually    (dt, f1, meinf, loc)                            ->
-      (*print_endline "eventually";*)
-      let a1 = (split_f f1) in Array.mapi (fun i e -> MEventually(dt, a1.(i), e, loc)) (split_meinfo meinf (p1 f1))
     in
   split_f mf
     
@@ -631,5 +597,3 @@ let rec print_ef = function
   | ENext          (dt, f1, ninf, _)                             -> print_endline "Next";print_ef f1
   | ESince         (f1, f2, sinf, _)                             -> print_endline "Since";print_ef f1;print_ef f2
   | EUntil         (f1, f2, uinf, _)                             -> print_endline "Until";print_ef f1;print_ef f2
-  | EEventuallyZ   (dt, f1, mezinf, _)                           -> print_endline "EventuallyZ";print_ef f1
-  | EEventually    (dt, f1, meinf, _)                            -> print_endline "Eventually";print_ef f1

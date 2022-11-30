@@ -4,14 +4,6 @@ open Relation
 open Tuple
 open MFOTL
 
-(* Immutable version of types used in eformula *)
-type mezinfo = { mezlastev: Neval.cell;
-                 mezauxrels: (int * timestamp * relation) Dllist.dllist}
-
-type meinfo  = { melastev: Neval.cell;
-                 meauxrels: (timestamp * relation) Dllist.dllist}
-
-
 (*  IMPORTANT/TODO
     The int pointers in the marshalled states can only be used if we work under the assumption that:
     1. Each split state marshals the whole formula (given by implementation)
@@ -35,8 +27,6 @@ type mformula =
   | MNext of interval * mformula * ninfo * int
   | MSince of mformula * mformula * sinfo * int
   | MUntil of mformula * mformula * uinfo * int
-  | MEventuallyZ of interval * mformula * mezinfo * int
-  | MEventually of interval * mformula * meinfo * int
 
 (* For each formula, returns list of relevant free variables according to sub structure *)
 let free_vars f =
@@ -56,8 +46,6 @@ let free_vars f =
   | MNext          (_, f1, _, _)             -> get_pred f1
   | MSince         (f1, f2, _, _)            -> Misc.union (get_pred f1) (get_pred f2)
   | MUntil         (f1, f2, _, _)            -> Misc.union (get_pred f1) (get_pred f2)
-  | MEventuallyZ   (_, f1, _, _)             -> get_pred f1
-  | MEventually    (_, f1, _, _)             -> get_pred f1
   in
   get_pred f
 
@@ -79,7 +67,5 @@ let predicates f =
   | MNext          (_, f1, _, _)             -> get_pred f1
   | MSince         (f1, f2, _, _)            -> Misc.union (get_pred f1) (get_pred f2)
   | MUntil         (f1, f2, _, _)            -> Misc.union (get_pred f1) (get_pred f2)
-  | MEventuallyZ   (_, f1, _, _)             -> get_pred f1
-  | MEventually    (_, f1, _, _)             -> get_pred f1
   in
   get_pred f

@@ -23,14 +23,7 @@ open Mformula
   neval dllist is converted to an array representation.
  *)
 let ext_to_m ff =
-  let el2m linf = linf.llast
-  in
-  let eze2m ezinf =
-    {mezlastev = ezinf.ezlastev; mezauxrels = ezinf.ezauxrels}
-  in
-  let ee2m einf =
-    {melastev = einf.elastev; meauxrels = einf.eauxrels}
-  in
+  let el2m linf = linf.llast in
   let rec e2m = function
     | ERel           (rel, loc)                         -> MRel         (rel, loc)
     | EPred          (pred, c1, inf, loc)               -> MPred        (pred, c1, inf, loc)
@@ -45,8 +38,6 @@ let ext_to_m ff =
     | ENext          (intv, ext, ninf, loc)             -> MNext        (intv, (e2m ext), ninf, loc)
     | ESince         (ext1, ext2, sinf, loc)            -> MSince       ((e2m ext1), (e2m ext2), sinf, loc)
     | EUntil         (ext1, ext2, uinf, loc)            -> MUntil       ((e2m ext1), (e2m ext2), uinf, loc)
-    | EEventuallyZ   (intv, ext, ezinf, loc)            -> MEventuallyZ (intv, (e2m ext), (eze2m ezinf), loc)
-    | EEventually    (intv, ext, einf, loc)             -> MEventually  (intv, (e2m ext), (ee2m einf), loc)
   in e2m ff
 
 (*
@@ -54,79 +45,7 @@ let ext_to_m ff =
   including optimization structures such as sliding trees.
 *)
 let m_to_ext mf =
-  let ml2e mlast = {llast = mlast}
-  in
-  let mez2e intv mezinf =
-   (* contents of inf:
-       ezlastev: 'a Neval.cell  last cell of neval for which f2 is evaluated
-       ezauxrels: info          the auxiliary relations (up to ezlastev)
-    *)
-    (* if auxrels is empty or ezlastev is void return invalid tree, forcing reevaluation in the algorithm *)
-    let return_empty =
-      let eztree = LNode {l = -1; r = -1; res = Some (Relation.empty)} in
-      let ezlast = Dllist.void in
-      {ezlastev = mezinf.mezlastev; eztree = eztree; ezlast = ezlast; ezauxrels  = mezinf.mezauxrels}
-    in
-    if not (Dllist.is_empty mezinf.mezauxrels) && Neval.is_valid mezinf.mezlastev then
-      (* If auxrels contains elements, rebuild tree and restore ezlast by getting all elements of auxrels
-         where the timepoint is smaller than that of ezlastev
-         Note: We are presuming that all monpoly instances have synchronized timepoints. *)
-      let (tpq, tsq) = Neval.get_data mezinf.mezlastev in
-      let (tpj, tsj, _) = Dllist.get_first mezinf.mezauxrels in
-      (* Catch case where auxrels contains exactly one element with same tp as ezlast *)
-      if ((tpj - tpq) < 0) then
-        let tree_list, ezlast =
-          let f = fun (j,_,rel) -> (j,rel) in
-          let cond = fun (tpj,_,_) -> (tpj - tpq) < 0 in
-          Helper.get_new_elements mezinf.mezauxrels Dllist.void cond f
-        in
-        let eztree =
-          if tree_list = [] then
-            LNode {l = -1; r = -1; res = Some (Relation.empty)}
-          else
-            Sliding.build_rl_tree_from_seq Relation.union tree_list
-        in
-        {ezlastev = mezinf.mezlastev; eztree; ezlast; ezauxrels  = mezinf.mezauxrels}
-      else return_empty
-    else begin
-      return_empty
-    end
-  in
-  let me2e intv meinf =
-    (* contents of inf:
-       elastev: 'a Neval.cell  last cell of neval for which f2 is evaluated
-       eauxrels: info          the auxiliary relations (up to elastev)
-    *)
-    let meauxrels = meinf.meauxrels in
-    (* if auxrels is empty or elastev is void return invalid tree, forcing reevaluation in the algorithm *)
-    let return_empty =
-      let metree = LNode {l = MFOTL.ts_invalid; r = MFOTL.ts_invalid; res = Some (Relation.empty)} in
-      let elast = Dllist.void in
-      {elastev = meinf.melastev; etree = metree; elast = elast;eauxrels = meinf.meauxrels}
-    in
-    if not(Dllist.is_empty meauxrels) && Neval.is_valid meinf.melastev then
-     (* If auxrels contains elements, rebuild tree and restore elast by getting all elements of auxrels
-         where the timestamp is smaller than that of elastev *)
-      let (_, tsq) = Neval.get_data meinf.melastev in
-      let (tsj, _) = Dllist.get_first meauxrels in
-      (* Catch case where auxrels contains exactly one element with same ts as elast *)
-      if Z.(tsj - tsq < zero) then
-        let tree_list, elast =
-          let cond = fun (tsj,_) -> Z.(tsj - tsq < zero) in
-          Helper.get_new_elements meinf.meauxrels Dllist.void cond (fun x -> x)
-        in
-        let etree =
-          if tree_list = [] then
-            LNode {l = MFOTL.ts_invalid; r = MFOTL.ts_invalid; res = Some (Relation.empty)}
-          else
-            Sliding.build_rl_tree_from_seq Relation.union tree_list
-        in
-        {elastev = meinf.melastev; etree; elast; eauxrels = meinf.meauxrels}
-      else return_empty
-    else begin
-      return_empty
-    end
-  in
+  let ml2e mlast = {llast = mlast} in
   let rec m2e = function
     | MRel           (rel, loc)                        -> ERel         (rel, loc)
     | MPred          (pred, c1, inf, loc)              -> EPred        (pred, c1, inf, loc)
@@ -141,8 +60,6 @@ let m_to_ext mf =
     | MNext          (intv, mf, ninf, loc)             -> ENext        (intv, (m2e mf), ninf, loc)
     | MSince         (mf1, mf2, sinf, loc)             -> ESince       ((m2e mf1), (m2e mf2), sinf, loc)
     | MUntil         (mf1, mf2, uinf, loc)             -> EUntil       ((m2e mf1), (m2e mf2), uinf, loc)
-    | MEventuallyZ   (intv, mf, mezinf, loc)           -> EEventuallyZ (intv, (m2e mf), (mez2e intv mezinf), loc)
-    | MEventually    (intv, mf, meinf, loc)            -> EEventually  (intv, (m2e mf), (me2e  intv meinf), loc)
   in m2e mf
 
 (* END SAVING AND LOADING STATE *)

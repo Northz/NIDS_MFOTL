@@ -4,13 +4,6 @@ open Relation
 open Tuple
 open MFOTL
 
-(* Immutable version of types used in eformula *)
-type mezinfo = { mezlastev: Neval.cell;
-                 mezauxrels: (int * timestamp * relation) Dllist.dllist}
-
-type meinfo  = { melastev: Neval.cell;
-                 meauxrels: (timestamp * relation) Dllist.dllist}
-
 (* Immutable version of eformula used for marshalling *)
 type mformula =
   | MRel of relation * int
@@ -26,8 +19,6 @@ type mformula =
   | MNext of interval * mformula * ninfo * int
   | MSince of mformula * mformula * sinfo * int
   | MUntil of mformula * mformula * uinfo * int
-  | MEventuallyZ of interval * mformula * mezinfo * int
-  | MEventually of interval * mformula * meinfo * int
 
 val free_vars: mformula -> Predicate.var list
 val predicates: mformula -> Predicate.predicate list
