@@ -12379,7 +12379,7 @@ next
       proof -
         have \<tau>_min:  "\<tau> \<sigma> (min (j + \<delta> - 1) k) = min (\<tau> \<sigma> (j + \<delta> - 1)) (\<tau> \<sigma> k)" for k
           by (simp add: min_of_mono monoI)
-        have le_progress_iff[simp]: "j + \<delta> \<le> progress \<sigma> P' \<phi> (j + \<delta>) \<Longrightarrow> progress \<sigma> P' \<phi> (j + \<delta>) = (j + \<delta>)" for \<phi> :: "'t Formula.formula"
+        have le_progress_iff[simp]: "j + \<delta> \<le> progress \<sigma> P' \<phi> (j + \<delta>) \<longleftrightarrow> progress \<sigma> P' \<phi> (j + \<delta>) = (j + \<delta>)" for \<phi> :: "'t Formula.formula"
           using wf_envs_progress_le[OF MUntil.prems(2), of \<phi>] by auto
         let ?X = "{i. \<forall>k. k < j + \<delta> \<and> k \<le> min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
         let ?min = "min (j + \<delta> - 1) (min (progress \<sigma> P' \<phi>'' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)))"
@@ -12389,18 +12389,12 @@ next
           by (auto simp: \<phi>''' intro!: exI[of _ "progress \<sigma> P' \<phi>'' (j + \<delta>)"])
         show ?thesis
           using that nts' Suc_i_aux' unfolding wf_ts_def progress.simps nt
-          apply (intro cInf_greatest[OF \<open>?X \<noteq> {}\<close>])
-          apply (clarsimp simp: 1 simp del: upt_Suc split: if_splits dest!: spec[of _ "?min"]
-              elim!: contrapos_np[of _ "Suc i \<le> _"]) (* 50 sec *)
-          (* apply (clarsimp simp: \<phi>''' simp del: upt_Suc) *)
-          using diff_le_mono diff_le_mono2 order_trans[OF diff_le_mono diff_le_mono2] \<tau>_mono
-          thm list_all2_Cons2 upt_eq_Cons_conv upt_Suc
-          sorry
-        apply (auto 0 3 simp: 1 \<phi>''' list_all2_Cons2 upt_eq_Cons_conv
-              simp del: upt_Suc split: list.splits if_splits
-              dest!: spec[of _ "?min"]
-              intro: diff_le_mono diff_le_mono2 order_trans[OF diff_le_mono diff_le_mono2] \<tau>_mono
-              elim!: contrapos_np[of _ "Suc i \<le> _"])
+        by (intro cInf_greatest[OF \<open>?X \<noteq> {}\<close>])
+          (auto 0 3 simp: 1 \<phi>''' list_all2_Cons2 upt_eq_Cons_conv
+            simp del: upt_Suc split: list.splits if_splits
+            dest!: spec[of _ "?min"]
+            intro: diff_le_mono diff_le_mono2 order_trans[OF diff_le_mono diff_le_mono2] \<tau>_mono
+            elim!: contrapos_np[of _ "Suc i \<le> _"])
       qed
       moreover have *: "k < progress \<sigma> P' \<psi> (j + \<delta>)" if
         "\<not> memR I (nt - \<tau> \<sigma> i)"
@@ -12411,8 +12405,10 @@ next
           elim!: contrapos_np[of _ "k < _"] intro!: diff_le_mono diff_le_mono2)
       ultimately show ?case using Cons.prems Suc_i_aux'[simplified]
         unfolding \<open>a = (t, a1, a2)\<close>
-        by (auto simp: Untilp_def \<phi>''' 1 sat.simps upt_conv_Cons dest!: Cons.IH[OF _ aux' Suc_i_aux']
-            simp del: upt_Suc split: if_splits prod.splits intro!: iff_exI qtable_cong[OF 3 refl])
+        by (auto simp: Untilp_def \<phi>''' 1 sat.simps upt_conv_Cons 
+            dest!: Cons.IH[OF _ aux' Suc_i_aux']
+            simp del: upt_Suc split: if_splits prod.splits 
+            intro!: iff_exI qtable_cong[OF 3 refl])
     qed
     note wf_aux'' = this[OF wf_envs_progress_mono[OF MUntil.prems(2)]
       wf_auxlist' conjunct2[OF update1, unfolded ne_def length_aux']]
