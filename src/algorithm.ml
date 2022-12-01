@@ -523,6 +523,10 @@ let apply_post = function
   | Some f -> Relation.filter_map f
   | None -> (fun rel -> rel)
 
+let force_post = function
+  | Some f -> f
+  | None -> (fun t -> Some t)
+
 let add_ext neval f =
   let neval0 = Neval.get_last neval in
   let loc = ref 0 in
@@ -533,18 +537,18 @@ let add_ext neval f =
     EPred (p, comp, Queue.create(), next_loc())
 
   | Let (p, f1, f2) ->
-    let ff1 = add_ext None f1 in
-    let ff2 = add_ext post f2 in
     let attr1 = MFOTL.free_vars f1 in
     let attrp = Predicate.pvars p in
     let new_pos = List.map snd (Table.get_matches attr1 attrp) in
-    let comp =
+    let post1 =
       if Misc.is_id_permutation (List.length attr1) new_pos then
-        (fun rel -> rel)
+        None
       else
-        Relation.reorder new_pos
+        Some (fun t -> Some (Tuple.projections new_pos t))
     in
-    ELet (p, comp, ff1, ff2, {llast = neval0}, next_loc())
+    let ff1 = add_ext post1 f1 in
+    let ff2 = add_ext post f2 in
+    ELet (p, (fun rel -> rel), ff1, ff2, {llast = neval0}, next_loc())
 
   | LetPast _ -> failwith "LETPAST is not supported except in -verified mode"
 
@@ -608,7 +612,6 @@ let add_ext neval f =
         | Neg f2' -> add_ext None f2'
         | _ -> add_ext None f2
       in
-      let postf = match post with None -> (fun t -> Some t) | Some g -> g in
       let comp =
         match f2 with
         | Neg _ ->
@@ -626,11 +629,11 @@ let add_ext neval f =
           if attr1 = attr2 then
             Relation.filtermap_inter post
           else if Misc.subset attr1 attr2 then
-            Relation.natural_join_sc1 postf matches2
+            Relation.natural_join_sc1 (force_post post) matches2
           else if Misc.subset attr2 attr1 then
-            Relation.natural_join_sc2 postf matches1
+            Relation.natural_join_sc2 (force_post post) matches1
           else
-            Relation.natural_join postf matches1
+            Relation.natural_join (force_post post) matches1
       in
       EAnd (comp, ff1, ff2, {arel = None}, next_loc())
 
@@ -640,15 +643,14 @@ let add_ext neval f =
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
-    let postf = match post with None -> (fun t -> Some t) | Some g -> g in
     let state =
       match op with
-      | Cnt -> Aggreg.cnt_once postf default intv 0 posG
-      | Min -> Aggreg.min_once postf default intv 0 posx posG
-      | Max -> Aggreg.max_once postf default intv 0 posx posG
-      | Sum -> Aggreg.sum_once postf default intv 0 posx posG
-      | Avg -> Aggreg.avg_once postf default intv 0 posx posG
-      | Med -> Aggreg.med_once postf default intv 0 posx posG
+      | Cnt -> Aggreg.cnt_once (force_post post) default intv 0 posG
+      | Min -> Aggreg.min_once (force_post post) default intv 0 posx posG
+      | Max -> Aggreg.max_once (force_post post) default intv 0 posx posG
+      | Sum -> Aggreg.sum_once (force_post post) default intv 0 posx posG
+      | Avg -> Aggreg.avg_once (force_post post) default intv 0 posx posG
+      | Med -> Aggreg.med_once (force_post post) default intv 0 posx posG
     in
     EAggOnce ({op; default}, state, add_ext None f, next_loc())
 
@@ -658,15 +660,14 @@ let add_ext neval f =
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
-    let postf = match post with None -> (fun t -> Some t) | Some g -> g in
     let comp =
       match op with
-      | Cnt -> Aggreg.cnt postf default 0 posG
-      | Sum -> Aggreg.sum postf default 0 posx posG
-      | Min -> Aggreg.min postf default 0 posx posG
-      | Max -> Aggreg.max postf default 0 posx posG
-      | Avg -> Aggreg.avg postf default 0 posx posG
-      | Med -> Aggreg.med postf default 0 posx posG
+      | Cnt -> Aggreg.cnt (force_post post) default 0 posG
+      | Sum -> Aggreg.sum (force_post post) default 0 posx posG
+      | Min -> Aggreg.min (force_post post) default 0 posx posG
+      | Max -> Aggreg.max (force_post post) default 0 posx posG
+      | Avg -> Aggreg.avg (force_post post) default 0 posx posG
+      | Med -> Aggreg.med (force_post post) default 0 posx posG
     in
     EAggreg ({op; default}, comp, add_ext None f, next_loc())
 
