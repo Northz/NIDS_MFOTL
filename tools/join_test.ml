@@ -41,11 +41,13 @@ let time_join reps f =
   done;
   relj.(0), ((endtime -. starttime) /. float_of_int reps) *. 1000.
 
+let id_opt t = Some t
+
 let compare_join_impls reps matches card1 rel1 card2 rel2 =
   let rel_nlj, time_nlj = time_join reps (fun () ->
-    Relation.nested_loop_join matches rel1 rel2) in
+    Relation.nested_loop_join id_opt matches rel1 rel2) in
   let rel_hj, time_hj = time_join reps (fun () ->
-    Relation.hash_join_with_cards matches card1 rel1 card2 rel2) in
+    Relation.hash_join_with_cards id_opt matches card1 rel1 card2 rel2) in
   if not (Relation.equal rel_nlj rel_hj) then
     begin
       Printf.printf "*** Test failure ***\n";

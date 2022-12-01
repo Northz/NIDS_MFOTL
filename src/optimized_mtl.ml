@@ -8,9 +8,10 @@ type args = {
   a_pos: bool;
   a_prop1: bool;
   a_key2: int list;
+  a_opt_fm: (tuple -> tuple option) option;
 }
 
-let init_args pos intv attr1 attr2 =
+let init_args opt_fm pos intv attr1 attr2 =
   let matches = Table.get_matches attr2 attr1 in
   {
     a_intv = intv;
@@ -19,6 +20,7 @@ let init_args pos intv attr1 attr2 =
     a_pos = pos;
     a_prop1 = (attr1 = []);
     a_key2 = List.map snd matches;
+    a_opt_fm = opt_fm;
   }
 
 type idx_table = (tuple, (tuple, unit) Hashtbl.t) Hashtbl.t
@@ -76,9 +78,9 @@ type msaux = {
   ms_since: (tuple, timestamp) Hashtbl.t;
 }
 
-let init_msaux pos intv attr1 attr2 =
+let init_msaux opt_fm pos intv attr1 attr2 =
   {
-    ms_args = init_args pos intv attr1 attr2;
+    ms_args = init_args opt_fm pos intv attr1 attr2;
     ms_t = ts_null;
     ms_gc = ts_null;
     ms_prevq = Queue.create();
@@ -99,6 +101,11 @@ let rec do_drop_while (p: 'a -> bool) (c: 'a -> unit) (q: 'a Queue.t) =
   else if p (Queue.peek q) then (c (Queue.pop q); do_drop_while p c q)
   else ()
 
+let apply_opt_fm aux rel =
+  match aux.ms_args.a_opt_fm with
+  | None -> rel
+  | Some f -> Relation.filter_map f rel
+
 let add_new_ts_msaux nt aux =
   let intv = aux.ms_args.a_intv in
   (* shift end *)
@@ -117,7 +124,7 @@ let add_new_ts_msaux nt aux =
     aux.ms_inq;
   if not aux.ms_args.a_prop1 then
     idx_table_remove aux.ms_args aux.ms_in_idx !discard;
-  aux.ms_in <- Relation.diff aux.ms_in !discard;
+  aux.ms_in <- Relation.diff aux.ms_in (apply_opt_fm aux !discard);
   (* add new ts *)
   let add = ref Relation.empty in
   do_drop_while (fun (t, _) -> in_right_ext (ts_minus nt t) intv)
@@ -136,7 +143,7 @@ let add_new_ts_msaux nt aux =
     aux.ms_prevq;
   if not aux.ms_args.a_prop1 then
     idx_table_insert aux.ms_args aux.ms_in_idx !add;
-  aux.ms_in <- Relation.union aux.ms_in !add;
+  aux.ms_in <- Relation.union aux.ms_in (apply_opt_fm aux !add);
   aux.ms_t <- nt
 
 let join_msaux rel aux =
@@ -161,7 +168,7 @@ let join_msaux rel aux =
             Hashtbl.remove aux.ms_since tup
         )
         discard;
-      aux.ms_in <- Relation.diff aux.ms_in discard
+      aux.ms_in <- Relation.diff aux.ms_in (apply_opt_fm aux discard)
     end;
   if aux.ms_args.a_gap &&
     not (in_left_ext (ts_minus aux.ms_t aux.ms_gc) aux.ms_args.a_intv) then
@@ -195,7 +202,7 @@ let add_new_table_msaux rel aux =
         end;
       if not aux.ms_args.a_prop1 then
         idx_table_insert aux.ms_args aux.ms_in_idx rel;
-      aux.ms_in <- Relation.union aux.ms_in rel
+      aux.ms_in <- Relation.union aux.ms_in (apply_opt_fm aux rel)
     end
 
 let result_msaux aux = aux.ms_in
@@ -282,9 +289,9 @@ let debug_muaux aux =
   Printf.printf "  mu_delmap = %s\n" (string_of_delmap aux.mu_delmap);
   print_endline "}"
 
-let init_muaux pos intv attr1 attr2 =
+let init_muaux opt_fm pos intv attr1 attr2 =
   {
-    mu_args = init_args pos intv attr1 attr2;
+    mu_args = init_args opt_fm pos intv attr1 attr2;
     mu_in_tp = -1;
     mu_in_ts = ts_invalid;
     mu_ts_cnt = 0;
@@ -368,16 +375,26 @@ let take_result_muaux aux =
     begin
       let j = aux.mu_out_tp in
       let res1 = ref Relation.empty in
+      let add_filter_mapped =
+        match aux.mu_args.a_opt_fm with
+        | None -> Relation.add
+        | Some f ->
+            (fun tup rel ->
+              match f tup with
+              | Some tup' -> Relation.add tup' rel
+              | None -> rel
+            )
+      in
       (match Hashtbl.find_opt aux.mu_useq j with
       | None -> ()
       | Some tbl ->
           Hashtbl.remove aux.mu_useq j;
           Hashtbl.iter (fun tup k ->
             if k = j then
-              res1 := Relation.add tup !res1
+              res1 := add_filter_mapped tup !res1
             else
               begin
-                aux.mu_res <- Relation.add tup aux.mu_res;
+                aux.mu_res <- add_filter_mapped tup aux.mu_res;
                 (match Hashtbl.find_opt aux.mu_acc tup with
                 | None -> Hashtbl.add aux.mu_acc tup k
                 | Some k' -> if k' < k then Hashtbl.replace aux.mu_acc tup k
@@ -396,10 +413,10 @@ let take_result_muaux aux =
           Hashtbl.remove aux.mu_delmap j;
           let del = List.fold_left (fun del tup ->
               match Hashtbl.find_opt aux.mu_acc tup with
-              | None -> Relation.add tup del
+              | None -> add_filter_mapped tup del
               | Some k when k <= j ->
                   Hashtbl.remove aux.mu_acc tup;
-                  Relation.add tup del
+                  add_filter_mapped tup del
               | _ -> del
             ) Relation.empty tupl
           in

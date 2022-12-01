@@ -175,6 +175,8 @@ val zip: 'a list -> 'b list -> ('a * 'b) list
 
 val replace: ('a * 'a) list -> 'a list -> 'a list
 
+val is_id_permutation: int -> int list -> bool
+
 (** Pretty-printing functions: *)
 
 val print_spaces: int -> unit

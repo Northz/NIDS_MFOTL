@@ -75,45 +75,36 @@ val map: (tuple -> tuple) -> relation -> relation
   (** [map f rel] returns the relation formed by those tuples [f t]
       with [t] in [rel]. *)
 
-val is_empty: relation -> bool
-  (** [is_empty rel] returns true if the relation is empty (has no tuples). *)
-
-
-val natural_join: (int * int) list -> relation -> relation -> relation
-  (** [natural_join matches rel1 rel2] returns the natural join of
-      relations [rel1] and [rel2]. The parameter [matches] gives the
-      columns which should match in the two relations in form of a
-      list of tuples [(pos2,pos1)]: column [pos2] in [rel2] should
-      match column [pos1] in [rel1].
+val natural_join: (tuple -> tuple option) -> (int * int) list -> relation -> relation -> relation
+  (** [natural_join post matches rel1 rel2] returns the natural join of
+      relations [rel1] and [rel2], and maps [post] over the result. The
+      parameter [matches] gives the columns which should match in the two
+      relations in form of a list of tuples [(pos2,pos1)]: column [pos2] in
+      [rel2] should match column [pos1] in [rel1].
   *)
 
-val nested_loop_join: (int * int) list -> relation -> relation -> relation
-val hash_join_with_cards: (int * int) list -> int -> relation ->
+val nested_loop_join: (tuple -> tuple option) -> (int * int) list -> relation -> relation -> relation
+val hash_join_with_cards: (tuple -> tuple option) -> (int * int) list -> int -> relation ->
   int -> relation -> relation
 
-val natural_join_sc1: (int * int) list -> relation -> relation -> relation
+val natural_join_sc1: (tuple -> tuple option) -> (int * int) list -> relation -> relation -> relation
 (** [natural_join] special case 1: attr1 are included in attr2 *)
 
-val natural_join_sc2: (int * int) list -> relation -> relation -> relation
+val natural_join_sc2: (tuple -> tuple option) -> (int * int) list -> relation -> relation -> relation
 (** [natural_join] special case 2: attr2 are included in attr1 *)
 
-val cross_product: relation -> relation -> relation
-  (** The cross product of the arguments. *)
+val filtermap_inter: (tuple -> tuple option) option -> relation -> relation -> relation
 
-val minus: int list -> relation -> relation -> relation
-  (** [reldiff rel1 rel2] returns the set difference between [rel1]
-      and the the natural join of [rel1] and [rel2]. *)
+val filtermap_diff: (tuple -> tuple option) option -> relation -> relation -> relation
+
+val minus: (tuple -> tuple option) option -> int list -> relation -> relation -> relation
+(** [minus opt_post rel1 rel2] returns the set difference between [rel1]
+and the the natural join of [rel1] and [rel2]. The function [opt_post] is mapped
+over the result unless [None]. *)
 
 val reorder: int list -> relation -> relation
 
-val project_away: int list -> relation -> relation
-  (** [project_away posl rel] removes the columns in [posl] from
-      [rel]. *)
-
-val eval_pred: predicate -> (relation -> relation)
-(* val selectp: predicate -> relation -> relation *)
-  (** [satisfiesp p rel] returns the set of tuples from [rel] which
-      satisfy predicate [p].  *)
+val eval_pred: (tuple -> tuple option) option -> predicate -> (relation -> relation)
 
 val eval_equal: term -> term -> relation
 val eval_not_equal: term -> term -> relation
@@ -145,6 +136,7 @@ val fold : (tuple -> 'a -> 'a) -> relation -> 'a -> 'a (** see {{:http://caml.in
 val for_all : (tuple -> bool) -> relation -> bool (** see {{:http://caml.inria.fr/pub/docs/manual-ocaml/libref/Set.S.html#VALfor_all}Set.S.for_all} *)
 val exists : (tuple -> bool) -> relation -> bool (** see {{:http://caml.inria.fr/pub/docs/manual-ocaml/libref/Set.S.html#VALexists}Set.S.exists} *)
 val filter : (tuple -> bool) -> relation -> relation (** see {{:http://caml.inria.fr/pub/docs/manual-ocaml/libref/Set.S.html#VALfilter}Set.S.filter} *)
+val filter_map : (tuple -> tuple option) -> relation -> relation
 val partition : (tuple -> bool) -> relation -> relation * relation (** see {{:http://caml.inria.fr/pub/docs/manual-ocaml/libref/Set.S.html#VALpartition}Set.S.partition} *)
 val cardinal : relation -> int (** see {{:http://caml.inria.fr/pub/docs/manual-ocaml/libref/Set.S.html#VALcardinal}Set.S.cardinal} *)
 val elements : relation -> tuple list (** see {{:http://caml.inria.fr/pub/docs/manual-ocaml/libref/Set.S.html#VALelements}Set.S.elements} *)

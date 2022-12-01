@@ -41,9 +41,13 @@ open Predicate
 
 type result = {empty_rel: bool; rel: Relation.relation}
 
-let empty_result empty_val group_posl =
+let empty_result fm empty_val group_posl =
   if group_posl = [] then
-    {empty_rel = true; rel = Relation.singleton (Tuple.make_tuple [empty_val])}
+    let t = Tuple.make_tuple [empty_val] in
+    (match fm t with
+    | None -> {empty_rel = true; rel = Relation.empty}
+    | Some t' -> {empty_rel = true; rel = Relation.singleton t'}
+    )
   else
     {empty_rel = false; rel = Relation.empty}
 
@@ -51,8 +55,8 @@ let nonempty_result rel = {empty_rel = false; rel}
 
 type aggregator = Relation.relation -> result
 
-let comp_aggreg empty_val init update post result_pos group_posl rel =
-  if Relation.is_empty rel then empty_result empty_val group_posl
+let comp_aggreg fm empty_val init update post result_pos group_posl rel =
+  if Relation.is_empty rel then empty_result fm empty_val group_posl
   else
     begin
       let map = Hashtbl.create 1000 (* TODO(JS): why this value? *) in
@@ -71,46 +75,48 @@ let comp_aggreg empty_val init update post result_pos group_posl rel =
       Hashtbl.iter
         (fun gtuple v ->
           let rtuple = Tuple.insert result_pos gtuple (post v) in
-          new_rel := Relation.add rtuple !new_rel
+          match fm rtuple with
+          | Some rtuple' -> new_rel := Relation.add rtuple' !new_rel
+          | None -> ()
         ) map;
       nonempty_result !new_rel
     end
 
-let cnt empty_val result_pos group_posl =
+let cnt fm empty_val result_pos group_posl =
   let init _t = Z.one in
   let update ov _nt = Z.succ ov in
   let post c = Int c in
-  comp_aggreg empty_val init update post result_pos group_posl
+  comp_aggreg fm empty_val init update post result_pos group_posl
 
-let min empty_val result_pos arg_pos group_posl =
+let min fm empty_val result_pos arg_pos group_posl =
   let init t = Tuple.get_at_pos t arg_pos in
   let update ov nt = min ov (Tuple.get_at_pos nt arg_pos) in
-  comp_aggreg empty_val init update (fun x -> x) result_pos group_posl
+  comp_aggreg fm empty_val init update (fun x -> x) result_pos group_posl
 
-let max empty_val result_pos arg_pos group_posl =
+let max fm empty_val result_pos arg_pos group_posl =
   let init t = Tuple.get_at_pos t arg_pos in
   let update ov nt = max ov (Tuple.get_at_pos nt arg_pos) in
-  comp_aggreg empty_val init update (fun x -> x) result_pos group_posl
+  comp_aggreg fm empty_val init update (fun x -> x) result_pos group_posl
 
-let sum empty_val result_pos arg_pos group_posl =
+let sum fm empty_val result_pos arg_pos group_posl =
   let init t = Tuple.get_at_pos t arg_pos in
   let update ov nt = plus ov (Tuple.get_at_pos nt arg_pos) in
-  comp_aggreg empty_val init update (fun x -> x) result_pos group_posl
+  comp_aggreg fm empty_val init update (fun x -> x) result_pos group_posl
 
-let avg empty_val result_pos arg_pos group_posl =
+let avg fm empty_val result_pos arg_pos group_posl =
   let init t = (Tuple.get_at_pos t arg_pos, 1) in
   let update (os, oc) nt = (plus os (Tuple.get_at_pos nt arg_pos), oc + 1) in
   let post (s, c) = Float (float_of_cst s /. float_of_int c) in
-  comp_aggreg empty_val init update post result_pos group_posl
+  comp_aggreg fm empty_val init update post result_pos group_posl
 
-let med empty_val result_pos arg_pos group_posl =
+let med fm empty_val result_pos arg_pos group_posl =
   let init t = ([Tuple.get_at_pos t arg_pos], 1) in
   let update (ol, oc) nt = (Tuple.get_at_pos nt arg_pos :: ol, oc + 1) in
   let post (l, c) =
     let sorted = List.sort Stdlib.compare l in
     Misc.median sorted c Predicate.average
   in
-  comp_aggreg empty_val init update post result_pos group_posl
+  comp_aggreg fm empty_val init update post result_pos group_posl
 
 
 class type window_aggregator =
@@ -120,7 +126,7 @@ class type window_aggregator =
     method get_result: result
   end
 
-class comm_group_aggregator init add remove post intv empty_val
+class comm_group_aggregator fm init add remove post intv empty_val
   result_pos group_posl =
   object
     val tw_rels = Queue.create ()
@@ -176,14 +182,16 @@ class comm_group_aggregator init add remove post intv empty_val
       loop ()
 
     method get_result =
-      if Hashtbl.length acc = 0 then empty_result empty_val group_posl
+      if Hashtbl.length acc = 0 then empty_result fm empty_val group_posl
       else
         begin
           let res = ref Relation.empty in
           Hashtbl.iter
             (fun gtuple v ->
               let rtuple = Tuple.insert result_pos gtuple (post v) in
-              res := Relation.add rtuple !res
+              match fm rtuple with
+              | Some rtuple' -> res := Relation.add rtuple' !res
+              | None -> ()
             ) acc;
           nonempty_result !res
         end
@@ -224,23 +232,23 @@ class once_aggregator (window: window_aggregator) intv =
     method get_result = window#get_result
   end
 
-let cnt_once empty_val intv result_pos group_posl =
+let cnt_once fm empty_val intv result_pos group_posl =
   let init _t = Z.one in
   let add ov _nt = Z.succ ov in
   let remove ov _dt = if Z.equal ov Z.one then None else Some (Z.pred ov) in
   let post x = Int x in
-  let window = new comm_group_aggregator init add remove post intv empty_val
+  let window = new comm_group_aggregator fm init add remove post intv empty_val
     result_pos group_posl in
   new once_aggregator window intv
 
-let sum_avg_once post empty_val intv result_pos arg_pos group_posl =
+let sum_avg_once post fm empty_val intv result_pos arg_pos group_posl =
   let init t = (Tuple.get_at_pos t arg_pos, 1) in
   let add (os, oc) nt = (plus os (Tuple.get_at_pos nt arg_pos), oc + 1) in
   let remove (os, oc) dt =
     if oc = 1 then None
     else Some (minus os (Tuple.get_at_pos dt arg_pos), oc - 1)
   in
-  let window = new comm_group_aggregator init add remove post intv empty_val
+  let window = new comm_group_aggregator fm init add remove post intv empty_val
     result_pos group_posl in
   new once_aggregator window intv
 
@@ -281,7 +289,7 @@ let mset_median fmed (mset, len) =
     failwith "[mset_median] internal error"
   with Break -> !med
 
-let med_once empty_val intv result_pos arg_pos group_posl =
+let med_once fm empty_val intv result_pos arg_pos group_posl =
   let init t = (Intmap.singleton (Tuple.get_at_pos t arg_pos) 1, 1) in
   let add (old_mset, oc) nt =
     let arg = Tuple.get_at_pos nt arg_pos in
@@ -307,12 +315,12 @@ let med_once empty_val intv result_pos arg_pos group_posl =
       Some (new_mset, oc - 1)
   in
   let post x = mset_median Predicate.average x in
-  let window = new comm_group_aggregator init add remove post intv empty_val
+  let window = new comm_group_aggregator fm init add remove post intv empty_val
     result_pos group_posl in
   new once_aggregator window intv
 
 
-class mono_aggregator is_better intv empty_val result_pos arg_pos group_posl =
+class mono_aggregator fm is_better intv empty_val result_pos arg_pos group_posl =
   (* is_better x y returns 1 if x better than y, 0 if they are equal, and -1
      otherwise.
      for Min: x is better than y iff x < y
@@ -385,7 +393,7 @@ class mono_aggregator is_better intv empty_val result_pos arg_pos group_posl =
         ) table
 
     method get_result =
-      if Hashtbl.length table = 0 then empty_result empty_val group_posl
+      if Hashtbl.length table = 0 then empty_result fm empty_val group_posl
       else
         begin
           let res = ref Relation.empty in
@@ -393,21 +401,23 @@ class mono_aggregator is_better intv empty_val result_pos arg_pos group_posl =
             (fun gtuple dllist ->
               let _, agg_val = Dllist.get_last dllist in
               let rtuple = Tuple.insert result_pos gtuple agg_val in
-              res := Relation.add rtuple !res
+              match fm rtuple with
+              | Some rtuple' -> res := Relation.add rtuple' !res
+              | None -> ()
             ) table;
           nonempty_result !res
         end
   end
 
-let min_once empty_val intv result_pos arg_pos group_posl =
+let min_once fm empty_val intv result_pos arg_pos group_posl =
   let is_better x y = -(Stdlib.compare x y) in
-  let window = new mono_aggregator is_better intv empty_val
+  let window = new mono_aggregator fm is_better intv empty_val
     result_pos arg_pos group_posl in
   new once_aggregator window intv
 
-let max_once empty_val intv result_pos arg_pos group_posl =
+let max_once fm empty_val intv result_pos arg_pos group_posl =
   let is_better x y = Stdlib.compare x y in
-  let window = new mono_aggregator is_better intv empty_val
+  let window = new mono_aggregator fm is_better intv empty_val
     result_pos arg_pos group_posl in
   new once_aggregator window intv
 

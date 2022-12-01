@@ -101,29 +101,6 @@ let make_relation list =
   in make Tuple_set.empty list
 
 
-let map f rel =
-  let res = ref (Tuple_set.empty) in
-    Tuple_set.iter
-      (fun t ->
-   res := Tuple_set.add (f t) !res
-      )
-      rel
-
-
-let map f rel =
-  Tuple_set.fold (fun t rel' -> Tuple_set.add (f t) rel') rel Tuple_set.empty
-
-
-
-
-
-
-(********************************)
-
-let is_empty rel =
-  Tuple_set.is_empty rel
-
-
 (*******************************************************************)
 (*** rigid predicates ***)
 
@@ -149,7 +126,7 @@ let eval_not_equal t1 t2 =
 
 (**********************************************************************)
 
-let nested_loop_join matches rel1 rel2 =
+let nested_loop_join post matches rel1 rel2 =
   let joinrel = ref Tuple_set.empty in
   let process_rel_tuple t1 =
     (* For each tuple in [rel1] we compute the columns (i.e. positions)
@@ -167,8 +144,9 @@ let nested_loop_join matches rel1 rel2 =
       Tuple_set.iter
         (fun t2 ->
            try
-             let t = Tuple.join pv t1 t2 in
-             joinrel := Tuple_set.add t !joinrel
+             match post (Tuple.join pv t1 t2) with
+             | Some t -> joinrel := Tuple_set.add t !joinrel
+             | None -> ()
            with Not_joinable -> ()
         )
         rel2
@@ -187,43 +165,44 @@ let build_hash_index key_posl rel =
     rel;
   tbl
 
-let hash_join_with_index tbl key_posl join_fun rel =
+let hash_join_with_index post tbl key_posl join_fun rel =
   let joinrel = ref Tuple_set.empty in
   Tuple_set.iter
     (fun t1 ->
       let k = List.map (Tuple.get_at_pos t1) key_posl in
       List.iter
         (fun t2 ->
-          let t = join_fun t1 t2 in
-          joinrel := Tuple_set.add t !joinrel
+          match post (join_fun t1 t2) with
+          | Some t -> joinrel := Tuple_set.add t !joinrel
+          | None -> ()
         )
         (Hashtbl.find_all tbl k)
     )
     rel;
   !joinrel
 
-let hash_join_with_cards matches card1 rel1 card2 rel2 =
+let hash_join_with_cards post matches card1 rel1 card2 rel2 =
   let key_posl2, key_posl1 = List.split matches in
   if card1 < card2 then
     let tbl = build_hash_index key_posl1 rel1 in
     let join_fun t2 t1 = Tuple.join_unchecked matches t1 t2 in
-    hash_join_with_index tbl key_posl2 join_fun rel2
+    hash_join_with_index post tbl key_posl2 join_fun rel2
   else
     let tbl = build_hash_index key_posl2 rel2 in
-    hash_join_with_index tbl key_posl1 (Tuple.join_unchecked matches) rel1
+    hash_join_with_index post tbl key_posl1 (Tuple.join_unchecked matches) rel1
 
 (** [matches] gives the columns which should match in the two
     relations in form of a list of tuples [(pos2,pos1)]: column [pos2] in
     [rel2] should match column [pos1] in [rel1] *)
-let natural_join matches rel1 rel2 =
+let natural_join post matches rel1 rel2 =
   let card1 = Tuple_set.cardinal rel1 in
   let card2 = Tuple_set.cardinal rel2 in
   if card1 = 0 || card2 = 0 then
     Tuple_set.empty
   else if card1 < 8 || card2 < 8 then
-    nested_loop_join matches rel1 rel2
+    nested_loop_join post matches rel1 rel2
   else
-    hash_join_with_cards matches card1 rel1 card2 rel2
+    hash_join_with_cards post matches card1 rel1 card2 rel2
 
 
 let in_t2_not_in_t1 t2 matches =
@@ -248,7 +227,7 @@ let in_t2_not_in_t1 t2 matches =
    to f2!  Thus, for instance, for p(x,y) AND q(z,y,x) the fields
    should be ordered by (x,y,z).
 *)
-let natural_join_sc1 matches rel1 rel2 =
+let natural_join_sc1 post matches rel1 rel2 =
   if Tuple_set.is_empty rel1 || Tuple_set.is_empty rel2 then
     Tuple_set.empty
   else
@@ -266,14 +245,16 @@ let natural_join_sc1 matches rel1 rel2 =
         if Tuple_set.mem t1 rel1 then
 
           let t2_list = in_t2_not_in_t1 t2 matches in
-          let t2' = Tuple.make_tuple (t1_list @ t2_list) in
-          joinrel := Tuple_set.add t2' !joinrel
+          match post (Tuple.make_tuple (t1_list @ t2_list)) with
+          | Some t2' -> joinrel := Tuple_set.add t2' !joinrel
+          | None -> ()
       ) rel2;
       !joinrel
     end
 
 (* Misc.subset attr2 attr1 *)
-let natural_join_sc2 matches rel1 rel2 =
+(* TODO: rewrite using filter / filter_map, see minus *)
+let natural_join_sc2 post matches rel1 rel2 =
   if Tuple_set.is_empty rel1 || Tuple_set.is_empty rel2 then
     Tuple_set.empty
   else
@@ -287,51 +268,57 @@ let natural_join_sc2 matches rel1 rel2 =
       matches)
         in
         if Tuple_set.mem t2 rel2 then
-          joinrel := Tuple_set.add t1 !joinrel
+          match post t1 with
+          | Some t1' -> joinrel := Tuple_set.add t1' !joinrel
+          | None -> ()
       ) rel1;
       !joinrel
     end
 
+let filtermap_inter = function
+  | None -> Tuple_set.inter
+  | Some f ->
+    let scan rel1 rel2 = Tuple_set.filter_map (fun t ->
+      if Tuple_set.mem t rel2 then f t else None) rel1
+    in
+    (fun rel1 rel2 ->
+      if Tuple_set.cardinal rel1 <= Tuple_set.cardinal rel2 then
+        scan rel1 rel2
+      else
+        scan rel2 rel1
+    )
 
-let cross_product rel1 rel2 =
-  natural_join [] rel1 rel2
-
-
-
-let reorder new_pos rel =
-  let new_rel = ref Tuple_set.empty in
-  Tuple_set.iter (fun t ->
-    let t' = Tuple.projections new_pos t in
-    new_rel := Tuple_set.add t' !new_rel
-  ) rel;
-  !new_rel
+let filtermap_diff = function
+  | None -> Tuple_set.diff
+  | Some f ->
+    (fun rel1 rel2 ->
+      Tuple_set.filter_map (fun t ->
+      if Tuple_set.mem t rel2 then None else f t) rel1
+    )
 
 (* not set difference, but the diff operator as defined in Abiteboul, page 89 *)
-let minus posl rel1 rel2 =
-  Tuple_set.filter
-    (fun t ->
-      let t' = (Tuple.projections posl t) in
-      not (Tuple_set.mem t' rel2)
+let minus opt_post posl =
+  match opt_post with
+  | None ->
+    (fun rel1 rel2 ->
+      Tuple_set.filter
+        (fun t ->
+          let t' = Tuple.projections posl t in
+          not (Tuple_set.mem t' rel2)
+        )
+        rel1
     )
-    rel1
+  | Some f ->
+    (fun rel1 rel2 ->
+      Tuple_set.filter_map
+        (fun t ->
+          let t' = Tuple.projections posl t in
+          if Tuple_set.mem t' rel2 then None else f t
+        )
+        rel1
+    )
 
-
-
-
-(* given the "predicate formula" [p] and a relation [rel] ("having the
-   same signature" as [p]), obtain the relation containing those
-   tuples of [rel] which satisfy [p] *)
-let selectp p rel =
-  let res = ref Tuple_set.empty in
-    Tuple_set.iter
-      (fun t ->
-   let b,t' = Tuple.satisfiesp p t in
-   if b then
-     res := add t' !res
-      ) rel;
-    !res
-
-
+let reorder new_pos rel = Tuple_set.map (Tuple.projections new_pos) rel
 
 
 (* Note: [proj] \cup [sel] = all positions and [proj] \cap [sel] = \emptyset
@@ -360,22 +347,23 @@ let no_constraints tlist =
    function from relations to relations; this function transforms
    [|p(x_1,\dots,x_n)|] into [|p(t_1,\dots,t_n)|]
 *)
-let eval_pred p =
+let eval_pred opt_post p =
   let tlist = Predicate.get_args p in
   if no_constraints tlist then
-    fun rel -> rel
+    begin
+      match opt_post with
+      | None -> (fun rel -> rel)
+      | Some f -> Tuple_set.filter_map f
+    end
   else
-    fun rel ->
-      let res = ref Tuple_set.empty in
-      Tuple_set.iter
-        (fun t ->
-           let b, t' = Tuple.satisfiesp tlist t in
-           if b then
-             res := add t' !res;
-        ) rel;
-      !res
-
-
-(* the columns in [posl] are eliminated *)
-let project_away posl rel =
-  map (Tuple.project_away posl) rel
+    begin
+      match opt_post with
+      | None -> Tuple_set.filter_map (fun t ->
+            let b, t' = Tuple.satisfiesp tlist t in
+            if b then Some t' else None
+          )
+      | Some f -> Tuple_set.filter_map (fun t ->
+            let b, t' = Tuple.satisfiesp tlist t in
+            if b then f t' else None
+          )
+    end

@@ -509,110 +509,130 @@ let add_index f i tsi db =
   in
   update [] f
 
+let premap_post g f =
+  match g with
+  | Some g' -> Some (fun x -> g' (f x))
+  | None -> Some (fun x -> Some (f x))
+
+let bind_post g f =
+  match g with
+  | Some g' -> Some (fun x -> Option.bind (f x) g')
+  | None -> Some f
+
+let apply_post = function
+  | Some f -> Relation.filter_map f
+  | None -> (fun rel -> rel)
+
 let add_ext neval f =
   let neval0 = Neval.get_last neval in
   let loc = ref 0 in
   let next_loc () = incr loc; !loc in
-  let rec add_ext = function
+  let rec add_ext post = function
   | Pred p ->
-    EPred (p, Relation.eval_pred p, Queue.create(), next_loc())
+    let comp = Relation.eval_pred post p in
+    EPred (p, comp, Queue.create(), next_loc())
 
   | Let (p, f1, f2) ->
+    let ff1 = add_ext None f1 in
+    let ff2 = add_ext post f2 in
     let attr1 = MFOTL.free_vars f1 in
     let attrp = Predicate.pvars p in
     let new_pos = List.map snd (Table.get_matches attr1 attrp) in
-    let comp = Relation.reorder new_pos in
-    ELet (p, comp, add_ext f1, add_ext f2, {llast = neval0}, next_loc())
+    let comp =
+      if Misc.is_id_permutation (List.length attr1) new_pos then
+        (fun rel -> rel)
+      else
+        Relation.reorder new_pos
+    in
+    ELet (p, comp, ff1, ff2, {llast = neval0}, next_loc())
 
   | LetPast _ -> failwith "LETPAST is not supported except in -verified mode"
 
   | Equal (t1, t2) ->
-    let rel = Relation.eval_equal t1 t2 in
+    let rel = apply_post post (Relation.eval_equal t1 t2) in
     ERel (rel, next_loc())
 
   | Neg (Equal (t1, t2)) ->
-    let rel = Relation.eval_not_equal t1 t2 in
+    let rel = apply_post post (Relation.eval_not_equal t1 t2)
+    in
     ERel (rel, next_loc())
 
-  | Neg f -> ENeg (add_ext f, next_loc())
+  | Neg f ->
+    let ff = add_ext None f in
+    let ff' = ENeg (ff, next_loc()) in
+    (match post with
+    | None -> ff'
+    | Some g -> EExists (Relation.filter_map g, ff', next_loc())
+    )
 
   | Exists (vl, f1) ->
-    let ff1 = add_ext f1 in
     let attr1 = MFOTL.free_vars f1 in
     let pos = List.map (fun v -> Misc.get_pos v attr1) vl in
     let pos = List.sort Stdlib.compare pos in
-    let comp = Relation.project_away pos in
-    EExists (comp,ff1,next_loc())
+    let post' = premap_post post (Tuple.project_away pos) in
+    add_ext post' f1
 
   | Or (f1, f2) ->
-    let ff1 = add_ext f1 in
-    let ff2 = add_ext f2 in
     let attr1 = MFOTL.free_vars f1 in
     let attr2 = MFOTL.free_vars f2 in
-    let comp =
+    let post2 =
       if attr1 = attr2 then
-        Relation.union
+        post
       else
         let matches = Table.get_matches attr2 attr1 in
         let new_pos = List.map snd matches in
-        (* first reorder rel2 *)
-        (fun rel1 rel2 ->
-           let rel2' = Relation.reorder new_pos rel2 in
-           Relation.union rel1 rel2'
-        )
+        premap_post post (Tuple.projections new_pos)
     in
+    let ff1 = add_ext post f1 in
+    let ff2 = add_ext post2 f2 in
+    let comp = Relation.union in
     EOr (comp, ff1, ff2, {arel = None}, next_loc())
 
   | And (f1, f2) ->
     let attr1 = MFOTL.free_vars f1 in
     let attr2 = MFOTL.free_vars f2 in
-    let ff1 = add_ext f1 in
-    let f2_is_special = Rewriting.is_special_case attr1 f2 in
-    let ff2 =
-      if f2_is_special then ERel (Relation.empty, next_loc())
-      else match f2 with
-        | Neg f2' -> add_ext f2'
-        | _ -> add_ext f2
-    in
-    let comp =
-      if f2_is_special then
-        if Misc.subset attr2 attr1 then
-          let filter_cond = Tuple.get_filter attr1 f2 in
-          fun rel1 _ -> Relation.filter filter_cond rel1
-        else
-          let process_tuple = Tuple.get_tf attr1 f2 in
-          fun rel1 _ ->
-            Relation.fold
-              (fun t res ->
-                match process_tuple t with
-                | None -> res
-                | Some t' -> Relation.add t' res)
-              rel1 Relation.empty
+    if Rewriting.is_special_case attr1 f2 then
+      if Misc.subset attr2 attr1 then
+        let filter_cond = Tuple.get_filter attr1 f2 in
+        let post' = bind_post post (fun t ->
+          if filter_cond t then Some t else None) in
+        add_ext post' f1
       else
+        let process_tuple = Tuple.get_tf attr1 f2 in
+        let post' = bind_post post process_tuple in
+        add_ext post' f1
+    else
+      let ff1 = add_ext None f1 in
+      let ff2 =
+        match f2 with
+        | Neg f2' -> add_ext None f2'
+        | _ -> add_ext None f2
+      in
+      let postf = match post with None -> (fun t -> Some t) | Some g -> g in
+      let comp =
         match f2 with
         | Neg _ ->
           if attr1 = attr2 then
-            fun rel1 rel2 -> Relation.diff rel1 rel2
+            Relation.filtermap_diff post
           else
             begin
               assert(Misc.subset attr2 attr1);
               let posl = List.map (fun v -> Misc.get_pos v attr1) attr2 in
-              fun rel1 rel2 -> Relation.minus posl rel1 rel2
+              Relation.minus post posl
             end
-
         | _ ->
           let matches1 = Table.get_matches attr1 attr2 in
           let matches2 = Table.get_matches attr2 attr1 in
           if attr1 = attr2 then
-            fun rel1 rel2 -> Relation.inter rel1 rel2
+            Relation.filtermap_inter post
           else if Misc.subset attr1 attr2 then
-            fun rel1 rel2 -> Relation.natural_join_sc1 matches2 rel1 rel2
+            Relation.natural_join_sc1 postf matches2
           else if Misc.subset attr2 attr1 then
-            fun rel1 rel2 -> Relation.natural_join_sc2 matches1 rel1 rel2
+            Relation.natural_join_sc2 postf matches1
           else
-            fun rel1 rel2 -> Relation.natural_join matches1 rel1 rel2
-    in
-    EAnd (comp, ff1, ff2, {arel = None}, next_loc())
+            Relation.natural_join postf matches1
+      in
+      EAnd (comp, ff1, ff2, {arel = None}, next_loc())
 
   | Aggreg (t_y, y, op, x, glist, Once (intv, f)) ->
     let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
@@ -620,16 +640,17 @@ let add_ext neval f =
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
+    let postf = match post with None -> (fun t -> Some t) | Some g -> g in
     let state =
       match op with
-      | Cnt -> Aggreg.cnt_once default intv 0 posG
-      | Min -> Aggreg.min_once default intv 0 posx posG
-      | Max -> Aggreg.max_once default intv 0 posx posG
-      | Sum -> Aggreg.sum_once default intv 0 posx posG
-      | Avg -> Aggreg.avg_once default intv 0 posx posG
-      | Med -> Aggreg.med_once default intv 0 posx posG
+      | Cnt -> Aggreg.cnt_once postf default intv 0 posG
+      | Min -> Aggreg.min_once postf default intv 0 posx posG
+      | Max -> Aggreg.max_once postf default intv 0 posx posG
+      | Sum -> Aggreg.sum_once postf default intv 0 posx posG
+      | Avg -> Aggreg.avg_once postf default intv 0 posx posG
+      | Med -> Aggreg.med_once postf default intv 0 posx posG
     in
-    EAggOnce ({op; default}, state, add_ext f, next_loc())
+    EAggOnce ({op; default}, state, add_ext None f, next_loc())
 
   | Aggreg (t_y, y, op, x, glist, f)  ->
     let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
@@ -637,23 +658,24 @@ let add_ext neval f =
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
+    let postf = match post with None -> (fun t -> Some t) | Some g -> g in
     let comp =
       match op with
-      | Cnt -> Aggreg.cnt default 0 posG
-      | Sum -> Aggreg.sum default 0 posx posG
-      | Min -> Aggreg.min default 0 posx posG
-      | Max -> Aggreg.max default 0 posx posG
-      | Avg -> Aggreg.avg default 0 posx posG
-      | Med -> Aggreg.med default 0 posx posG
+      | Cnt -> Aggreg.cnt postf default 0 posG
+      | Sum -> Aggreg.sum postf default 0 posx posG
+      | Min -> Aggreg.min postf default 0 posx posG
+      | Max -> Aggreg.max postf default 0 posx posG
+      | Avg -> Aggreg.avg postf default 0 posx posG
+      | Med -> Aggreg.med postf default 0 posx posG
     in
-    EAggreg ({op; default}, comp, add_ext f, next_loc())
+    EAggreg ({op; default}, comp, add_ext None f, next_loc())
 
   | Prev (intv, f) ->
-    let ff = add_ext f in
+    let ff = add_ext post f in
     EPrev (intv, ff, {plast = neval0}, next_loc())
 
   | Next (intv, f) ->
-    let ff = add_ext f in
+    let ff = add_ext post f in
     ENext (intv, ff, {init = true}, next_loc())
 
   | Since (intv,f1,f2) ->
@@ -665,17 +687,17 @@ let add_ext neval f =
        | _ -> f1, true
       )
     in
-    let ff1 = add_ext ef1 in
-    let ff2 = add_ext f2 in
-    let saux = Optimized_mtl.init_msaux pos intv attr1 attr2 in
+    let ff1 = add_ext None ef1 in
+    let ff2 = add_ext None f2 in
+    let saux = Optimized_mtl.init_msaux post pos intv attr1 attr2 in
     let inf = {srel2 = None; saux} in
     ESince (ff1,ff2,inf, next_loc())
 
   | Once (intv,f) ->
     let attr = MFOTL.free_vars f in
     let ff1 = ERel (Relation.make_relation [Tuple.make_tuple []], next_loc()) in
-    let ff2 = add_ext f in
-    let saux = Optimized_mtl.init_msaux true intv [] attr in
+    let ff2 = add_ext None f in
+    let saux = Optimized_mtl.init_msaux post true intv [] attr in
     let inf = {srel2 = None; saux} in
     ESince (ff1,ff2,inf, next_loc())
 
@@ -688,23 +710,23 @@ let add_ext neval f =
        | _ -> f1, true
       )
     in
-    let ff1 = add_ext ef1 in
-    let ff2 = add_ext f2 in
-    let uaux = Optimized_mtl.init_muaux pos intv attr1 attr2 in
+    let ff1 = add_ext None ef1 in
+    let ff2 = add_ext None f2 in
+    let uaux = Optimized_mtl.init_muaux post pos intv attr1 attr2 in
     let inf = {ulast = neval0; urel2 = None; uaux} in
     EUntil (ff1,ff2,inf, next_loc())
 
   | Eventually (intv,f) ->
     let attr = MFOTL.free_vars f in
     let ff1 = ERel (Relation.make_relation [Tuple.make_tuple []], next_loc()) in
-    let ff2 = add_ext f in
-    let uaux = Optimized_mtl.init_muaux true intv [] attr in
+    let ff2 = add_ext None f in
+    let uaux = Optimized_mtl.init_muaux post true intv [] attr in
     let inf = {ulast = neval0; urel2 = None; uaux} in
     EUntil (ff1,ff2,inf, next_loc())
 
   | _ -> failwith "[add_ext] internal error"
   in
-  add_ext f, neval0
+  add_ext None f, neval0
 
 
 type 'a state = {
@@ -850,9 +872,6 @@ let merge_states files =
 (* MONITORING FUNCTION *)
 
 let process_index state =
-  if !Misc.verbose then
-    Printf.printf "At time point %d:\n%!" state.s_in_tp;
-
   let rec eval_loop () =
     let crt = Neval.get_next state.s_last in
     let (q, tsq) = Neval.get_data crt in
@@ -928,6 +947,8 @@ module Monitor = struct
 
   let eval_tp ctxt =
     ctxt.s_in_tp <- ctxt.s_log_tp;
+    if !Misc.verbose then
+      Printf.printf "At time point %d:\n%!" ctxt.s_in_tp;
     ignore (Neval.append (ctxt.s_log_tp, ctxt.s_log_ts) ctxt.s_neval);
     add_index ctxt.s_extf ctxt.s_log_tp ctxt.s_log_ts ctxt.s_db;
     Hashtbl.clear ctxt.s_db;
