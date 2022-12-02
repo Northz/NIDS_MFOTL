@@ -23,17 +23,14 @@ let init_args opt_fm pos intv attr1 attr2 =
     a_opt_fm = opt_fm;
   }
 
-type idx_table = (tuple, (tuple, unit) Hashtbl.t) Hashtbl.t
+type idx_table = (tuple, Relation.relation) Hashtbl.t
 
 let idx_table_insert args ixt rel =
   Relation.iter (fun tup ->
     let key = Misc.get_positions args.a_key2 tup in
     match Hashtbl.find_opt ixt key with
-    | None ->
-        let inner = Hashtbl.create 1 in
-        Hashtbl.add inner tup ();
-        Hashtbl.add ixt key inner
-    | Some inner -> Hashtbl.replace inner tup ()
+    | None -> Hashtbl.add ixt key (Relation.singleton tup)
+    | Some inner -> Hashtbl.replace ixt key (Relation.add tup inner)
   ) rel
 
 let idx_table_remove args ixt rel =
@@ -42,8 +39,11 @@ let idx_table_remove args ixt rel =
     match Hashtbl.find_opt ixt key with
     | None -> ()
     | Some inner ->
-        Hashtbl.remove inner tup;
-        if Hashtbl.length inner = 0 then Hashtbl.remove ixt key
+        let inner' = Relation.remove tup inner in
+        if Relation.is_empty inner' then
+          Hashtbl.remove ixt key
+        else
+          Hashtbl.replace ixt key inner'
   ) rel
 
 let idx_table_inv_semijoin args ixt rel =
@@ -52,8 +52,7 @@ let idx_table_inv_semijoin args ixt rel =
   else
     begin
       let res = ref Relation.empty in
-      let add_keys inner =
-        Hashtbl.iter (fun tup () -> res := Relation.add tup !res) inner in
+      let add_keys inner = res := Relation.union !res inner in
       if args.a_pos || Hashtbl.length ixt <= Relation.cardinal rel then
         Hashtbl.iter (fun key inner ->
           if Relation.mem key rel <> args.a_pos then add_keys inner) ixt
