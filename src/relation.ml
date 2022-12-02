@@ -199,7 +199,7 @@ let natural_join post matches rel1 rel2 =
   let card2 = Tuple_set.cardinal rel2 in
   if card1 = 0 || card2 = 0 then
     Tuple_set.empty
-  else if card1 < 8 || card2 < 8 then
+  else if matches = [] || card1 < 8 || card2 < 8 then
     nested_loop_join post matches rel1 rel2
   else
     hash_join_with_cards post matches card1 rel1 card2 rel2
