@@ -33,8 +33,7 @@ let idx_table_insert args ixt rel =
         let inner = Hashtbl.create 1 in
         Hashtbl.add inner tup ();
         Hashtbl.add ixt key inner
-    | Some inner ->
-        if not (Hashtbl.mem inner tup) then Hashtbl.add inner tup ()
+    | Some inner -> Hashtbl.replace inner tup ()
   ) rel
 
 let idx_table_remove args ixt rel =
@@ -44,7 +43,7 @@ let idx_table_remove args ixt rel =
     | None -> ()
     | Some inner ->
         Hashtbl.remove inner tup;
-        if Hashtbl.length ixt = 0 then Hashtbl.remove ixt key
+        if Hashtbl.length inner = 0 then Hashtbl.remove ixt key
   ) rel
 
 let idx_table_inv_semijoin args ixt rel =
