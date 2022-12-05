@@ -5352,9 +5352,14 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
     \<Longrightarrow> wf_trigger_aux \<sigma> V R args \<phi>' \<psi>' aux (progress \<sigma> P (Formula.Trigger \<phi>'' I \<psi>') j)
     \<Longrightarrow> wf_mformula \<sigma> j P V n R (MAndTrigger (fv \<alpha>') \<alpha> buf1 args \<phi> \<psi> buf2 nts aux) 
       (Formula.And \<alpha>' (Formula.Trigger \<phi>'' I \<psi>'))"
-  | And_Release: "\<not> mem I 0 \<Longrightarrow> bounded I \<Longrightarrow> Formula.fv \<phi>' = Formula.fv \<psi>'
-    \<Longrightarrow> wf_mformula \<sigma> j P V n R aux (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>')
-    \<Longrightarrow> wf_mformula \<sigma> j P V n R aux (Formula.And \<alpha>' (Formula.Release \<phi>' I \<psi>'))"
+(* thm and_release_safe_bounded_def[of \<alpha>' \<phi>' I \<psi>']
+thm hello *)
+  | And_Release: "\<not> mem I 0 \<Longrightarrow> bounded I \<Longrightarrow> Formula.fv \<phi>' = Formula.fv \<psi>' 
+    \<Longrightarrow> Formula.fv \<psi>' \<subseteq> Formula.fv \<alpha>' \<Longrightarrow> safe_formula \<alpha>'
+    \<Longrightarrow> safe_formula (release_safe_bounded \<phi>' I \<psi>')
+    \<Longrightarrow> wf_mbuf2' \<sigma> P V j n R (formula.And \<alpha>' (formula.Neg (Formula.eventually I Formula.TT))) (formula.And \<alpha>' (release_safe_bounded \<phi>' I \<psi>')) buf
+    \<Longrightarrow> wf_mformula \<sigma> j P V n R (MOr L\<^sub>M R\<^sub>M buf) (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>')
+    \<Longrightarrow> wf_mformula \<sigma> j P V n R (MOr L\<^sub>M R\<^sub>M buf) (Formula.And \<alpha>' (Formula.Release \<phi>' I \<psi>'))"
   | Ands: "list_all2 (\<lambda>\<phi> \<phi>'. wf_mformula \<sigma> j P V n R \<phi> \<phi>') l (l_pos @ map remove_neg l_neg)
     \<Longrightarrow> wf_mbufn (progress \<sigma> P (Formula.Ands l') j) 
       (map (\<lambda>\<psi>. progress \<sigma> P \<psi> j) (l_pos @ map remove_neg l_neg)) 
@@ -5420,9 +5425,11 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
     \<Longrightarrow> wf_mbuf2' \<sigma> P V j n R \<phi>' \<psi>' buf \<Longrightarrow> wf_ts \<sigma> P j \<phi>' \<psi>' nts
     \<Longrightarrow> wf_trigger_aux \<sigma> V R args \<phi>' \<psi>' aux (progress \<sigma> P (Formula.Trigger \<phi>'' I \<psi>') j)
     \<Longrightarrow> wf_mformula \<sigma> j P V n R (MTrigger args \<phi> \<psi> buf nts aux) (Formula.Trigger \<phi>'' I \<psi>')"
-  | Release_0: "mem I 0 \<Longrightarrow> bounded I \<Longrightarrow> Formula.fv \<phi>' \<subseteq> Formula.fv \<psi>'
-    \<Longrightarrow> wf_mformula \<sigma> j P V n R aux (release_safe_0 \<phi>' I \<psi>')
-    \<Longrightarrow> wf_mformula \<sigma> j P V n R aux (Formula.Release \<phi>' I \<psi>')"
+  | Release_0: "mem I 0 \<Longrightarrow> bounded I \<Longrightarrow> Formula.fv \<phi>' \<subseteq> Formula.fv \<psi>' 
+    \<Longrightarrow> safe_formula \<psi>' \<Longrightarrow> safe_formula (release_safe_0 \<phi>' I \<psi>')
+    \<Longrightarrow> wf_mbuf2' \<sigma> P V j n R (Formula.Until \<psi>' I (Formula.And \<psi>' \<phi>')) (always_safe_0 I \<psi>') buf
+    \<Longrightarrow> wf_mformula \<sigma> j P V n R (MOr L\<^sub>M R\<^sub>M buf) (release_safe_0 \<phi>' I \<psi>')
+    \<Longrightarrow> wf_mformula \<sigma> j P V n R (MOr L\<^sub>M R\<^sub>M buf) (Formula.Release \<phi>' I \<psi>')"
   | MatchP: "(case to_mregex r of (mr', \<phi>s') 
       \<Rightarrow> list_all2 (wf_mformula \<sigma> j P V n R) \<phi>s \<phi>s' \<and> mr = mr')
     \<Longrightarrow> mrs = sorted_list_of_set (RPDs mr) \<Longrightarrow> Regex.safe_regex fv rgx_safe_pred Past Strict r
@@ -6223,6 +6230,11 @@ next
 next
   case (And_Release \<phi> \<phi>' I \<psi>')
   note fvs = release_fvi(3)[of 0 \<phi> \<phi>' I \<psi>']
+  have safe_release_bdd: "safe_formula (release_safe_bounded \<phi>' I \<psi>')"
+    using And_Release(1-7) 
+    by (auto simp: safe_release_bdd_iff)
+  have "fv \<psi>' \<subseteq> fv \<phi>"
+    using And_Release(7) by auto
   have fv_eq: "fv (formula.And \<phi> (formula.Release \<phi>' I \<psi>')) = fv \<phi>"
     using And_Release(7)
     by auto
@@ -6244,6 +6256,17 @@ next
           And_Release.IH(4)[OF release_subformulas(2)]
       And_Release.prems(2)
     by auto
+  then obtain L\<^sub>M R\<^sub>M buf 
+    where obs: "wf_mbuf2' \<sigma> P V 0 n R (formula.And \<phi> (formula.Neg (Formula.eventually I Formula.TT))) (formula.And \<phi> (release_safe_bounded \<phi>' I \<psi>')) buf"
+      "wf_mformula \<sigma> 0 P V n R (MOr L\<^sub>M R\<^sub>M buf) (and_release_safe_bounded \<phi> \<phi>' I \<psi>')" 
+      "minit0 n (and_release_safe_bounded \<phi> \<phi>' I \<psi>') = MOr L\<^sub>M R\<^sub>M buf"
+    using safe_release_bdd And_Release(1-7) 
+    apply (atomize_elim)
+    apply (rule_tac x="([],[])" in exI)
+    apply (rule_tac x="(MAnd (fv \<phi>) (minit0 n \<phi>) True {} (MNeg (minit0 n (Formula.eventually I Formula.TT))) ([], []))" in exI)
+    apply (rule_tac x="(MAnd (fv \<phi>) (minit0 n \<phi>) True (fv \<phi>' \<union> fv \<psi>') (minit0 n (release_safe_bounded \<phi>' I \<psi>')) ([], []))" in exI)
+    by (auto simp: wf_mbuf2'_def wf_mbuf2_def eventually_def release_safe_bounded_def 
+        always_safe_bounded_def safe_assignment_iff and_release_safe_bounded_def)
   have "\<not> safe_assignment (fv \<phi>) (formula.Release \<phi>' I \<psi>')"
     unfolding safe_assignment_def
     by auto
@@ -6252,11 +6275,13 @@ next
     by auto
   moreover have "\<not> is_constraint (formula.Release \<phi>' I \<psi>')"
     by auto
-  ultimately have "minit0 n (and_release_safe_bounded \<phi> \<phi>' I \<psi>') 
-    = minit0 n (formula.And \<phi> (formula.Release \<phi>' I \<psi>'))"
+  ultimately have "minit0 n (formula.And \<phi> (formula.Release \<phi>' I \<psi>'))
+    = minit0 n (and_release_safe_bounded \<phi> \<phi>' I \<psi>') "
     by auto
-  then show ?case using wf_mformula.And_Release[OF And_Release(6,5,4) wf_formula(1)]
-    by auto
+  then show ?case 
+    using wf_mformula.And_Release[OF And_Release(6,5,4) \<open>fv \<psi>' \<subseteq> fv \<phi>\<close> 
+        And_Release(1) safe_release_bdd obs(1,2)]
+    by (clarsimp simp: obs)
 next
   case (Ands l pos neg)
   note posneg = "Ands.hyps"(1)
@@ -6503,12 +6528,20 @@ next
   then show ?case by auto
 next
   case (Release_0 \<phi> I \<psi>)
-  have "wf_mformula \<sigma> 0 P V n R (minit0 n (release_safe_0 \<phi> I \<psi>)) (release_safe_0 \<phi> I \<psi>)"
+  hence "safe_formula \<psi>"
+    by auto
+  moreover have "wf_mformula \<sigma> 0 P V n R (minit0 n (release_safe_0 \<phi> I \<psi>)) (release_safe_0 \<phi> I \<psi>)"
     using Release_0.IH[OF Release_0.prems[unfolded release_fvi(1)]]
     by auto
-  then show ?case
+  moreover with this have "safe_formula (release_safe_0 \<phi> I \<psi>)"
+    unfolding release_safe_0_def
+    by (cases rule: wf_mformula.cases)
+      (auto simp: packagg_def split: option.splits)
+  moreover have "wf_mbuf2' \<sigma> P V 0 n R (formula.Until \<psi> I (formula.And \<psi> \<phi>)) (always_safe_0 I \<psi>) ([],[])"
+    by (auto simp: wf_mbuf2'_def wf_mbuf2_def)
+  ultimately show ?case
     using minit0_release_0[OF Release_0(1)] wf_mformula.Release_0[OF Release_0(1-2,4)]
-    by (auto)
+    by (auto simp: release_safe_0_def)
 next
   case (Release \<phi> I \<psi>)
   then show ?case 
@@ -11950,66 +11983,18 @@ next
         elim!: wf_mbufn_take list_all2_appendI
         elim: mbufn_take_induct[OF _ wf_mbufn_add[OF wf_buf]])
 next
-(* next
-  case (And_Release I \<phi>' \<psi>' P v n R aux \<alpha>')
-  
-  define zs where "zs = fst (meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db aux)"
-  define \<chi> where "\<chi> = snd (meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db aux)"
-
-  have ztuple_eq: "(meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db aux) = (zs, \<chi>)"
-    using zs_def \<chi>_def
-    by auto
-
-  have IH:
-    "wf_mformula \<sigma> (j + \<delta>) P' v n R \<chi> (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>')"
-    "list_all2 (\<lambda>i. qtable n (fv (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>')) (mem_restr R) (\<lambda>va. Formula.sat \<sigma> v (map the va) i (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>')))
-     [Monitor.progress \<sigma> P (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>') j..<Monitor.progress \<sigma> P' (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>') (j + \<delta>)] zs"
-    using And_Release.IH[OF And_Release.prems(1)]
-    unfolding ztuple_eq
-    by auto
-  have "wf_mformula \<sigma> (j + \<delta>) P' v n R \<chi> (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>'))"
-    using wf_mformula.And_Release[OF And_Release(1-3) IH(1)]
-    by auto
-  moreover have "list_all2
-       (\<lambda>i. qtable n (fv (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>'))) (mem_restr R) (\<lambda>va. Formula.sat \<sigma> v (map the va) i (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>'))))
-       [Monitor.progress \<sigma> P (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) j..<Monitor.progress \<sigma> P' (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) (j + \<delta>)] zs"
-  proof -
-    have "length [Monitor.progress \<sigma> P (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>') j..<Monitor.progress \<sigma> P' (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>') (j + \<delta>)] = length zs"
-      using IH(2)
-      unfolding list_all2_iff
-      by auto
-    
-    then have "length [Monitor.progress \<sigma> P (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) j..<Monitor.progress \<sigma> P' (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) (j + \<delta>)] =
-    length zs"
-      by (auto simp only: progress_and_release_rewrite_bounded[OF And_Release(1-2)])
-    moreover have "\<And>i r. (i, r) \<in>set (zip [Monitor.progress \<sigma> P (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) j..<Monitor.progress \<sigma> P' (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) (j + \<delta>)] zs) \<Longrightarrow>
-        qtable n (fv (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>'))) (mem_restr R) (\<lambda>va. Formula.sat \<sigma> v (map the va) i (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>'))) r"
-    proof -
-      fix i r
-      assume "(i, r) \<in>set (zip [Monitor.progress \<sigma> P (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) j..<Monitor.progress \<sigma> P' (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')) (j + \<delta>)] zs)"
-      then have "(i, r) \<in>set (zip [Monitor.progress \<sigma> P (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>') j..<Monitor.progress \<sigma> P' (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>') (j + \<delta>)] zs)"
-        by (auto simp only: progress_and_release_rewrite_bounded[OF And_Release(1-2),symmetric])
-      then have qtable: "qtable n (fv (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>')) (mem_restr R) (\<lambda>va. Formula.sat \<sigma> v (map the va) i (and_release_safe_bounded \<alpha>' \<phi>' I \<psi>')) r"
-        using IH(2)
-        unfolding list_all2_iff
-        by auto
-      
-      show "qtable n (fv (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>'))) (mem_restr R) (\<lambda>va. Formula.sat \<sigma> v (map the va) i (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>'))) r"
-        using qtable release_fvi(3) sat_and_release_rewrite[OF And_Release(2,1)]
-        unfolding qtable_def
-        by (auto intro!: qtableI[of n "(fv (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')))" r "(mem_restr R)" "(\<lambda>va. Formula.sat \<sigma> v (map the va) i (formula.And \<alpha>' (formula.Release \<phi>' I \<psi>')))"])
-    qed
-    ultimately show ?thesis
-      unfolding list_all2_iff
-      by blast
-  qed
-  ultimately show ?case using ztuple_eq by auto *)
   case (MOr \<phi> \<psi> buf)
   from MOr.prems obtain \<phi>'' \<psi>'' \<alpha>' J where
     \<phi>'_eq: "\<phi>' = \<phi>'' \<or>\<^sub>F \<psi>'' \<or> \<phi>' = \<alpha>' \<and>\<^sub>F (\<phi>'' \<^bold>R J \<psi>'') \<or> \<phi>' = \<phi>'' \<^bold>R J \<psi>''"
     by (cases rule: wf_mformula.cases)
       auto
-  have "S, E \<turnstile> \<phi>''" and "S, E \<turnstile> \<psi>''"
+  have pred_mappings: "rel_mapping (\<le>) P P'"
+    "pred_mapping (\<lambda>x. x \<le> j) P"
+    "pred_mapping (\<lambda>x. x \<le> j + \<delta>) P'"
+    using MOr.prems by auto
+  have wty_phi: "S, E \<turnstile> \<phi>''" 
+    and wty_psi: "S, E \<turnstile> \<psi>''"
+    and wty_alpha: "\<phi>' = \<alpha>' \<and>\<^sub>F (\<phi>'' \<^bold>R J \<psi>'') \<Longrightarrow> S, E \<turnstile> \<alpha>'"
      apply (cases rule: wty_formula.cases)
     using \<phi>'_eq MOr.prems(3)
     by (auto dest: wty_formulaD)
@@ -12023,43 +12008,156 @@ next
       by (cases rule: wf_mformula.cases)
         (auto dest!: MOr.IH split: if_splits prod.splits intro!: wf_mformula.Or qtable_union
           elim: mbuf2_take_add'(1) list.rel_mono_strong[OF mbuf2_take_add'(2)])
-  }
-  moreover {assume phi'_eq: "\<phi>' = \<alpha>' \<and>\<^sub>F (\<phi>'' \<^bold>R J \<psi>'')"
-    with MOr.prems have wf_MOr: "wf_mformula \<sigma> j P V n R (MOr \<phi> \<psi> buf)
-     ((\<alpha>' \<and>\<^sub>F \<not>\<^sub>F Formula.eventually J Formula.TT) \<or>\<^sub>F \<alpha>' \<and>\<^sub>F release_safe_bounded \<phi>'' J \<psi>'')"
+  } moreover {
+    let ?ff = "\<not>\<^sub>F Formula.eventually J Formula.TT" 
+      and ?Rbdd = "release_safe_bounded \<phi>'' J \<psi>''"
+      and ?AndRbdd = "and_release_safe_bounded \<alpha>' \<phi>'' J \<psi>''"
+    assume phi'_eq: "\<phi>' = \<alpha>' \<and>\<^sub>F (\<phi>'' \<^bold>R J \<psi>'')"
+    (* obtain hyps for inductive hypothesis *)
+    hence wtys: "S, E \<turnstile> \<alpha>' \<and>\<^sub>F ?ff" "S, E \<turnstile> \<alpha>' \<and>\<^sub>F ?Rbdd"
+      using wty_phi wty_psi wty_alpha[OF phi'_eq]
+      by (auto simp: Formula.eventually_def release_safe_bounded_def 
+          always_safe_bounded_def once_def intro!: wty_formula.intros)
+    have progress_eq: "progress \<sigma> W ?AndRbdd i 
+      = min (progress \<sigma> W (\<alpha>' \<and>\<^sub>F ?ff) i) (progress \<sigma> W (\<alpha>' \<and>\<^sub>F ?Rbdd) i)" for i W
+      by (clarsimp simp: and_release_safe_bounded_def)
+    from MOr.prems have "\<not> mem J 0" and "bounded J" 
+      and fvs: "FV \<phi>'' = FV \<psi>''" "FV \<psi>'' \<subseteq> FV \<alpha>'" "FV \<alpha>' \<union> FV \<psi>'' = FV \<alpha>'"
+      and safes: "safe_formula \<alpha>'" "safe_formula ?Rbdd" 
+      and wf_buf: "wf_mbuf2' \<sigma> P V j n R (\<alpha>' \<and>\<^sub>F ?ff) (\<alpha>' \<and>\<^sub>F ?Rbdd) buf"
+      by (cases rule: wf_mformula.cases; force simp: phi'_eq)+
+    from MOr.prems have wf_MOr: "wf_mformula \<sigma> j P V n R (MOr \<phi> \<psi> buf) ?AndRbdd"
+      by (cases rule: wf_mformula.cases; clarsimp simp: phi'_eq)
+    hence wf_psi: "wf_mformula \<sigma> j P V n R \<psi> (\<alpha>' \<and>\<^sub>F ?Rbdd)"
       by (cases rule: wf_mformula.cases; clarsimp simp: and_release_safe_bounded_def)
-    then obtain blah where wf_blah: "wf_mformula \<sigma> j P V n R blah (\<alpha>' \<and>\<^sub>F release_safe_bounded \<phi>'' J \<psi>'')"
-      by (cases rule: wf_mformula.cases; clarsimp simp: and_release_safe_bounded_def)
-    then obtain \<alpha>\<^sub>M where wf_alpha: "wf_mformula \<sigma> j P V n R \<alpha>\<^sub>M \<alpha>'"
+    have wf_phi: "wf_mformula \<sigma> j P V n R \<phi> (\<alpha>' \<and>\<^sub>F ?ff)"
       using wf_MOr
-      apply (cases rule: wf_mformula.cases; clarsimp simp: and_release_safe_bounded_def packagg_def split: if_splits option.splits)
-      sorry
-    from MOr.prems obtain \<alpha>\<^sub>M where "wf_mformula \<sigma> j P V n R \<alpha>\<^sub>M \<alpha>'"
-      using phi'_eq
-      apply (cases rule: wf_mformula.cases; clarsimp simp: and_release_safe_bounded_def)
-      apply (erule wf_mformula.cases; clarsimp simp: packagg_def split: if_splits option.splits)+
-      done (* 12 secs *)
-    thm MOr.IH[OF _ MOr.prems(2,3)]
-    obtain \<phi>\<^sub>M' where "wf_mformula \<sigma> j P V n R \<phi>\<^sub>M' \<phi>''"
-      using MOr.prems \<open>\<phi>' = formula.And \<alpha>' (formula.Release \<phi>'' J \<psi>'')\<close>
-      apply (cases rule: wf_mformula.cases; clarsimp simp: and_release_safe_bounded_def)
-      apply (erule wf_mformula.cases; clarsimp?)
-      apply (erule wf_mformula.cases; clarsimp?)
-      apply (erule wf_mformula.cases; clarsimp?)
-      subgoal for \<phi> \<phi>' \<psi>' \<psi>''' pos a b
-        apply (erule wf_mformula.cases; clarsimp?)
-        sorry
-      sorry
-    note phi'_eq
+      by (cases rule: wf_mformula.cases; clarsimp simp: 
+          and_release_safe_bounded_def Formula.eventually_def)
+    (* apply inductive hypothesis *)
+    obtain \<phi>s \<phi>\<^sub>M and \<psi>s \<psi>\<^sub>M and \<phi>\<psi>s buf'
+      where meval_defs: "meval (j + \<delta>) n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<phi> = (\<phi>s, \<phi>\<^sub>M)"
+        "meval (j + \<delta>) n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<psi> = (\<psi>s, \<psi>\<^sub>M)"
+        "mbuf2_take (\<union>) (mbuf2_add \<phi>s \<psi>s buf) = (\<phi>\<psi>s, buf')"
+      by (meson eq_snd_iff)
+    hence preIH: "wf_mformula \<sigma> (j + \<delta>) P' V n R \<phi>\<^sub>M (\<alpha>' \<and>\<^sub>F ?ff)"
+      "list_all2 (\<lambda>i. qtable n (FV (\<alpha>' \<and>\<^sub>F ?ff)) (mem_restr R) (\<lambda>v. \<langle>\<sigma>, V, v, i\<rangle> \<Turnstile>\<^sub>M \<alpha>' \<and>\<^sub>F ?ff))
+        [progress \<sigma> P (\<alpha>' \<and>\<^sub>F ?ff) j..< progress \<sigma> P' (\<alpha>' \<and>\<^sub>F ?ff) (j + \<delta>)] \<phi>s"
+      "wf_mformula \<sigma> (j + \<delta>) P' V n R \<psi>\<^sub>M (\<alpha>' \<and>\<^sub>F ?Rbdd)"
+      "list_all2 (\<lambda>i. qtable n (FV (\<alpha>' \<and>\<^sub>F ?Rbdd)) (mem_restr R) (\<lambda>v. \<langle>\<sigma>, V, v, i\<rangle> \<Turnstile>\<^sub>M \<alpha>' \<and>\<^sub>F ?Rbdd))
+       [Monitor.progress \<sigma> P (\<alpha>' \<and>\<^sub>F ?Rbdd) j..<Monitor.progress \<sigma> P' (\<alpha>' \<and>\<^sub>F ?Rbdd) (j + \<delta>)] \<psi>s"
+      using MOr.IH(1)[OF wf_phi MOr.prems(2) wtys(1)] MOr.IH(2)[OF wf_psi MOr.prems(2) wtys(2)]
+      by auto
+    note mbuf'_obs = mbuf2_take_add'[OF meval_defs(3) wf_buf pred_mappings(1) 
+        preIH(2,4) _ pred_mappings(2,3)]
+    have IH1: "wf_mformula \<sigma> (j + \<delta>) P' V n R (MOr \<phi>\<^sub>M \<psi>\<^sub>M buf') ?AndRbdd"
+      using MOr.prems meval_defs preIH
+      unfolding phi'_eq 
+      by (cases rule: wf_mformula.cases)
+        (auto simp: and_release_safe_bounded_def split: prod.splits
+          intro!: wf_mformula.And_Release wf_mformula.Or[OF preIH(1,3)]
+          elim: mbuf2_take_add'(1))
+    have IH2: 
+      "list_all2 (\<lambda>i. qtable n (fv ?AndRbdd) (mem_restr R) (\<lambda>v. \<langle>\<sigma>, V, v, i\<rangle> \<Turnstile>\<^sub>M ?AndRbdd))
+        [progress \<sigma> P ?AndRbdd j..< progress \<sigma> P' ?AndRbdd (j + \<delta>)] \<phi>\<psi>s"
+      using MOr.prems meval_defs preIH
+      unfolding phi'_eq 
+      apply (cases rule: wf_mformula.cases, unfold progress_eq)
+      by (rule list.rel_mono_strong[OF mbuf'_obs(2)])
+        (auto simp: fvs and_release_safe_bounded_def intro!: qtable_union)
+    (* translate encoding *)
+    have key: "(\<lambda>i. qtable n (FV (\<alpha>' \<and>\<^sub>F (\<phi>'' \<^bold>R J \<psi>''))) (mem_restr R) (\<lambda>v. \<langle>\<sigma>, V, v, i\<rangle> \<Turnstile>\<^sub>M \<alpha>' \<and>\<^sub>F (\<phi>'' \<^bold>R J \<psi>'')))
+      = (\<lambda>i. qtable n (FV ?AndRbdd) (mem_restr R) (\<lambda>v. \<langle>\<sigma>, V, v, i\<rangle> \<Turnstile>\<^sub>M ?AndRbdd))"
+      apply (rule ext)+
+      apply (subst qtable_cong_strong[of "FV (\<alpha>' \<and>\<^sub>F (\<phi>'' \<^bold>R J \<psi>''))" "FV ?AndRbdd" n "mem_restr R"])
+      using fvs \<open>\<not> mem J 0\<close> \<open>bounded J\<close> sat_and_release_rewrite by auto
+    have "wf_mformula \<sigma> (j + \<delta>) P' V n R (MOr \<phi>\<^sub>M \<psi>\<^sub>M buf') (\<alpha>' \<and>\<^sub>F (\<phi>'' \<^bold>R J \<psi>''))"
+      using wf_mformula.intros(9)[OF \<open>\<not> mem J 0\<close> \<open>bounded J\<close> fvs(1,2) safes mbuf'_obs(1) IH1] 
+      by force
+    moreover have "list_all2 (\<lambda>i. qtable n (FV (\<alpha>' \<and>\<^sub>F (\<phi>'' \<^bold>R J \<psi>''))) (mem_restr R) (\<lambda>v. \<langle>\<sigma>, V, v, i\<rangle> \<Turnstile>\<^sub>M \<alpha>' \<and>\<^sub>F (\<phi>'' \<^bold>R J \<psi>'')))
+       [Monitor.progress \<sigma> P (\<alpha>' \<and>\<^sub>F (\<phi>'' \<^bold>R J \<psi>'')) j..<Monitor.progress \<sigma> P' (\<alpha>' \<and>\<^sub>F (\<phi>'' \<^bold>R J \<psi>'')) (j + \<delta>)] \<phi>\<psi>s"
+      unfolding progress_and_release_rewrite_bounded[OF \<open>\<not> mem J 0\<close> \<open>bounded J\<close>, symmetric]
+      apply (subst key)
+      using IH2 .
+    ultimately have ?case
+      using meval_defs
+      unfolding meval.simps phi'_eq
+      by fastforce
+  } moreover {
+    let ?R0 = "release_safe_0 \<phi>'' J \<psi>''" and ?A0 = "always_safe_0 J \<psi>''"
+    assume phi'_eq: "\<phi>' = \<phi>'' \<^bold>R J \<psi>''"
+    (* obtain hyps for inductive hypothesis *)
+    with MOr.prems have "wf_envs S \<sigma> j \<delta> P P' V db"
+      and "S, E \<turnstile> \<phi>'' \<^bold>R J \<psi>''"
+      and "mem J 0"
+      and "bounded J"
+      and "FV \<phi>'' \<subseteq> FV \<psi>''"
+      and safes: "safe_formula \<psi>''" "safe_formula (?R0)"
+      and wf_mOr: "wf_mformula \<sigma> j P V n R (MOr \<phi> \<psi> buf) (?R0)"
+      and wf_buf: "wf_mbuf2' \<sigma> P V j n R (\<psi>'' \<^bold>U J \<psi>'' \<and>\<^sub>F \<phi>'') (?A0) buf"
+      unfolding phi'_eq
+      by (cases rule: wf_mformula.cases, clarsimp)+
+    thm wf_mformula.intros(20)[of J \<phi>'' \<psi>'' \<sigma> P V j n R buf \<phi> \<psi>]
+    hence fvs: "FV (\<phi>'' \<^bold>R J \<psi>'') = FV \<psi>''"
+      "FV (\<psi>'' \<^bold>U J \<psi>'' \<and>\<^sub>F \<phi>'') = FV \<psi>''"
+      "FV (?A0) = FV \<psi>''"
+      "FV (?R0) = FV \<psi>''"
+      by auto
+    have wtys: "S, E \<turnstile> \<psi>'' \<^bold>U J \<psi>'' \<and>\<^sub>F \<phi>''" "S, E \<turnstile> ?A0"
+      using wty_phi wty_psi
+      unfolding always_safe_0_def
+      by (auto intro!: wty_formula.intros)
+    thm release_safe_0_def[of \<phi>'' J \<psi>''] always_safe_0_def[of J \<psi>'']
+    have wf_phi: "wf_mformula \<sigma> j P V n R \<phi> (\<psi>'' \<^bold>U J \<psi>'' \<and>\<^sub>F \<phi>'')"
+      using wf_mOr
+      by (cases rule: wf_mformula.cases; clarsimp simp: release_safe_0_def)
+    have wf_psi: "wf_mformula \<sigma> j P V n R \<psi> ?A0"
+      using wf_mOr
+      by (cases rule: wf_mformula.cases; clarsimp simp: release_safe_0_def)
+    (* apply inductive hypothesis *)
+    obtain \<phi>s \<phi>\<^sub>M and \<psi>s \<psi>\<^sub>M and \<phi>\<psi>s buf'
+      where meval_defs: "meval (j + \<delta>) n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<phi> = (\<phi>s, \<phi>\<^sub>M)"
+        "meval (j + \<delta>) n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db \<psi> = (\<psi>s, \<psi>\<^sub>M)"
+        "mbuf2_take (\<union>) (mbuf2_add \<phi>s \<psi>s buf) = (\<phi>\<psi>s, buf')"
+      by (meson eq_snd_iff)
+    hence preIH: "wf_mformula \<sigma> (j + \<delta>) P' V n R \<phi>\<^sub>M (\<psi>'' \<^bold>U J \<psi>'' \<and>\<^sub>F \<phi>'')"
+      "list_all2 (\<lambda>i. qtable n (FV (\<psi>'' \<^bold>U J \<psi>'' \<and>\<^sub>F \<phi>'')) (mem_restr R) (\<lambda>v. \<langle>\<sigma>, V, v, i\<rangle> \<Turnstile>\<^sub>M (\<psi>'' \<^bold>U J \<psi>'' \<and>\<^sub>F \<phi>'')))
+        [progress \<sigma> P (\<psi>'' \<^bold>U J \<psi>'' \<and>\<^sub>F \<phi>'') j..< progress \<sigma> P' (\<psi>'' \<^bold>U J \<psi>'' \<and>\<^sub>F \<phi>'') (j + \<delta>)] \<phi>s"
+      "wf_mformula \<sigma> (j + \<delta>) P' V n R \<psi>\<^sub>M ?A0"
+      "list_all2 (\<lambda>i. qtable n (FV ?A0) (mem_restr R) (\<lambda>v. \<langle>\<sigma>, V, v, i\<rangle> \<Turnstile>\<^sub>M ?A0))
+        [progress \<sigma> P ?A0 j..< progress \<sigma> P' ?A0 (j + \<delta>)] \<psi>s"
+      using MOr.IH(1)[OF wf_phi MOr.prems(2) wtys(1)] MOr.IH(2)[OF wf_psi MOr.prems(2) wtys(2)]
+      by auto
+    note mbuf'_obs = mbuf2_take_add'[OF meval_defs(3) wf_buf pred_mappings(1) 
+        preIH(2,4) _ pred_mappings(2,3)]
+    thm release_safe_0_def
+    have IH1: "wf_mformula \<sigma> (j + \<delta>) P' V n R (MOr \<phi>\<^sub>M \<psi>\<^sub>M buf') ?R0"
+      using MOr.prems meval_defs preIH safes
+      unfolding phi'_eq 
+      by (cases rule: wf_mformula.cases)
+        (auto simp: release_safe_0_def split: prod.splits
+          intro!: wf_mformula.Release_0 wf_mformula.Or[OF preIH(1,3)]
+          elim: mbuf2_take_add'(1)) (* 10 secs *)
+    have IH2: "list_all2 (\<lambda>i. qtable n (FV ?R0) (mem_restr R) (\<lambda>v. \<langle>\<sigma>, V, v, i\<rangle> \<Turnstile>\<^sub>M ?R0))
+        [progress \<sigma> P ?R0 j..< progress \<sigma> P' ?R0 (j + \<delta>)] \<phi>\<psi>s"
+      using MOr.prems meval_defs preIH
+      unfolding phi'_eq progress_release_rewrite_0[OF \<open>mem J 0\<close>, symmetric]
+      apply (cases rule: wf_mformula.cases)
+      by (rule list.rel_mono_strong[OF mbuf'_obs(2), folded progress.simps(8) release_safe_0_def])
+        (auto simp: fvs release_safe_0_def intro!: qtable_union)
+    have "list_all2 (\<lambda>i. qtable n (FV ?R0) (mem_restr R) (\<lambda>v. \<langle>\<sigma>, V, v, i\<rangle> \<Turnstile>\<^sub>M \<phi>'' \<^bold>R J \<psi>''))
+      [progress \<sigma> P (\<phi>'' \<^bold>R J \<psi>'') j..< progress \<sigma> P' (\<phi>'' \<^bold>R J \<psi>'') (j + \<delta>)] \<phi>\<psi>s"
+      using IH2 
+      unfolding sat_release_rewrite_0[OF \<open>mem J 0\<close> \<open>bounded J\<close>] progress_release_rewrite_0[OF \<open>mem J 0\<close>]
+      by auto
+    moreover note wf_mformula.Release_0[OF \<open>mem J 0\<close> \<open>bounded J\<close> \<open>FV \<phi>'' \<subseteq> FV \<psi>''\<close> safes mbuf'_obs(1) IH1] 
+    ultimately have ?case
+      using meval_defs
+      unfolding meval.simps phi'_eq fvs
+      by auto
   }
-  show ?case
-    using MOr.prems
-    apply (cases rule: wf_mformula.cases)
-    using MOr.IH
-    using \<phi>'_eq
-    (* apply (auto dest!: MOr.IH split: if_splits prod.splits intro!: wf_mformula.Or qtable_union
-        elim: mbuf2_take_add'(1) list.rel_mono_strong[OF mbuf2_take_add'(2)]) *)
-    sorry
+  ultimately show ?case
+    using \<phi>'_eq by metis
 next
   case (MNeg \<phi>)
   have *: "qtable n {} (mem_restr R) (\<lambda>v. P v) X \<Longrightarrow>
@@ -12137,7 +12235,7 @@ next
       by (auto 0 3 simp: map_Suc_upt[symmetric] list.rel_map qtable_empty_iff mini_def
           simp del: upt_Suc elim!: wf_mformula.Prev list.rel_mono_strong dest: wf_envs_progress_le
           split: prod.split if_split_asm) (* slow 25 sec*)
-  qed (auto dest: wf_mformula_and_release_safe_bddE wf_mformula_and_release_safe0E)
+  qed
 next
   case (MNext I \<phi> first nts)
   from MNext.prems show ?case
@@ -12179,7 +12277,7 @@ next
         (auto 0 3 simp: qtable_empty_iff le_Suc_eq le_diff_conv mini_def list.rel_map
           elim!: wf_mformula.Next list.rel_mono_strong list_all2_appendI intro!: list.rel_refl
           split: prod.split list.splits if_split_asm)  (* slow 15 sec*)
-  qed (auto dest: wf_mformula_and_release_safe_bddE wf_mformula_and_release_safe0E)
+  qed
 next
   case (MSince args \<phi> \<psi> buf  aux db P P' V n' R' \<phi>')
   note sat.simps[simp del]
@@ -12834,37 +12932,6 @@ next
   ultimately show ?case
     unfolding zs_def \<eta>_def phi'_eq
     by auto
-(*
-next
-  case (Release_0 I \<phi>' \<psi>' P V n R aux)
-
-  define xs where "xs = fst (meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db aux)"
-  define \<phi>'' where "\<phi>'' = snd (meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db aux)"
-
-  have tuple_eq: "meval n (map (\<tau> \<sigma>) [j..<j + \<delta>]) db aux = (xs, \<phi>'')"
-    using xs_def \<phi>''_def
-    by auto
-
-  have IH:
-    "wf_mformula \<sigma> (j + \<delta>) P' V n R \<phi>'' (release_safe_0 \<phi>' I \<psi>')"
-    "list_all2 (\<lambda>i. qtable n (fv (release_safe_0 \<phi>' I \<psi>')) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (release_safe_0 \<phi>' I \<psi>')))
-     [Monitor.progress \<sigma> P (release_safe_0 \<phi>' I \<psi>') j..<Monitor.progress \<sigma> P' (release_safe_0 \<phi>' I \<psi>') (j + \<delta>)] xs"
-    using Release_0.IH[OF Release_0.prems(1)]
-    by (auto simp add: tuple_eq)
-
-  have "list_all2 (\<lambda>i. qtable n (fv (release_safe_0 \<phi>' I \<psi>')) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Release \<phi>' I \<psi>')))
-    [Monitor.progress \<sigma> P (formula.Release \<phi>' I \<psi>') j..<Monitor.progress \<sigma> P' (formula.Release \<phi>' I \<psi>') (j + \<delta>)] xs"
-    using IH(2)
-    unfolding sat_release_rewrite_0[OF Release_0(1-2), symmetric] progress_release_rewrite_0[OF Release_0(1)]
-    by auto
-  moreover have "wf_mformula \<sigma> (j + \<delta>) P' V n R \<phi>'' (formula.Release \<phi>' I \<psi>')"
-    using wf_mformula.Release_0[OF Release_0(1-3) IH(1)]
-    by auto
-
-  ultimately show ?case
-    using tuple_eq release_fvi(1)
-    by (auto)
-*)
 next
   case (MMatchP I mr mrs \<phi>s buf nts aux)
   note sat.simps[simp del] mbufnt_take.simps[simp del] mbufn_add.simps[simp del]
