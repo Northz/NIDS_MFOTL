@@ -1,6 +1,6 @@
 (*<*)
 theory Monitor_Code
-  imports Monitor_Impl RBT_set_opt
+  imports Monitor_Impl RBT_set_opt "HOL-Library.Code_Cardinality"
 begin
 (*>*)
 
@@ -21,6 +21,17 @@ lemma "Code_Cardinality.finite' (List.coset (xs::'a list))
   unfolding finite_UNIV
   apply clarsimp
   done
+
+term mstep
+
+definition "my_fun \<phi> \<psi> = (if safe_assignment (fv \<phi>) \<psi> then True else False)"
+
+export_code get_and_list checking Scala?
+export_code my_fun checking Scala?
+
+export_code convert_multiway checking Scala?
+
+export_code mstep checking Haskell?
 
 export_code convert_multiway mmonitorable_exec vminit_safe minit_safe vmstep mstep
    checking OCaml?
