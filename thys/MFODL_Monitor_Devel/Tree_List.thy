@@ -11,7 +11,7 @@ setup_lifting type_definition_treelist
 
 (* Lifting all required operations *)
 lift_definition empty_treelist :: "'a treelist" is "[]" .
-lift_definition insert_treelist :: "'a::linorder \<Rightarrow> 'a treelist \<Rightarrow> 'a treelist" is insort .
+lift_definition insert_treelist :: "'a::linorder \<Rightarrow> 'a treelist \<Rightarrow> 'a treelist" is insort1 .
 lift_definition get_treelist :: "'a::linorder treelist \<Rightarrow> nat \<Rightarrow> 'a" is "\<lambda>l n. (sort l) ! n" . 
 lift_definition length_treelist :: "'a::linorder treelist \<Rightarrow> nat" is length .
 lift_definition remove_treelist :: "'a::linorder \<Rightarrow> 'a treelist => 'a treelist" is del_list .
@@ -24,7 +24,7 @@ lift_definition cons_treelist :: "'a::linorder \<Rightarrow> 'a treelist \<Right
 
 lemma mset_treelist_insert:
   "mset_treelist (insert_treelist i t) = {#i#} + mset_treelist t"
-  by (simp add: Sorting.mset_insort insert_treelist.rep_eq mset_treelist.rep_eq)
+  by (simp add: Sorting.mset_insort1 insert_treelist.rep_eq mset_treelist.rep_eq)
 
 lemma mset_treelist_empty:
   "mset_treelist empty_treelist = {#}"

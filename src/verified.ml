@@ -53,22 +53,22 @@ end = struct
   let compare x y = Z.of_int (Stdlib.compare x y);;
 end;;
 
-module Bits_Integer : sig
+module Integer_Bit : sig
+  val test_bit : Z.t -> Z.t -> bool
   val shiftl : Z.t -> Z.t -> Z.t
   val shiftr : Z.t -> Z.t -> Z.t
-  val test_bit : Z.t -> Z.t -> bool
 end = struct
 
 (* We do not need an explicit range checks here,
    because Big_int.int_of_big_int raises Failure
    if the argument does not fit into an int. *)
+let test_bit x n =  Z.testbit x (Z.to_int n);;
+
 let shiftl x n = Z.shift_left x (Z.to_int n);;
 
 let shiftr x n = Z.shift_right x (Z.to_int n);;
 
-let test_bit x n =  Z.testbit x (Z.to_int n);;
-
-end;; (*struct Bits_Integer*)
+end;; (*struct Integer_Bit*)
 
 module Monitor : sig
   type ('a, 'b) phantom
@@ -1205,8 +1205,6 @@ let rec gen_length n x1 = match n, x1 with n, x :: xs -> gen_length (suc n) xs
 
 let rec size_lista x = gen_length zero_nata x;;
 
-let rec apfst f (x, y) = (f x, y);;
-
 let rec map_prod f g (a, b) = (f a, g b);;
 
 let rec divmod_nat
@@ -1218,6 +1216,8 @@ let rec divmod_nat
                      else (fun k l -> if Z.equal Z.zero l then (Z.zero, l) else
                             Z.div_rem (Z.abs k) (Z.abs l))
                             k l)));;
+
+let rec apfst f (x, y) = (f x, y);;
 
 let rec rbtreeify_g
   n kvs =
@@ -1284,10 +1284,7 @@ let rec rbt_split_min
 
 let rec rbt_join2
   l r = (if is_rbt_empty r then l
-          else (let a = rbt_split_min r in
-                let (aa, b) = a in
-                let (ba, c) = b in
-                 rbt_join l aa ba c));;
+          else (let (a, (b, c)) = rbt_split_min r in rbt_join l a b c));;
 
 let rec rbt_comp_inter_swap_rec
   c f gamma t1 t2 =
@@ -5342,8 +5339,8 @@ let rec less_eq_rec_safety x0 uu = match x0, uu with Unused, uu -> true
                              | AnyRec, NonFutuRec -> false;;
 
 let rec safe_assignment
-  x phi =
-    (match phi with Pred (_, _) -> false | Let (_, _, _) -> false
+  x alpha =
+    (match alpha with Pred (_, _) -> false | Let (_, _, _) -> false
       | LetPast (_, _, _) -> false
       | Eq (Var xa, Var y) ->
         equal_bool (not (member (ceq_nat, ccompare_nat) xa x))
@@ -5831,17 +5828,13 @@ let rec to_mregex_exec
                  | TS _ -> (MSkip zero_nata, xs)))
     | Plusa (r, s), xs ->
         (let (mr, ys) = to_mregex_exec r xs in
-         let a = to_mregex_exec s ys in
-         let (ms, aa) = a in
-          (MPlus (mr, ms), aa))
+         let (ms, a) = to_mregex_exec s ys in
+          (MPlus (mr, ms), a))
     | Times (r, s), xs ->
         (let (mr, ys) = to_mregex_exec r xs in
-         let a = to_mregex_exec s ys in
-         let (ms, aa) = a in
-          (MTimes (mr, ms), aa))
-    | Star r, xs -> (let a = to_mregex_exec r xs in
-                     let (mr, aa) = a in
-                      (MStar mr, aa));;
+         let (ms, a) = to_mregex_exec s ys in
+          (MTimes (mr, ms), a))
+    | Star r, xs -> (let (mr, a) = to_mregex_exec r xs in (MStar mr, a));;
 
 let rec to_mregex r = to_mregex_exec r [];;
 
@@ -6579,9 +6572,8 @@ let rec combineb _A
               (size_tree (Node (v, va, vb)))
           then (let (lMax, l) = del_max _A (Node (v, va, vb)) in
                  balanceL l lMax (Node (vc, vd, ve)))
-          else (let a = split_min _A (Node (vc, vd, ve)) in
-                let (aa, b) = a in
-                 balanceR (Node (v, va, vb)) aa b));;
+          else (let (a, b) = split_min _A (Node (vc, vd, ve)) in
+                 balanceR (Node (v, va, vb)) a b));;
 
 let rec deletec (_A1, _A2)
   uu x1 = match uu, x1 with uu, Leaf -> Leaf
@@ -6601,7 +6593,7 @@ let rec delete_rank
   args typea t (v, m) =
     (if v then (let group = drop (size_lista (aggargs_tys args)) t in
                 let term = meval_trm (aggargs_f args) t in
-                let a =
+                let (a, b) =
                   (match
                     (lookupa
                        ((ccompare_list (ccompare_option ccompare_event_data)),
@@ -6696,8 +6688,7 @@ let rec delete_rank
                                        (equal_option equal_event_data)))
                                    group (LString l) m))))
                   in
-                let (aa, b) = a in
-                 (aa, b))
+                 (a, b))
       else (v, m));;
 
 let rec delete_rank_cfc xb xc = Abs_comp_fun_commute (delete_rank xb xc);;
@@ -7765,14 +7756,13 @@ let rec add_new_mmauaux
                                       (a2_map, (tstp_map, donea)))))))))),
             aggaux))
       | Some aggargs ->
-        (let a = shift_mmauaux args nt (mmuaux, aggaux) in
-         let (aa, b) = a in
+        (let (a, b) = shift_mmauaux args nt (mmuaux, aggaux) in
           (let (tp, (tss, (tables,
                             (len, (maskL,
                                     (maskR,
                                       (result,
 (a1_map, (a2_map, (tstp_map, donea))))))))))
-             = aa in
+             = a in
             (fun aggauxa ->
               (let i = args_ivl args in
                let pos = args_pos args in
@@ -8011,14 +8001,13 @@ asa)
 
 let rec eval_mmauaux
   args nt aux =
-    (let a = shift_mmauaux args nt aux in
-     let (aa, b) = a in
+    (let (a, b) = shift_mmauaux args nt aux in
       (let (tp, (tss, (tables,
                         (len, (maskL,
                                 (maskR,
                                   (result,
                                     (a1_map, (a2_map, (tstp_map, donea))))))))))
-         = aa in
+         = a in
         (fun auxs ->
           (rev donea,
             ((tp, (tss, (tables,
@@ -8990,24 +8979,21 @@ let rec rep_wf_set (Abs_wf_set x) = x;;
 let rec wf_idx_of_wf_set (_A1, _A2)
   xb xc =
     Abs_wf_idx
-      (let (n, a) = rep_wf_set xc in
-       let (aa, t) = a in
-       let i = inf_seta (ceq_nat, ccompare_nat) xb aa in
-        (n, (aa, (i, idx_create (_A1, _A2) t i))));;
+      (let (n, (a, t)) = rep_wf_set xc in
+       let i = inf_seta (ceq_nat, ccompare_nat) xb a in
+        (n, (a, (i, idx_create (_A1, _A2) t i))));;
 
 let rec wf_set_union (_A1, _A2)
   xb xc =
     Abs_wf_set
-      ((let (n, a) = rep_wf_set xb in
-        let (aa, t) = a in
-         (fun (na, (aaa, ta)) ->
-           (if equal_nata n na &&
-                 set_eq (cenum_nat, ceq_nat, ccompare_nat) aa aaa
-             then (n, (aa, sup_seta
-                             ((ceq_list (ceq_option _A1)),
-                               (ccompare_list (ccompare_option _A2)))
-                             t ta))
-             else (n, (aa, t)))))
+      ((let (n, (a, t)) = rep_wf_set xb in
+         (fun (na, (aa, ta)) ->
+           (if equal_nata n na && set_eq (cenum_nat, ceq_nat, ccompare_nat) a aa
+             then (n, (a, sup_seta
+                            ((ceq_list (ceq_option _A1)),
+                              (ccompare_list (ccompare_option _A2)))
+                            t ta))
+             else (n, (a, t)))))
         (rep_wf_set xc));;
 
 let rec rep_wf_idx (Abs_wf_idx x) = x;;
@@ -9052,20 +9038,17 @@ let rec idx_union _A (_B1, _B2) = combine _A (sup_seta (_B1, _B2));;
 let rec wf_idx_union (_A1, _A2)
   xb xc =
     Abs_wf_idx
-      ((let (n, a) = rep_wf_idx xb in
-        let (aa, (i, t)) = a in
-         (fun (na, (aaa, (ia, ta))) ->
-           (if equal_nata n na &&
-                 set_eq (cenum_nat, ceq_nat, ccompare_nat) aa aaa
+      ((let (n, (a, (i, t))) = rep_wf_idx xb in
+         (fun (na, (aa, (ia, ta))) ->
+           (if equal_nata n na && set_eq (cenum_nat, ceq_nat, ccompare_nat) a aa
              then (let ib = inf_seta (ceq_nat, ccompare_nat) i ia in
                    let ic = idx_reindex (_A1, _A2) ib i t in
                    let iaa = idx_reindex (_A1, _A2) ib ia ta in
-                    (n, (aa, (ib, idx_union
-                                    (ccompare_list (ccompare_option _A2))
-                                    ((ceq_list (ceq_option _A1)),
-                                      (ccompare_list (ccompare_option _A2)))
-                                    ic iaa))))
-             else (n, (aa, (i, t))))))
+                    (n, (a, (ib, idx_union (ccompare_list (ccompare_option _A2))
+                                   ((ceq_list (ceq_option _A1)),
+                                     (ccompare_list (ccompare_option _A2)))
+                                   ic iaa))))
+             else (n, (a, (i, t))))))
         (rep_wf_idx xc));;
 
 let rec wf_idx_cols x = (let (_, (_, (i, _))) = rep_wf_idx x in i);;
@@ -9330,14 +9313,13 @@ let rec dropWhile_queue
 let rec wf_set_antijoin (_A1, _A2, _A3)
   xb xc =
     Abs_wf_set
-      ((let (n, a) = rep_wf_set xb in
-        let (aa, t) = a in
-         (fun (na, (aaa, ta)) ->
+      ((let (n, (a, t)) = rep_wf_set xb in
+         (fun (na, (aa, ta)) ->
            (if equal_nata n na &&
-                 less_eq_set (cenum_nat, ceq_nat, ccompare_nat) aaa aa
-             then (n, (sup_seta (ceq_nat, ccompare_nat) aa aaa,
-                        bin_join (_A1, _A2, _A3) n aa t false aaa ta))
-             else (n, (aa, t)))))
+                 less_eq_set (cenum_nat, ceq_nat, ccompare_nat) aa a
+             then (n, (sup_seta (ceq_nat, ccompare_nat) a aa,
+                        bin_join (_A1, _A2, _A3) n a t false aa ta))
+             else (n, (a, t)))))
         (rep_wf_set xc));;
 
 let rec mapping_antijoin _A
@@ -9366,22 +9348,20 @@ let rec idx_antijoin _A (_B1, _B2, _B3)
 let rec wf_idx_antijoin (_A1, _A2, _A3)
   xb xc =
     Abs_wf_idx
-      ((let (n, a) = rep_wf_idx xb in
-        let (aa, (i, t)) = a in
-         (fun (na, (aaa, (ia, ta))) ->
+      ((let (n, (a, (i, t))) = rep_wf_idx xb in
+         (fun (na, (aa, (ia, ta))) ->
            (if equal_nata n na &&
-                 less_eq_set (cenum_nat, ceq_nat, ccompare_nat) aaa aa
+                 less_eq_set (cenum_nat, ceq_nat, ccompare_nat) aa a
              then (let ib = inf_seta (ceq_nat, ccompare_nat) i ia in
-                    (if set_eq (cenum_nat, ceq_nat, ccompare_nat) ib aaa
+                    (if set_eq (cenum_nat, ceq_nat, ccompare_nat) ib aa
                       then (let ic = idx_reindex (_A1, _A2) ib i t in
-                             (n, (aa, (ib,
-mapping_antijoin (ccompare_list (ccompare_option _A2)) ic ta))))
+                             (n, (a, (ib, mapping_antijoin
+    (ccompare_list (ccompare_option _A2)) ic ta))))
                       else (let ic = idx_reindex (_A1, _A2) ib i t in
                             let iaa = idx_reindex (_A1, _A2) ib ia ta in
-                             (n, (aa, (ib,
-idx_antijoin (ccompare_list (ccompare_option _A2)) (_A1, _A2, _A3) n aa ic aaa
-  iaa))))))
-             else (n, (aa, (i, t))))))
+                             (n, (a, (ib, idx_antijoin
+    (ccompare_list (ccompare_option _A2)) (_A1, _A2, _A3) n a ic aa iaa))))))
+             else (n, (a, (i, t))))))
         (rep_wf_idx xc));;
 
 let rec wf_table_antijoin (_A1, _A2, _A3)
@@ -9533,29 +9513,27 @@ let rec add_new_ts_mmasaux
 let rec wf_set_join (_A1, _A2, _A3)
   xb xc =
     Abs_wf_set
-      ((let (n, a) = rep_wf_set xb in
-        let (aa, t) = a in
-         (fun (na, (aaa, ta)) ->
+      ((let (n, (a, t)) = rep_wf_set xb in
+         (fun (na, (aa, ta)) ->
            (if equal_nata n na
-             then (n, (sup_seta (ceq_nat, ccompare_nat) aa aaa,
-                        bin_join (_A1, _A2, _A3) n aa t true aaa ta))
-             else (n, (aa, t)))))
+             then (n, (sup_seta (ceq_nat, ccompare_nat) a aa,
+                        bin_join (_A1, _A2, _A3) n a t true aa ta))
+             else (n, (a, t)))))
         (rep_wf_set xc));;
 
 let rec wf_idx_join (_A1, _A2, _A3)
   xb xc =
     Abs_wf_idx
-      ((let (n, a) = rep_wf_idx xb in
-        let (aa, (i, t)) = a in
-         (fun (na, (aaa, (ia, ta))) ->
+      ((let (n, (a, (i, t))) = rep_wf_idx xb in
+         (fun (na, (aa, (ia, ta))) ->
            (if equal_nata n na
              then (let ib = inf_seta (ceq_nat, ccompare_nat) i ia in
                    let ic = idx_reindex (_A1, _A2) ib i t in
                    let iaa = idx_reindex (_A1, _A2) ib ia ta in
-                    (n, (sup_seta (ceq_nat, ccompare_nat) aa aaa,
+                    (n, (sup_seta (ceq_nat, ccompare_nat) a aa,
                           (ib, idx_join (ccompare_list (ccompare_option _A2))
-                                 (_A1, _A2, _A3) n aa ic aaa iaa))))
-             else (n, (aa, (i, t))))))
+                                 (_A1, _A2, _A3) n a ic aa iaa))))
+             else (n, (a, (i, t))))))
         (rep_wf_idx xc));;
 
 let rec wf_table_join (_A1, _A2, _A3)
@@ -9576,15 +9554,13 @@ let rec wf_table_join (_A1, _A2, _A3)
 let rec wf_set_set x = (let (_, (_, t)) = rep_wf_set x in t);;
 
 let rec wf_idx_set (_A1, _A2)
-  x = (let (_, a) = rep_wf_idx x in
-       let (_, aa) = a in
-       let (_, ab) = aa in
+  x = (let (_, (_, (_, a))) = rep_wf_idx x in
         set_of_idx
           ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)),
             set_impl_list)
           (finite_UNIV_list, cenum_list, (ceq_list (ceq_option _A1)),
             (cproper_interval_list (ccompare_option _A2)), set_impl_list)
-          ab);;
+          a);;
 
 let rec wf_table_set (_A1, _A2)
   = function Wf_table_of_wf_set t -> wf_set_set t
@@ -10096,8 +10072,7 @@ let rec meprev_next
               with (None, _) ->
                 ([], (mbuf_t_Cons x xsa, mbuf_t_Cons t mbuf_t_empty))
               | (Some ta, tsb) ->
-                (let a = meprev_next i xsa (mbuf_t_Cons ta tsb) in
-                 let (ys, aa) = a in
+                (let (ys, a) = meprev_next i xsa (mbuf_t_Cons ta tsb) in
                   ((if memL i (minus_nata ta t) && memR i (minus_nata ta t)
                      then x
                      else empty_table
@@ -10106,7 +10081,7 @@ let rec meprev_next
                                 (ccompare_option ccompare_event_data)),
                               set_impl_list)) ::
                      ys,
-                    aa)))));;
+                    a)))));;
 
 let rec mebufn_take
   f z buf =
@@ -10121,9 +10096,7 @@ let rec mebuf2_take
         (match mbuf_t_cases ys
           with (None, ysa) -> ([], (mbuf_t_Cons x xsa, ysa))
           | (Some y, ysa) ->
-            (let a = mebuf2_take f (xsa, ysa) in
-             let (zs, aa) = a in
-              (f x y :: zs, aa))));;
+            (let (zs, a) = mebuf2_take f (xsa, ysa) in (f x y :: zs, a))));;
 
 let rec mebuf2S_add
   xsa ysa tsa (xs, (ys, (ts, skew))) =
@@ -10328,9 +10301,7 @@ let rec eval_matchF
   i mr nt x3 = match i, mr, nt, x3 with i, mr, nt, [] -> ([], [])
     | i, mr, nt, (t, (rels, rel)) :: aux ->
         (if not (memR i (minus_nata nt t))
-          then (let a = eval_matchF i mr nt aux in
-                let (xs, aa) = a in
-                 (rel :: xs, aa))
+          then (let (xs, a) = eval_matchF i mr nt aux in (rel :: xs, a))
           else ([], (t, (rels, rel)) :: aux));;
 
 let rec meeval
@@ -10350,17 +10321,15 @@ let rec meeval
           (zs, MMatchF (i, mr, mrs, phi_sa, bufa, ntsa, nt, auxb)))
     | j, n, ts, db, MMatchP (i, mr, mrs, phi_s, buf, nts, aux) ->
         (let (xss, phi_sa) = map_split id (mapa (meeval j n ts db) phi_s) in
-         let a =
+         let (a, b) =
            mebufnt_take
              (fun rels t (zs, auxa) ->
-               (let a = update_matchP n i mr mrs rels t auxa in
-                let (z, aa) = a in
-                 (mbuf_t_append zs [z], aa)))
+               (let (z, a) = update_matchP n i mr mrs rels t auxa in
+                 (mbuf_t_append zs [z], a)))
              (mbuf_t_empty, aux) (mebufn_add xss buf) zero_nata
              (mbuf_t_append nts ts)
            in
-         let (aa, b) = a in
-          (let (zs, auxa) = aa in
+          (let (zs, auxa) = a in
             (fun (bufa, (_, ntsa)) ->
               (rep_mbuf_t zs, MMatchP (i, mr, mrs, phi_sa, bufa, ntsa, auxa))))
             b)
@@ -10697,27 +10666,18 @@ let rec split_constraint
 let rec split_assignment
   x xa1 = match x, xa1 with
     x, Eq (t1, t2) ->
-      (let (xa, xaa) = (t1, t2) in
-        (match xa
-          with Var xab ->
-            (match xaa
-              with Var y ->
-                (if member (ceq_nat, ccompare_nat) xab x then (y, t1)
-                  else (xab, t2))
-              | Const _ -> (xab, t2) | Plus (_, _) -> (xab, t2)
-              | Minus (_, _) -> (xab, t2) | UMinus _ -> (xab, t2)
-              | Mult (_, _) -> (xab, t2) | Div (_, _) -> (xab, t2)
-              | Mod (_, _) -> (xab, t2) | F2i _ -> (xab, t2)
-              | I2f _ -> (xab, t2))
-          | Const _ -> (let Var y = xaa in (y, t1))
-          | Plus (_, _) -> (let Var y = xaa in (y, t1))
-          | Minus (_, _) -> (let Var y = xaa in (y, t1))
-          | UMinus _ -> (let Var y = xaa in (y, t1))
-          | Mult (_, _) -> (let Var y = xaa in (y, t1))
-          | Div (_, _) -> (let Var y = xaa in (y, t1))
-          | Mod (_, _) -> (let Var y = xaa in (y, t1))
-          | F2i _ -> (let Var y = xaa in (y, t1))
-          | I2f _ -> (let Var y = xaa in (y, t1))))
+      (match (t1, t2)
+        with (Var xa, Var y) ->
+          (if member (ceq_nat, ccompare_nat) xa x then (y, t1) else (xa, t2))
+        | (Var xa, Const _) -> (xa, t2) | (Var xa, Plus (_, _)) -> (xa, t2)
+        | (Var xa, Minus (_, _)) -> (xa, t2) | (Var xa, UMinus _) -> (xa, t2)
+        | (Var xa, Mult (_, _)) -> (xa, t2) | (Var xa, Div (_, _)) -> (xa, t2)
+        | (Var xa, Mod (_, _)) -> (xa, t2) | (Var xa, F2i _) -> (xa, t2)
+        | (Var xa, I2f _) -> (xa, t2) | (Const _, Var y) -> (y, t1)
+        | (Plus (_, _), Var y) -> (y, t1) | (Minus (_, _), Var y) -> (y, t1)
+        | (UMinus _, Var y) -> (y, t1) | (Mult (_, _), Var y) -> (y, t1)
+        | (Div (_, _), Var y) -> (y, t1) | (Mod (_, _), Var y) -> (y, t1)
+        | (F2i _, Var y) -> (y, t1) | (I2f _, Var y) -> (y, t1))
     | uu, Pred (v, va) -> failwith "undefined"
     | uu, Let (v, va, vb) -> failwith "undefined"
     | uu, LetPast (v, va, vb) -> failwith "undefined"

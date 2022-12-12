@@ -545,7 +545,7 @@ lemma insort_remove_comm:
 proof -
   fix t l i
   assume "(t :: 'a) \<in> set l" and "sorted l"
-  then show "(insort t ^^ i) (del_list t l) = del_list t ((insort t ^^ i) l)"
+  then show "(insort1 t ^^ i) (del_list t l) = del_list t ((insort1 t ^^ i) l)"
   proof(induction l)
     case Nil
     then show ?case by auto
@@ -605,8 +605,8 @@ next
   show ?case using Suc(1)[OF *] unfolding simp1 insort_remove_comm[OF in_set, OF sorted] apply(transfer) 
   proof -
     fix l t i
-    assume "sort (l :: 'a list) = (Sorting.insort t ^^ i) (sort ((del_list t ^^ i) l))"
-    then show "sort l = del_list t ((Sorting.insort t ^^ Suc i) (sort ((del_list t ^^ i) l)))"
+    assume "sort (l :: 'a list) = (Sorting.insort1 t ^^ i) (sort ((del_list t ^^ i) l))"
+    then show "sort l = del_list t ((Sorting.insort1 t ^^ Suc i) (sort ((del_list t ^^ i) l)))"
       using insort_del_inverse[of t, unfolded insort_eq2[symmetric]] by auto
   qed
 qed
@@ -615,7 +615,7 @@ lemma unpack_insort:
   assumes "ID ccompare = Some (c :: event_data comparator)" 
   and "\<forall>t. (t \<in> set xs \<longrightarrow> (\<exists>k. f t = Some k))"
   and "\<forall>e. e \<in> set xs \<longrightarrow> c t e = comp_of_ords (\<le>) (<) (the (f t)) (the (f e))"
-  shows "map (\<lambda>a. the (f a)) (linorder.insort (le_of_comp c) t xs) = insort (the (f t)) (map (\<lambda>a. the (f a)) xs)"
+  shows "map (\<lambda>a. the (f a)) (linorder.insort (le_of_comp c) t xs) = insort1 (the (f t)) (map (\<lambda>a. the (f a)) xs)"
 proof -
   interpret linorder "le_of_comp c" "lt_of_comp c"
     using ID_ccompare[OF assms(1)] by auto
@@ -648,7 +648,7 @@ lemma bulk_unpack_insort:
   and "\<forall>e. (e \<in> (set xs) \<union> {t} \<longrightarrow> (\<exists>k. f e = Some k))"
   and "\<forall>e. e \<in> (set xs) \<union> {t} \<longrightarrow> c t e = comp_of_ords (\<le>) (<) (the (f t)) (the (f e))"
   shows "map (\<lambda>a. the (f a)) ((linorder.insort (le_of_comp c) t ^^ n) xs)
-         = (insort ((the \<circ> f) t) ^^ n) (map (the \<circ> f) xs)"
+         = (insort1 ((the \<circ> f) t) ^^ n) (map (the \<circ> f) xs)"
   using assms(2-3)
 proof(induction n arbitrary:xs)
   case 0
@@ -709,11 +709,11 @@ proof -
     have "flatten_multiset (Set.insert x F) = ((linorder.insort (le_of_comp c') t) ^^ i) (flatten_multiset F)"
       using insort_mset_bulk_insort[OF c_def, OF assms(1)] insert x_def linorder.sorted_list_of_set_insert[OF c_class]
       by (simp add: c_def csorted_list_of_set_def flatten_multiset_def)
-    then have simp1: "map (\<lambda>a. the (f a)) (flatten_multiset (Set.insert x F)) = (insort ((the \<circ> f) t) ^^ i) (map (the \<circ> f) (flatten_multiset F))"
+    then have simp1: "map (\<lambda>a. the (f a)) (flatten_multiset (Set.insert x F)) = (insort1 ((the \<circ> f) t) ^^ i) (map (the \<circ> f) (flatten_multiset F))"
        using bulk_unpack_insort[OF assms(1) _ **] * by simp
     have *: "(count \<circ> mset_treelist) l ?t \<ge> i" using Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of f] _ insert(1) insert(2)]
        insert(4) insert(6) by(auto simp:x_def valid_list_aux'_def mset_conv_def) fastforce
-    have simp2:"unpack (sort_treelist l) = ((insort ?t) ^^ i) (map (the \<circ> f) (flatten_multiset F))" unfolding sort_insert_remove[OF *] 
+    have simp2:"unpack (sort_treelist l) = ((insort1 ?t) ^^ i) (map (the \<circ> f) (flatten_multiset F))" unfolding sort_insert_remove[OF *] 
       using IH by(transfer; auto)
     show ?case by(simp only:simp1) (simp add:simp2) 
   qed
@@ -1266,7 +1266,7 @@ lemma foldl_unpack_eq:
   using assms by(induction xs arbitrary:k) (auto simp:unpack_int_def)
 
 lemma insort_mset:
-  shows "mset (insort a xs) = add_mset a (mset xs)" by (simp add: insort_eq)
+  shows "mset (insort1 a xs) = add_mset a (mset xs)" by (simp add: insort_eq)
 
 lemma valid_insert_sum_unfolded:
   assumes valid_before: "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_tys = tys, aggargs_f = f\<rparr> (SumAux m) X" 
