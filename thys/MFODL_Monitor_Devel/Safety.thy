@@ -1,6 +1,7 @@
 (*<*)
 theory Safety
-  imports Formula
+  imports Formula (* "Containers.Containers"     
+    "HOL-Library.Code_Target_Nat" *)
 begin
 (*>*)
 
@@ -358,6 +359,49 @@ lemma trigger_not_safe_assignment: "\<not> safe_assignment (fv \<phi>) (formula.
 lemma case_Neg_iff: "(case \<gamma> of formula.Neg x \<Rightarrow> P x | _ \<Rightarrow> False) 
     \<longleftrightarrow> (\<exists>\<gamma>'. \<gamma> = formula.Neg \<gamma>' \<and> P \<gamma>')"
   by (cases \<gamma>) auto
+
+(* derive ccompare Formula.trm
+derive (eq) ceq Formula.trm
+derive (rbt) set_impl Formula.trm
+derive (rbt) mapping_impl Monitor.mregex
+derive (rbt) set_impl string8
+derive (rbt) mapping_impl string8
+derive (rbt) set_impl event_data
+derive (rbt) mapping_impl event_data
+derive (eq) ceq string8
+derive (linorder) compare string8
+derive (compare) ccompare string8
+
+
+(* print_codesetup *)
+(* code_thms Formula.sat *)
+(* code_deps Formula.sat *)
+term listset
+print_codeproc
+print_derives
+
+(* declare [[code_preproc_trace]] *)
+
+code_thms ord_string8_inst.less_string8
+code_printing Formula.sat
+
+definition "my_fun \<phi> \<psi> = (if safe_assignment (fv \<phi>) \<psi> then True else False)"
+
+code_deps my_fun
+(* No code equations for ord_string8_inst.less_eq_string8, 
+  equal_string8_inst.equal_string8, 
+  ord_string8_inst.less_string8, 
+  one_double_inst.one_double, 
+  copysign_double, 
+  compare_double, 
+  Code_Double.is_zero 
+*)
+
+export_code my_fun checking OCaml?
+export_code my_fun checking Scala?
+export_code my_fun checking SML?
+
+term "x :: 'a stream" *)
 
 subsection \<open> Safe formula predicate \<close>
 

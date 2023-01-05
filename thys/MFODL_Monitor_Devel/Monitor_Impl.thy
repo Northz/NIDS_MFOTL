@@ -5,11 +5,52 @@ theory Monitor_Impl
     Optimized_Agg
     Optimized_MTL
     "HOL-Library.Code_Target_Nat"
-    "HOL-Library.Code_Cardinality"
+    (* "HOL-Library.Code_Cardinality" *)
     Containers.Containers
     "Generic_Join_Devel.Proj_Code"
 begin
 (*>*)
+
+(* derive ccompare Formula.trm
+derive (eq) ceq Formula.trm
+derive (rbt) set_impl Formula.trm
+derive (rbt) mapping_impl Monitor.mregex
+derive (rbt) set_impl string8
+derive (rbt) mapping_impl string8
+derive (rbt) set_impl event_data
+derive (rbt) mapping_impl event_data
+derive (eq) ceq string8
+derive (linorder) compare string8
+derive (compare) ccompare string8
+
+
+(* print_codesetup *)
+(* code_thms Formula.sat *)
+(* code_deps Formula.sat *)
+term listset
+print_codeproc
+print_derives
+
+(* declare [[code_preproc_trace]] *)
+
+code_thms ord_string8_inst.less_string8
+code_printing Formula.sat
+
+definition "my_fun \<phi> \<psi> = (if safe_assignment (fv \<phi>) \<psi> then True else False)"
+
+code_deps my_fun
+(* No code equations for ord_string8_inst.less_eq_string8, 
+  equal_string8_inst.equal_string8, 
+  ord_string8_inst.less_string8, 
+  one_double_inst.one_double, 
+  copysign_double, 
+  compare_double, 
+  Code_Double.is_zero 
+*)
+
+export_code my_fun checking OCaml?
+export_code my_fun checking Scala?
+export_code my_fun checking SML? *)
 
 declare Let_def[simp del]
 
@@ -878,8 +919,8 @@ end (* maux *)
 
 section \<open>Instantiation of the generic algorithm and code setup\<close>
 
-lemma [code_unfold del, symmetric, code_post del]: "card \<equiv> Code_Cardinality.card'" by simp
-declare [[code drop: card]] Set_Impl.card_code[code]
+(* lemma [code_unfold del, symmetric, code_post del]: "card \<equiv> Code_Cardinality.card'" by simp
+declare [[code drop: card]] Set_Impl.card_code[code] *)
 
 (*
   The following snippet (context \<dots> end) is taken from HOL-Library.Code_Cardinality.
@@ -1168,17 +1209,17 @@ lemma LPDs_code[code]: "LPDs r = LPDs_aux {r}"
 lemma is_empty_table_unfold [code_unfold]:
   "X = empty_table \<longleftrightarrow> Set.is_empty X"
   "empty_table = X \<longleftrightarrow> Set.is_empty X"
-  "Code_Cardinality.eq_set X empty_table \<longleftrightarrow> Set.is_empty X"
-  "Code_Cardinality.eq_set empty_table X \<longleftrightarrow> Set.is_empty X"
+  (* "Code_Cardinality.eq_set X empty_table \<longleftrightarrow> Set.is_empty X"
+  "Code_Cardinality.eq_set empty_table X \<longleftrightarrow> Set.is_empty X" *)
   "set_eq X empty_table \<longleftrightarrow> Set.is_empty X"
   "set_eq empty_table X \<longleftrightarrow> Set.is_empty X"
   "X = (set_empty impl) \<longleftrightarrow> Set.is_empty X"
   "(set_empty impl) = X \<longleftrightarrow> Set.is_empty X"
-  "Code_Cardinality.eq_set X (set_empty impl) \<longleftrightarrow> Set.is_empty X"
-  "Code_Cardinality.eq_set (set_empty impl) X \<longleftrightarrow> Set.is_empty X"
+  (* "Code_Cardinality.eq_set X (set_empty impl) \<longleftrightarrow> Set.is_empty X"
+  "Code_Cardinality.eq_set (set_empty impl) X \<longleftrightarrow> Set.is_empty X" *)
   "set_eq (set_empty impl) X \<longleftrightarrow> Set.is_empty X"
   "set_eq X (set_empty impl) \<longleftrightarrow> Set.is_empty X"
-  unfolding set_eq_def set_empty_def empty_table_def Set.is_empty_def Code_Cardinality.eq_set_def 
+  unfolding set_eq_def set_empty_def empty_table_def Set.is_empty_def (* Code_Cardinality.eq_set_def  *)
   by auto
 
 lemma tabulate_rbt_code[code]: "Monitor.mrtabulate (xs :: mregex list) f =
@@ -1651,13 +1692,13 @@ lift_definition insert_rank_cfc::"aggargs \<Rightarrow> type \<Rightarrow> (even
 lemma [code_unfold]: "Finite_Set.fold (insert_rank args type) (v, m) data = set_fold_cfc (insert_rank_cfc args type) (v, m) data"
   by(transfer) auto
 
-definition finite' :: "'a set \<Rightarrow> bool" where
+(* definition finite' :: "'a set \<Rightarrow> bool" where
   "finite' = finite"
 
 lemma finite'_code [code]: (* do we need it? *)
   "finite' (set (xs::'a :: finite_UNIV list)) \<longleftrightarrow> True"
   "finite' (List.coset xs) \<longleftrightarrow> of_phantom (finite_UNIV :: 'a finite_UNIV)"
-  by (simp_all add: finite'_def card_gt_0_iff finite_UNIV)
+  by (simp_all add: finite'_def card_gt_0_iff finite_UNIV) *)
 
 declare insert_maggaux'.simps [code del]
 declare insert_maggaux'.simps [folded finite'_def, code]

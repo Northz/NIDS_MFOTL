@@ -1,6 +1,6 @@
 (*<*)
 theory Monitor_Code
-  imports Monitor_Impl RBT_set_opt "HOL-Library.Code_Cardinality"
+  imports Monitor_Impl RBT_set_opt
 begin
 (*>*)
 
@@ -27,16 +27,20 @@ term mstep
 definition "my_fun \<phi> \<psi> = (if safe_assignment (fv \<phi>) \<psi> then True else False)"
 
 export_code get_and_list checking Scala?
-export_code my_fun checking Scala?
+export_code my_fun checking OCaml?
 
 export_code convert_multiway checking Scala?
+export_code convert_multiway checking OCaml?
+export_code vminit_safe checking OCaml?
+export_code minit_safe checking OCaml?
+export_code vmstep checking OCaml?
+export_code mstep checking OCaml?
 
-export_code mstep checking Haskell?
 
-export_code convert_multiway mmonitorable_exec vminit_safe minit_safe vmstep mstep
-   checking OCaml?
+(* export_code convert_multiway mmonitorable_exec vminit_safe minit_safe vmstep mstep
+   checking OCaml? *)
 
-export_code
+(* export_code
   (*basic types*)
   nat_of_integer integer_of_nat int_of_integer integer_of_int enat
   interval empty_db insert_into_db RBT_set rbt_fold Sum_Type.Inl
@@ -46,7 +50,7 @@ export_code
   convert_multiway mmonitorable_exec minit_safe mstep type_check vminit_safe vmstep  
   (*rewrite functions*)
   rewrite_trigger
-  in OCaml module_name Monitor file_prefix "verified"
+  in OCaml module_name Monitor file_prefix "verified" *)
 
 (*<*)
 end
