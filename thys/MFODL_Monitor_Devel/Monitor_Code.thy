@@ -4,25 +4,34 @@ theory Monitor_Code
 begin
 (*>*)
 
-(* understanding error from code generation *)
 
-lemma "List.coset xs = {x. x \<notin> set xs}"
-  using List.coset_def[unfolded uminus_set_def]
-  thm bool_Compl_def
-  by (simp add: set_eqI)
+thm default_mmasaux.init_since'_def 
+thm default_mmauaux.init_until'_def
+thm verimon_maux.init_trigger'_def
+thm verimon_maux.init_and_trigger'_def
+thm mtaux.init_and_trigger'_def
+thm default_maux.meinit0.simps(13)[unfolded default_mmasaux.init_since'_def]
 
-find_theorems "List.coset _"
-typ "('a, bool) phantom"
-thm insert_maggaux'.simps insert_maggaux'.simps [folded finite'_def]
 
-lemma "Code_Cardinality.finite' (List.coset (xs::'a list)) 
-  \<equiv> of_phantom (finite_UNIV:: ('a::finite_UNIV, bool) phantom)"
-  apply simp
-  unfolding finite_UNIV
-  apply clarsimp
-  done
+lemmas meinit0_code_simps = default_maux.meinit0.simps[unfolded verimon_maux.init_and_trigger'_def]
+lemmas vmeinit0_code_simps = verimon_maux.meinit0.simps[unfolded verimon_maux.init_and_trigger'_def]
+declare default_maux.meinit0.simps [code del]
+declare meinit0_code_simps [code]
+  and vmeinit0_code_simps [code]
+declare default_mmasaux.init_since'_def [code_unfold]
+  and default_mmauaux.init_until'_def [code_unfold]
+  and verimon_maux.init_since'_def [code_unfold]
+  and verimon_maux.init_until'_def [code_unfold]
+  and verimon_maux.init_trigger'_def [code_unfold]
+  and verimon_maux.init_and_trigger'_def [code_unfold]
 
-term mstep
+(* code_thms vminit_safe *)
+
+
+term default_mmasaux.init_since'
+term default_mmauaux.init_until' 
+term verimon_maux.init_trigger'
+
 
 definition "my_fun \<phi> \<psi> = (if safe_assignment (fv \<phi>) \<psi> then True else False)"
 
