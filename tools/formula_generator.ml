@@ -21,6 +21,7 @@ Generate these formulas as base cases:
 | EAggreg        (if aggregations enabled)
 | EAggOnce       (if aggregations enabled)
 | EAggMMOnce     (if aggregations enabled)
+| ELet           (optionally disabled)
 *)
 
 open QCheck
@@ -68,6 +69,7 @@ type genformula =
   | GAggAvg       of (var * aggrop * var * var list * genformula)
   | GAggMed       of (var * aggrop * var * var list * genformula)
   | GAgg          of (var * aggrop * var * var list * genformula)
+  | GLet          of (predicate * genformula * genformula)
 
 let gRel         r t1 t2      = GRel         (r ,t1, t2) 
 let gPred        p            = GPred        p 
@@ -100,6 +102,7 @@ let gAggMMOnce   r a v gs i f = GAggMMOnce   (r, a, v, gs, i, f)
 let gAggAvg      r a v gs f   = GAggAvg      (r, a, v, gs, f)
 let gAggMed      r a v gs f   = GAggMed      (r, a, v, gs, f)
 let gAgg         r a v gs f   = GAgg         (r, a, v, gs, f)
+let gLet         p f1 f2        = GLet         (p, f1, f2) 
 
 let aggr_op = function 
 | MAX -> Max
@@ -154,6 +157,7 @@ let rec formula_of_genformula = function
 | GAggAvg      (r, a, v, gs, f)
 | GAggMed      (r, a, v, gs, f) 
 | GAgg         (r, a, v, gs, f) -> Aggreg ((aggr_op_type a), r, (aggr_op a), v, gs, formula_of_genformula f)
+| GLet         (p,f1,f2) -> Let(p, formula_of_genformula f1,  formula_of_genformula f2)
 
 (* TODO: Print floats where necessary (e.g., result of AVG and MED) *)
 let rec string_of_arity = function
@@ -284,6 +288,8 @@ let rec string_f_rec top par h =
 
           | Until (intv,f1,f2) -> failwith "Unsupported: future operators"
 
+          | Let (p,f1,f2) -> failwith "Unsupported: let operator"
+
           | _ -> failwith "[print_formula] internal error"
         )
         
@@ -389,7 +395,8 @@ let rel_gen v all_rels max_const =
 
 let predicate_gen map vs =
   let vs = List.map (fun e -> Var e) vs in 
-  let predNum = Set.cardinal (List.fold_left Set.union Set.empty (List.map snd (IntMap.bindings map))) in
+  let predNum = Set.cardinal (List.fold_left Set.union Set.empty 
+                                (List.map snd (IntMap.bindings map))) in
   let freshPred = "P" ^ string_of_int predNum in
   let oldSet = try find (List.length vs) map with Not_found -> Set.empty in 
   let newSet = Set.add freshPred oldSet in 
@@ -399,11 +406,12 @@ let predicate_gen map vs =
   Gen.map (fun (m,p) -> (m, make_predicate (p, shuffle vs))) 
   (Gen.oneofl ((updatedMap, freshPred) :: (List.map (fun e -> (map,e)) (Set.elements oldSet)))))
 
-let formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi max_const qtl varnum size = 
-  let fq = if past_only || qtl then 0 else 1 in
-  let mq = if (max_lb < 0) then 0 else 1 in
-  let aq = if aggr then 1 else 0 in
-  let tq = if foo then 0 else 1 in 
+let formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi max_const qtl nogenlet varnum size = 
+  let fq = if past_only || qtl then 0 else 1 in (* generate past-only formulas *)
+  let mq = if (max_lb < 0) then 0 else 1 in     (* generate metric formulas *)
+  let aq = if aggr then 1 else 0 in             (* generate aggregation formulas *)
+  let tq = if foo then 0 else 1 in              (* generate temporal formulas *)
+  let lq = if nogenlet then 0 else 1 in         (* generate let formulas *)
   let max_interval = max 0 max_interval in
   let size = max 0 size in
   let varnum = max 0 varnum in
@@ -428,9 +436,9 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi ma
       else 
       Gen.map (mapSnd gPred) (predicate_gen predmap vars)
     | n -> 
-      let aq = min aq (List.length vars) in
-      let oq = min (n-1) 1 in 
-      let sq = min (List.length vars) 1 in
+      let aq = min aq (List.length vars) in   (* aggregations must have at least 1 var *)
+      let oq = min (n-1) 1 in                 (* generate optimized patterns of height 2 *)
+      let sq = min (List.length vars) 1 in    (* and_assign and filter need at least 1 var *)
       let new_bound_variable vs = "y" ^ string_of_int
         ((List.fold_left 
           max 
@@ -519,6 +527,17 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi ma
         1, vars_sub1 >>= (fun v1 -> binarybind gAndSUB1     v1 vars);
         1, vars_sub1 >>= (fun v1 -> binarybind gAndSUB2     vars v1);
         1, (go (predmap, (new_bv :: vars), (n-1))) >>= (fun (newMap,sf) -> (fun s -> (newMap, gExists [new_bv] sf)));
+       lq, 
+       Gen.int_bound (List.length vars) >>= 
+        (fun letvsnum -> 
+          let new_bvs = new_bound_variables letvsnum vars in
+          (predicate_gen predmap new_bvs) >>=
+            (fun (newMap,p) -> 
+              (go (newMap,new_bvs,m)) >>= 
+                (fun (newerMap,f1) -> 
+                  (go (newerMap,vars,n-1-m)) >>=
+                    (fun (newestMap,f2) -> 
+                      (fun s -> (newestMap, (gLet p f1 f2)))))));
        tq, metricunarybind gPrev        interval;
     fq*tq, metricunarybind gNext        interval_bound;
        tq, metricunarybind gOnce        interval;
@@ -608,7 +627,7 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi ma
       if qtl then toplvlq result vars
       else result
   
-  let generate_formula ?(signature = empty) ?(max_lb = -1) ?(max_interval=10) ?(past_only=false) ?(all_rels=false) ?(aggr=false) ?(foo=false) ?(ndi=false) ?(max_const=42) ?(qtl=false) varnum size = List.hd (Gen.generate ~n:1 (formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi max_const qtl varnum size))
+  let generate_formula ?(signature = empty) ?(max_lb = -1) ?(max_interval=10) ?(past_only=false) ?(all_rels=false) ?(aggr=false) ?(foo=false) ?(ndi=false) ?(max_const=42) ?(qtl=false) ?(nogenlet=true) varnum size = List.hd (Gen.generate ~n:1 (formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi max_const qtl nogenlet varnum size))
 
     (* TODO: check binary temporal ops for qtl  *)
     (* TODO: other special AND case *)

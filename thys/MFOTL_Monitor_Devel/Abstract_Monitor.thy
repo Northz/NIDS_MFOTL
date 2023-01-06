@@ -233,7 +233,7 @@ lemma pslice_closed[simp, intro]: "\<pi> \<in> prefixes \<Longrightarrow> pslice
   using prefix_of_pmap_\<Gamma> by (fastforce simp: prefixes_def)
 
 lemma union_verdicts_slice:
-  assumes part: "\<Union>\<S> = UNIV"
+  assumes part: "\<And>v. length v = nfv \<Longrightarrow> v \<in> \<Union>\<S>"
     and trace: "\<sigma> \<in> traces"
   shows "\<Union>((\<lambda>S. verdict_filter S (verdicts (slice S \<sigma>))) ` \<S>) = verdicts \<sigma>"
 proof safe
@@ -259,8 +259,8 @@ next
   assume "(i, v) \<in> verdicts \<sigma>"
   then have tuple: "wf_tuple nfv fv v" and "sat \<sigma> (map the v) i"
     by (auto simp: verdicts_def)
-  from part obtain S where "S \<in> \<S>" and "map the v \<in> S"
-    by blast
+  then obtain S where "S \<in> \<S>" and "map the v \<in> S"
+    using part[of "map the v"] by (auto simp add: wf_tuple_def)
   then have "mem_restr S v"
     using mem_restrI[of "map the v" S nfv fv] tuple
     by (auto simp: wf_tuple_def fv_less_nfv)
@@ -285,7 +285,7 @@ locale sliceable_monitor = monitor _ _ _ sat M + abstract_slicer relevant_events
 begin
 
 lemma union_M_pslice:
-  assumes part: "\<Union>\<S> = UNIV"
+  assumes part: "\<And>v. length v = nfv \<Longrightarrow> v \<in> \<Union>\<S>"
     and prefix: "\<pi> \<in> prefixes"
   shows "\<Union>((\<lambda>S. verdict_filter S (M (pslice S \<pi>))) ` \<S>) = M \<pi>"
 proof safe
@@ -297,8 +297,8 @@ next
   assume "(i, v) \<in> M \<pi>"
   then have tuple: "wf_tuple nfv fv v"
     using prefix wf_monitor by blast
-  from part obtain S where "S \<in> \<S>" and "map the v \<in> S"
-    by blast
+  then obtain S where "S \<in> \<S>" and "map the v \<in> S"
+    using part[of "map the v"] by (auto simp add: wf_tuple_def)
   then have "mem_restr S v"
     using mem_restrI[of "map the v" S nfv fv] tuple
     by (auto simp: wf_tuple_def fv_less_nfv)

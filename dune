@@ -5,8 +5,12 @@
 (env
   (dev
     (flags :standard -warn-error -A -w -27-32..39)
-    (js_of_ocaml (flags --pretty --no-inline --debug-info --source-map)))
+    (js_of_ocaml
+      (flags --pretty --no-inline --debug-info --source-map --enable effects)
+      (build_runtime_flags (:standard --enable effects))))
   (release
     (flags :standard -warn-error -A -w -27-32..39)
     (ocamlopt_flags (:standard -O3))
-    (js_of_ocaml (flags --opt 3))))
+    (js_of_ocaml
+      (flags --opt 3 --enable effects)
+      (build_runtime_flags (:standard --enable effects)))))

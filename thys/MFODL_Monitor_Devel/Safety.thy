@@ -1,7 +1,6 @@
 (*<*)
 theory Safety
-  imports Formula (* "Containers.Containers"     
-    "HOL-Library.Code_Target_Nat" *)
+  imports Formula
 begin
 (*>*)
 
@@ -360,48 +359,6 @@ lemma case_Neg_iff: "(case \<gamma> of formula.Neg x \<Rightarrow> P x | _ \<Rig
     \<longleftrightarrow> (\<exists>\<gamma>'. \<gamma> = formula.Neg \<gamma>' \<and> P \<gamma>')"
   by (cases \<gamma>) auto
 
-(* derive ccompare Formula.trm
-derive (eq) ceq Formula.trm
-derive (rbt) set_impl Formula.trm
-derive (rbt) mapping_impl Monitor.mregex
-derive (rbt) set_impl string8
-derive (rbt) mapping_impl string8
-derive (rbt) set_impl event_data
-derive (rbt) mapping_impl event_data
-derive (eq) ceq string8
-derive (linorder) compare string8
-derive (compare) ccompare string8
-
-
-(* print_codesetup *)
-(* code_thms Formula.sat *)
-(* code_deps Formula.sat *)
-term listset
-print_codeproc
-print_derives
-
-(* declare [[code_preproc_trace]] *)
-
-code_thms ord_string8_inst.less_string8
-code_printing Formula.sat
-
-definition "my_fun \<phi> \<psi> = (if safe_assignment (fv \<phi>) \<psi> then True else False)"
-
-code_deps my_fun
-(* No code equations for ord_string8_inst.less_eq_string8, 
-  equal_string8_inst.equal_string8, 
-  ord_string8_inst.less_string8, 
-  one_double_inst.one_double, 
-  copysign_double, 
-  compare_double, 
-  Code_Double.is_zero 
-*)
-
-export_code my_fun checking OCaml?
-export_code my_fun checking Scala?
-export_code my_fun checking SML?
-
-term "x :: 'a stream" *)
 
 subsection \<open> Safe formula predicate \<close>
 
@@ -3062,11 +3019,11 @@ qualified fun matches ::
   "Formula.env \<Rightarrow> 't Formula.formula \<Rightarrow> Formula.name \<times> event_data list \<Rightarrow> bool" where
   "matches v (Formula.Pred r ts) e = (fst e = r \<and> map (Formula.eval_trm v) ts = snd e)"
 | "matches v (Formula.Let p \<phi> \<psi>) e =
-    ((\<exists>v'. matches v' \<phi> e \<and> matches v \<psi> (p, v')) \<or>
+    ((\<exists>v'. length v' = Formula.nfv \<phi> \<and> matches v' \<phi> e \<and> matches v \<psi> (p, v')) \<or>
     (fst e \<noteq> p \<or> length (snd e) \<noteq> Formula.nfv \<phi>) \<and> matches v \<psi> e)"
 | "matches v (Formula.LetPast p \<phi> \<psi>) e =
     ((fst e \<noteq> p \<or> length (snd e) \<noteq> Formula.nfv \<phi>) \<and>
-      (\<exists>e'. (\<lambda>e' e. matches (snd e') \<phi> e \<and> fst e' = p)\<^sup>*\<^sup>* e' e \<and> matches v \<psi> e'))"
+      (\<exists>e'. (\<lambda>e' e. matches (snd e') \<phi> e \<and> fst e' = p \<and> length (snd e') = Formula.nfv \<phi>)\<^sup>*\<^sup>* e' e \<and> matches v \<psi> e'))"
 | "matches v (Formula.Eq _ _) e = False"
 | "matches v (Formula.Less _ _) e = False"
 | "matches v (Formula.LessEq _ _) e = False"
@@ -3143,7 +3100,7 @@ proof (induction \<phi> arbitrary: V V' v S i)
     case (Some a)
     moreover obtain a' where "V' ?rn = Some a'" using Some \<open>dom V = dom V'\<close> by auto
     moreover have "the (V ?rn) (map (Formula.eval_trm v) ts) i = the (V' ?rn) (map (Formula.eval_trm v) ts) i"
-      using Some Pred(2,4) by force
+      using Some Pred(2,4) by fastforce
     ultimately show ?thesis by simp
   qed
 next
@@ -3157,18 +3114,18 @@ next
       with V show ?thesis
         unfolding fun_upd_apply eqTrueI[OF True] if_True option.sel mem_Collect_eq
       proof (intro conj_cong refl Let(1)[where
-        S="{v'. (p, v') \<in> relevant_events \<psi> S}" and V=V],
+        S="{v'. (p, v') \<in> relevant_events \<psi> S \<and> length v' = Formula.nfv \<phi>}" and V=V],
         goal_cases relevant' v' dom' V')
         case relevant'
         then show ?case
-          by (elim subset_trans[rotated]) (auto simp: set_eq_iff)
+          by (elim subset_trans[rotated]) auto
       next
         case v'
         with True show ?case by simp
       next
         case (V' p' v' i)
         then show ?case
-          by (intro V(4)) (auto simp: set_eq_iff)
+          by (intro V(4)) auto
       qed auto
     next
       case False
@@ -3186,26 +3143,26 @@ next
     proof (cases "(p', n) = (p, Formula.nfv \<phi>)")
       case True
       let ?pn = "(p, Formula.nfv \<phi>)"
-      let ?R = "(\<lambda>e' e. matches (snd e') \<phi> e \<and> fst e' = p)\<^sup>*\<^sup>*"
-      have inter_matches_imp_R: "{w. ?R (p, v') (p, w)} \<inter> {w. matches w \<phi> (p'', u)} \<noteq> {} \<Longrightarrow>
-        ?R (p, v') (p'', u)" for p'' u
+      let ?R = "(\<lambda>e' e. matches (snd e') \<phi> e \<and> fst e' = p \<and> length (snd e') = Formula.nfv \<phi>)\<^sup>*\<^sup>*"
+      have inter_matches_imp_R: "?R (p, v') (p, w) \<Longrightarrow> matches w \<phi> (p'', u) \<Longrightarrow> length w = Formula.nfv \<phi> \<Longrightarrow>
+        ?R (p, v') (p'', u)" for w p'' u
         by (auto intro: rtranclp.rtrancl_into_rtrancl)
 
       have "letpast_sat (\<lambda>X u k. Formula.sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>) w j =
           letpast_sat (\<lambda>X u k. Formula.sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) (V'(?pn \<mapsto> X)) u k \<phi>) w j"
-        if "?R (p, v') (p, w)" "j \<le> i'" for w j
+        if "?R (p, v') (p, w)" "length w = Formula.nfv \<phi>" "j \<le> i'" for w j
         using that
       proof (induct "\<lambda>X u k. Formula.sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>" w j rule: letpast_sat.induct)
         case (1 w j)
         show ?case
         proof (subst (1 2) letpast_sat.simps,
-            rule LetPast.IH(1)[where S="{w. ?R (p, v') (p, w)}"],
+            rule LetPast.IH(1)[where S="{w. ?R (p, v') (p, w) \<and> length w = Formula.nfv \<phi>}"],
             goal_cases relevant R dom eq)
           case relevant
-          have "relevant_events \<phi> {w. ?R (p, v') (p, w)} - {e. (fst e, length (snd e)) \<in> insert ?pn (dom V)}
+          have "relevant_events \<phi> {w. ?R (p, v') (p, w) \<and> length w = Formula.nfv \<phi>} - {e. (fst e, length (snd e)) \<in> insert ?pn (dom V)}
           \<subseteq> relevant_events (Formula.LetPast p \<phi> \<psi>) S - {e. (fst e, length (snd e)) \<in> dom V}"
             using V(2) True
-            by (fastforce dest!: inter_matches_imp_R)
+            by (auto dest!: inter_matches_imp_R)
           also have "insert ?pn (dom V) = dom (V(?pn \<mapsto> \<lambda>w j'. j' < j \<and> letpast_sat (\<lambda>X u k. Formula.sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>) w j'))"
             by simp
           finally show ?case
@@ -3225,19 +3182,19 @@ next
             letpast_sat (\<lambda>X u k. Formula.sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) (V'(?pn \<mapsto> X)) u k \<phi>) w' j'"
               if "j' < j"
               using that eq "1" True
-              by (auto split: if_splits dest!: inter_matches_imp_R)
+              by (auto split: if_splits dest: inter_matches_imp_R)
             ultimately show ?thesis
               by (simp cong: conj_cong)
           next
             case False
             then show ?thesis
               using eq V(2) LetPast.prems(4)[of p'' n' w' j'] True
-              by (fastforce simp add: dom_def dest!: inter_matches_imp_R)
+              by (fastforce simp add: dom_def dest: inter_matches_imp_R)
           qed
         qed
       qed
       then show ?thesis
-        by (auto simp add: True)
+        using V(3) True by auto
     next
       case False
       then show ?thesis
@@ -3328,14 +3285,20 @@ qed simp_all
 
 end (*context*)
 
+locale traces_downward_closed =
+  fixes traces :: "Formula.trace set"
+  assumes closed: "\<sigma> \<in> traces \<Longrightarrow> (\<And>i. \<Gamma> \<sigma>' i \<subseteq> \<Gamma> \<sigma> i) \<Longrightarrow> \<sigma>' \<in> traces"
+begin
 
-interpretation Formula_slicer: abstract_slicer "relevant_events \<phi>" for \<phi> .
+lemma map_\<Gamma>_subset_traces: "\<sigma> \<in> traces \<Longrightarrow> (\<And>D. f D \<subseteq> D) \<Longrightarrow> map_\<Gamma> f \<sigma> \<in> traces"
+  by (simp add: closed)
 
-lemma sat_slice_iff:
-  assumes "v \<in> S"
-  shows "Formula.sat \<sigma> V v i \<phi> 
-  \<longleftrightarrow> Formula.sat (Formula_slicer.slice Formula_slicer \<phi> S \<sigma>) V v i \<phi>" (*added Formula_slicer*)
-  by (rule sat_slice_strong[OF assms]) auto
+sublocale formula_slicer: sliceable_fo_spec "Formula.nfv \<phi>" "Formula.fv \<phi>" traces
+  "relevant_events \<phi>" "\<lambda>\<sigma> v i. Formula.sat \<sigma> Map.empty v i \<phi>" for \<phi>
+  by unfold_locales
+    (auto simp add: fvi_less_nfv sat_fv_cong closed iff: sat_slice_strong)
+
+end
 
 lemma Neg_splits:
   "P (case \<phi> of Formula.formula.Neg \<psi> \<Rightarrow> f \<psi> | \<phi> \<Rightarrow> g \<phi>) =

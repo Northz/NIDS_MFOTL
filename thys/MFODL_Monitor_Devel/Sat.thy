@@ -262,6 +262,28 @@ lemma sat_unconvert:
 
 lemmas sat_unconvert' = sat_unconvert[where A="{}" and X="preds \<phi>" and \<phi>=\<phi> for \<phi>, simplified]
 
+definition "relevant_events' \<phi> S p = {xs. length xs = snd p \<and> (\<exists>v\<in>S. Safety.matches v \<phi> (fst p, xs))}"
+
+lemma sat_relevant_events':
+  assumes "v \<in> S" and \<tau>_eq: "\<And>i. \<tau> \<sigma> i = \<tau> \<sigma>' i"
+    and \<Gamma>_eq: "\<And>i p. p \<in> preds \<phi> \<Longrightarrow> \<Gamma> \<sigma> i p \<inter> relevant_events' \<phi> S p = \<Gamma> \<sigma>' i p \<inter> relevant_events' \<phi> S p"
+  shows "sat \<sigma> v i \<phi> = sat \<sigma>' v i \<phi>"
+proof -
+  have "sat \<sigma> v i \<phi> = Formula.sat (unconvert (preds \<phi>) \<sigma>) Map.empty v i \<phi>"
+    by (rule sat_unconvert')
+  also have "\<dots> = Formula.sat (map_\<Gamma> (\<lambda>D. D \<inter> relevant_events \<phi> S) (unconvert (preds \<phi>) \<sigma>)) Map.empty v i \<phi>"
+    using \<open>v \<in> S\<close> by (simp add: sat_slice_strong)
+  also have "map_\<Gamma> (\<lambda>D. D \<inter> relevant_events \<phi> S) (unconvert (preds \<phi>) \<sigma>) =
+    map_\<Gamma> (\<lambda>D. D \<inter> relevant_events \<phi> S) (unconvert (preds \<phi>) \<sigma>')"
+    using \<tau>_eq \<Gamma>_eq by (fastforce simp add: unconvert_def relevant_events'_def intro!: trace_eqI)
+  also have "Formula.sat (map_\<Gamma> (\<lambda>D. D \<inter> relevant_events \<phi> S) (unconvert (preds \<phi>) \<sigma>')) Map.empty v i \<phi> =
+    Formula.sat (unconvert (preds \<phi>) \<sigma>') Map.empty v i \<phi>"
+    using \<open>v \<in> S\<close> by (simp add: sat_slice_strong[symmetric])
+  finally show ?thesis
+    by (simp add: sat_unconvert')
+qed
+
+
 subsection \<open>Collected correctness results\<close>
 
 definition pprogress :: "'t Formula.formula \<Rightarrow> Sat.prefix \<Rightarrow> nat" where

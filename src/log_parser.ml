@@ -272,16 +272,16 @@ module Make(C: Consumer) = struct
           | None -> fail ("Predicate " ^ s
               ^ " was not defined in the signature."))
       | AT ->
-          next pb;
           C.end_tp ctxt;
+          next pb;
           parse_ts ()
       | SEP ->
-          next pb;
           C.end_tp ctxt;
+          next pb;
           parse_init ()
       | CMD ->
-          next pb;
           C.end_tp ctxt;
+          next pb;
           parse_command ()
       | EOF -> C.end_tp ctxt
       | t -> fail ("Expected a predicate, '@', ';', or '>' but saw "
