@@ -1700,8 +1700,8 @@ lemma finite'_code [code]: (* do we need it? *)
   "finite' (List.coset xs) \<longleftrightarrow> of_phantom (finite_UNIV :: 'a finite_UNIV)"
   by (simp_all add: finite'_def card_gt_0_iff finite_UNIV) *)
 
-declare insert_maggaux'.simps [code del]
-declare insert_maggaux'.simps [folded finite'_def, code]
+(* declare insert_maggaux'.simps [code del]
+declare insert_maggaux'.simps [folded finite'_def, code] *)
 
 lemma [code_unfold]: "X - Mapping.keys tuple_in = Set.filter (\<lambda>k. Mapping.lookup tuple_in k = None) X"
   by(transfer) auto
