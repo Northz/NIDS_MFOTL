@@ -61,6 +61,11 @@ export_code
   rewrite_trigger
   in OCaml module_name Monitor file_prefix "verified"
 
+term "RBT_set t1 - RBT_set t2"
+term RBT_set
+thm rbt_minus_def rbt_minus_code
+find_theorems name: RBT name: minus name: def
+
 (*<*)
 end
 (*>*)

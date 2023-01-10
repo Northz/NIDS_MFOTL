@@ -125,9 +125,9 @@ let convert_formula dbschema f =
   | Prev (intv,f) -> Prev ((convert_interval intv), (convert_formula_vars fvl bvl lets f))
   | Next (intv,f) -> Next ((convert_interval intv), (convert_formula_vars fvl bvl lets f))
   | Since (intv,f1,f2) -> Since (convert_formula_vars fvl bvl lets f1,convert_interval intv,convert_formula_vars fvl bvl lets f2)
-  | Trigger (intv,f1,f2) -> Trigger (convert_formula_vars fvl bvl f1,convert_interval intv,convert_formula_vars fvl bvl f2)
+  | Trigger (intv,f1,f2) -> Trigger (convert_formula_vars fvl bvl lets f1,convert_interval intv,convert_formula_vars fvl bvl lets f2)
   | Until (intv,f1,f2) -> Until (convert_formula_vars fvl bvl lets f1,convert_interval intv,convert_formula_vars fvl bvl lets f2)
-  | Release (intv,f1,f2) -> Release (convert_formula_vars fvl bvl f1,convert_interval intv,convert_formula_vars fvl bvl f2)
+  | Release (intv,f1,f2) -> Release (convert_formula_vars fvl bvl lets f1,convert_interval intv,convert_formula_vars fvl bvl lets f2)
   | Eventually (intv,f) -> convert_formula_vars fvl bvl lets (Until (intv,truth,f))
   | Once (intv,f) -> convert_formula_vars fvl bvl lets (Since (intv,truth,f))
   | Always (intv,f) -> convert_formula_vars fvl bvl lets (Neg (Eventually (intv,(Neg f))))
@@ -225,6 +225,22 @@ type state =
                        ((nat, nat) mapping *
                          ((event_data option) list) set list)))))))))) *
       aggaux option),
+      (nat *
+          (nat *
+            (nat *
+              (nat *
+                (bool list *
+                  (bool list *
+                    ((nat *
+                       (((event_data option) list) set *
+                         ((event_data option) list) set))
+                       queue *
+                      ((nat * ((event_data option) list) set) queue *
+                        ((((event_data option) list), nat) mapping *
+                          (((event_data option) list) set *
+                            ((((event_data option) list), nat) mapping *
+                              (((event_data option) list) set *
+                                ((event_data option) list) set)))))))))))),
     unit)
     mstate_ext
 

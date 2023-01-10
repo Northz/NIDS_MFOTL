@@ -1318,8 +1318,14 @@ declare Set_inter_code(16)[code del]
 declare rbt_inter_code[code]
 
 (* Set_minus on RBTs not supported in Set_Impl! *)
-declare Set_minus_code[code del]
+
+(* definition "my_fun b t1 t2 = (if b then {0::nat,1,2,3,4} - {0::nat,1,2,5} else RBT_set t1 - RBT_set t2)"
+code_thms my_fun *)
+thm Set_minus_code
+declare Set_minus_code(2) [code del]
 declare rbt_minus_code[code]
+
+
 
 (*
 The following code equation requires an executable sorting algorithm for ccompare.
