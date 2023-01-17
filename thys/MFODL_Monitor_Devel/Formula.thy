@@ -209,14 +209,14 @@ lemma eval_trm_fv_cong: "\<forall>x\<in>fv_trm t. v ! x = v' ! x \<Longrightarro
 
 subsubsection \<open>Formulas\<close>
 
-text \<open> Aggregation operators @{term "Agg nat agg_op nat trm formula"} are special
-formulas with five parameters:
+text \<open> Aggregation operators @{text "Agg nat ('t agg_op) ('t list) trm ('t formula)"} 
+are special formulas with five parameters:
 \begin{itemize}
-\item Variable @{term "y::nat"} that saves the value of the aggregation operation.
-\item Type of aggregation (sum, avg, min, max, ...).
-\item Binding number @{term "b::nat"} for many variables in the next two arguments.
-\item Term @{term "t::trm"} that represents an operation to be aggregated.
-\item Formula @{term "\<phi>"} that restricts the domain where the aggregation takes place.
+\item A variable @{term "y::nat"} that saves the value of the aggregation operation.
+\item A type of aggregation (sum, avg, min, max, ...).
+\item A list @{term "ts::'t list"} binding (with its length) the variables in the next arguments.
+\item A term @{term "t::trm"} that represents an operation to be aggregated.
+\item A formula @{term "\<phi>"} that restricts the domain where the aggregation takes place.
 \end{itemize} \<close>
 
 datatype ty = TInt | TFloat | TString
@@ -1318,35 +1318,6 @@ lemma release_fvi:
   by (auto simp add: release_safe_0_def always_safe_0_def Formula.TT_def Formula.FF_def 
       and_release_safe_bounded_def release_safe_bounded_def always_safe_bounded_def)
 
-(* fun subformulas :: "'a Formula.formula \<Rightarrow> 'a Formula.formula set"
-  where "subformulas (p \<dagger> ts) = {p \<dagger> ts}"
-  | "subformulas (t1 =\<^sub>F t2) = {t1 =\<^sub>F t2}"
-  | "subformulas (t1 <\<^sub>F t2) = {t1 <\<^sub>F t2}"
-  | "subformulas (t1 \<le>\<^sub>F t2) = {t1 \<le>\<^sub>F t2}"
-  | "subformulas (Formula.Let p \<alpha> \<beta>) = subformulas \<alpha> \<union> subformulas \<beta> \<union> {Formula.Let p \<alpha> \<beta>}"
-  | "subformulas (Formula.LetPast p \<alpha> \<beta>) = subformulas \<alpha> \<union> subformulas \<beta> \<union> {Formula.LetPast p \<alpha> \<beta>}"
-  | "subformulas (\<not>\<^sub>F \<alpha>) = subformulas \<alpha> \<union> {\<not>\<^sub>F \<alpha>}"
-  | "subformulas (\<alpha> \<or>\<^sub>F \<beta>) = subformulas \<alpha> \<union> subformulas \<beta> \<union> {\<alpha> \<or>\<^sub>F \<beta>}"
-  | "subformulas (\<alpha> \<and>\<^sub>F \<beta>) = subformulas \<alpha> \<union> subformulas \<beta> \<union> {\<alpha> \<and>\<^sub>F \<beta>}"
-  | "subformulas (\<And>\<^sub>F \<alpha>s) = (\<Union>\<alpha>\<in>set \<alpha>s. subformulas \<alpha>) \<union> {\<And>\<^sub>F \<alpha>s}"
-  | "subformulas (\<exists>\<^sub>F:t. \<alpha>) = subformulas \<alpha> \<union> {\<exists>\<^sub>F:t. \<alpha>}"
-  | "subformulas (Formula.Agg y \<omega> tys f \<alpha>) = subformulas \<alpha> \<union> {Formula.Agg y \<omega> tys f \<alpha>}"
-  | "subformulas (\<^bold>Y I \<alpha>) = subformulas \<alpha> \<union> {\<^bold>Y I \<alpha>}"
-  | "subformulas (\<^bold>X I \<alpha>) = subformulas \<alpha> \<union> {\<^bold>X I \<alpha>}"
-  | "subformulas (\<alpha> \<^bold>S I \<beta>) = subformulas \<alpha> \<union> subformulas \<beta> \<union> {\<alpha> \<^bold>S I \<beta>}"
-  | "subformulas (\<alpha> \<^bold>U I \<beta>) = subformulas \<alpha> \<union> subformulas \<beta> \<union> {\<alpha> \<^bold>U I \<beta>}"
-  | "subformulas (\<alpha> \<^bold>T I \<beta>) = subformulas \<alpha> \<union> subformulas \<beta> \<union> {\<alpha> \<^bold>T I \<beta>}"
-  | "subformulas (\<alpha> \<^bold>R I \<beta>) = subformulas \<alpha> \<union> subformulas \<beta> \<union> {\<alpha> \<^bold>R I \<beta>}"
-  | "subformulas (Formula.MatchP I r) = {Formula.MatchP I r}"
-  | "subformulas (Formula.MatchF I r) = {Formula.MatchF I r}"
-  | "subformulas (Formula.TP j) = {Formula.TP j}"
-  | "subformulas (Formula.TS t) = {Formula.TS t}"
-
-lemma self_subformula: "\<alpha> \<in> subformulas \<alpha>"
-  by (induct \<alpha> rule: subformulas.induct) auto
-
-definition "strict_subformulas \<alpha> = subformulas \<alpha> - {\<alpha>}" *)
-
 unbundle MFODL_no_notation \<comment> \<open> disable notation \<close>
 
 
@@ -1392,7 +1363,6 @@ proof -
     by (transfer' fixing: \<sigma>) (auto split: if_splits)
   ultimately show ?thesis by auto
 qed
-
 
 lemma historically_rewrite_0:
   fixes I1 :: \<I>

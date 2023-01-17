@@ -77,6 +77,8 @@ let elim_double_negation f =
     | PastAlways (intv, f) -> PastAlways (intv, elim f)
     | Since (intv, f1, f2) -> Since (intv, elim f1, elim f2)
     | Until (intv, f1, f2) -> Until (intv, elim f1, elim f2)
+    | Trigger (intv, f1, f2) -> Trigger (intv, elim f1, elim f2)
+    | Release (intv, f1, f2) -> Release (intv, elim f1, elim f2)
     | Frex (intv, r) -> Frex (intv, elim_re r)
     | Prex (intv, r) -> Prex (intv, elim_re r)
   and elim_re = function
@@ -87,8 +89,6 @@ let elim_double_negation f =
   | Star r -> Star (elim_re r)
   in
   elim f
-
-
 
 
 let simplify_terms f =
@@ -126,6 +126,8 @@ let simplify_terms f =
     | PastAlways (intv, f) -> PastAlways (intv, s f)
     | Since (intv, f1, f2) -> Since (intv, s f1, s f2)
     | Until (intv, f1, f2) -> Until (intv, s f1, s f2)
+    | Trigger (intv, f1, f2) -> Trigger (intv, s f1, s f2)
+    | Release (intv, f1, f2) -> Release (intv, s f1, s f2)
     | Frex (intv, r) -> Frex (intv, s_re r)
     | Prex (intv, r) -> Prex (intv, s_re r)
   and s_re = function
@@ -177,10 +179,16 @@ let rec elim_syntactic_sugar g =
     | Next (intv, f) -> Next (intv, elim f)
     | Eventually (intv, f) -> Eventually (intv, elim f)
     | Once (intv, f) -> Once (intv, elim f)
-    | Always (intv, f) -> Neg (Eventually (intv, elim (Neg f)))
-    | PastAlways (intv, f) -> Neg (Once (intv, elim (Neg f)))
+    | Always (intv, f) -> if !Misc.verified 
+      then Release (intv, Neg (Exists (["x"], Equal (Var "x", Var "x"))), elim f) 
+      else Neg (Eventually (intv, elim (Neg f)))
+    | PastAlways (intv, f) -> if !Misc.verified 
+      then Trigger (intv, Neg (Exists (["x"], Equal (Var "x", Var "x"))), elim f) 
+      else Neg (Once (intv, elim (Neg f)))
     | Since (intv, f1, f2) -> Since (intv, elim f1, elim f2)
     | Until (intv, f1, f2) -> Until (intv, elim f1, elim f2)
+    | Trigger (intv, f1, f2) -> Trigger (intv, elim f1, elim f2)
+    | Release (intv, f1, f2) -> Release (intv, elim f1, elim f2)
     | Frex (intv, r) -> Frex (intv, elim_re r)
     | Prex (intv, r) -> Prex (intv, elim_re r)
   and elim_re = function
@@ -213,6 +221,10 @@ let push_negation g =
     | Neg (Implies (f1, f2) as f) -> push (Neg (push f))
     | Neg (Equiv (f1, f2) as f) -> push (Neg (push f))
     | Neg (Let (p,f1,f2)) -> Let (p,f1, push (Neg f2))
+    | Neg (Since (intv, f1, f2)) -> Trigger (intv, push (Neg f1), push (Neg f2))
+    | Neg (Until (intv, f1, f2)) -> Release (intv, push (Neg f1), push (Neg f2))
+    | Neg (Trigger (intv, f1, f2)) -> Since (intv, push (Neg f1), push (Neg f2))
+    | Neg (Release (intv, f1, f2)) -> Until (intv, push (Neg f1), push (Neg f2))
 
     | Neg f -> Neg (push f)
     | Let (p,f1,f2) -> Let (p,f1, push f2)
@@ -233,6 +245,8 @@ let push_negation g =
     | PastAlways (intv, f) -> PastAlways (intv, push f)
     | Since (intv, f1, f2) -> Since (intv, push f1, push f2)
     | Until (intv, f1, f2) -> Until (intv, push f1, push f2)
+    | Trigger (intv, f1, f2) -> Trigger (intv, push f1, push f2)
+    | Release (intv, f1, f2) -> Release (intv, push f1, push f2)
     | Frex (intv, r) -> Frex (intv, push_re r)
     | Prex (intv, r) -> Prex (intv, push_re r)
   and push_re = function
@@ -251,7 +265,7 @@ let normalize_negation f =
 let normalize_syntax f = 
   elim_syntactic_sugar (simplify_terms f)
 
-(* The function [normalize] pushes simplifies terms, eliminates
+(* The function [normalize] simplifies terms, eliminates
    syntactic siguar, pushes down negations, and eliminates double
    negations. *)
 let normalize f =
@@ -442,7 +456,9 @@ let rec is_monitorable f =
   | Always _
   | PastAlways _ ->
     failwith "[Rewriting.is_monitorable] The operators IMPLIES, EQUIV, FORALL, ALWAYS and PAST_ALWAYS should have been eliminated when the -no_rw option is not present. If the -no_rw option is present, make sure to eliminate these operators yourself."
-
+  | Trigger _ 
+  | Release _ ->
+    failwith "[Rewriting.is_monitorable] The operators TRIGGER and RELEASE are only available without rewriting in the verified monitor. If the -no_rw flag is present, please rewrite them manually. Otherwise, use the -verified flag."
 
 
 (** Range-restrictions, safe-range and TSF safe-range checks, and
@@ -579,13 +595,21 @@ let rec rr = function
     let _, b1 = rr f1 in
     let rr2, b2 = rr f2 in
     (rr2, b1 && b2)
+    (* Following Monitoring Metric First-order Temporal Properties 
+       by Basin et al in J. ACM 62(2), 2015 *)
+  | Trigger (intv, f1, f2)
+  | Release (intv, f1, f2) ->
+    let _, b1 = rr f1 in
+    let rr2, b2 = rr f2 in
+    let b = if MFOTL.in_interval Z.zero intv then b1 && b2 else false in
+    (rr2, b) 
   | Frex (_,r) -> rr_re true r 
   | Prex (_,r) -> rr_re false r 
   (* TODO: We should also check the first subformula of Let and LetPast, and
      set the boolean result accordingly. *)
   | Let (_,_,f) -> rr f
   | LetPast (_,_,f) -> rr f
-  | _ -> failwith "[Rewriting.rr] internal error: syntactic sugar not supported"
+  | _ -> failwith "[Rewriting.rr] internal error: syntactic sugar (IMPL, EQUIV, FORALL, ALWAYS and PAST_ALWAYS) not supported"
   and rr_re future = function 
   | Wild -> ([],true)
   | Test f -> rr f
@@ -596,9 +620,6 @@ let rec rr = function
                       let (rr2,b2) = rr_re future r2 in
                       (List.filter (fun v -> List.mem v rr1) rr2, b1 && b2)
   | Star r -> rr_re future r
-  
-
-
 
 let is_saferange f =
   let rrv, b = rr f in
@@ -774,6 +795,8 @@ let rec rewrite f =
   | PastAlways (intv, f1) -> PastAlways (intv, rewrite f1)
   | Since (intv, f1, f2) -> Since (intv, rewrite f1, rewrite f2)
   | Until (intv, f1, f2) -> Until (intv, rewrite f1, rewrite f2)
+  | Trigger (intv, f1, f2) -> Trigger (intv, rewrite f1, rewrite f2)
+  | Release (intv, f1, f2) -> Release (intv, rewrite f1, rewrite f2)
 
   (* | Pred p -> rewrite_pred p *)
   | f -> f
@@ -935,6 +958,7 @@ let rec is_future = function
   | Implies (f1, f2)
   | Equiv (f1, f2)
   | Since (_, f1, f2)
+  | Trigger (_, f1, f2)
   | Let (_,f1,f2)
     -> (is_future f1) || (is_future f2)
   | LetPast (_,f1,f2)
@@ -944,6 +968,7 @@ let rec is_future = function
   | Eventually (_, _)
   | Always (_, _)
   | Until (_, _, _)
+  | Release (_, _, _)
   | Frex (_,_)
     -> true
 and is_re_future = function 
@@ -1154,6 +1179,8 @@ let rec check_aggregations = function
   | Equiv (f1, f2)
   | Since (_, f1, f2)
   | Until (_, f1, f2)
+  | Trigger (_, f1, f2)
+  | Release (_, f1, f2)
     -> (check_aggregations f1) && (check_aggregations f2)
 and check_re_aggregations = function 
   | Wild -> true
