@@ -4,27 +4,6 @@ theory Monitor_Code
 begin
 (*>*)
 
-
-thm default_mmasaux.init_since'_def 
-thm default_mmauaux.init_until'_def
-thm verimon_maux.init_trigger'_def
-thm verimon_maux.init_and_trigger'_def
-thm mtaux.init_and_trigger'_def
-thm default_maux.meinit0.simps(13)[unfolded default_mmasaux.init_since'_def]
-
-
-lemmas meinit0_code_simps = default_maux.meinit0.simps[unfolded verimon_maux.init_and_trigger'_def]
-lemmas vmeinit0_code_simps = verimon_maux.meinit0.simps[unfolded verimon_maux.init_and_trigger'_def]
-declare default_maux.meinit0.simps [code del]
-declare meinit0_code_simps [code]
-  and vmeinit0_code_simps [code]
-declare default_mmasaux.init_since'_def [code_unfold]
-  and default_mmauaux.init_until'_def [code_unfold]
-  and verimon_maux.init_since'_def [code_unfold]
-  and verimon_maux.init_until'_def [code_unfold]
-  and verimon_maux.init_trigger'_def [code_unfold]
-  and verimon_maux.init_and_trigger'_def [code_unfold]
-
 (* code_thms vminit_safe *)
 
 

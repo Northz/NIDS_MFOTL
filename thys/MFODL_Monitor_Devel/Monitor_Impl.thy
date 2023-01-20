@@ -11,47 +11,6 @@ theory Monitor_Impl
 begin
 (*>*)
 
-(* derive ccompare Formula.trm
-derive (eq) ceq Formula.trm
-derive (rbt) set_impl Formula.trm
-derive (rbt) mapping_impl Monitor.mregex
-derive (rbt) set_impl string8
-derive (rbt) mapping_impl string8
-derive (rbt) set_impl event_data
-derive (rbt) mapping_impl event_data
-derive (eq) ceq string8
-derive (linorder) compare string8
-derive (compare) ccompare string8
-
-
-(* print_codesetup *)
-(* code_thms Formula.sat *)
-(* code_deps Formula.sat *)
-term listset
-print_codeproc
-print_derives
-
-(* declare [[code_preproc_trace]] *)
-
-code_thms ord_string8_inst.less_string8
-code_printing Formula.sat
-
-definition "my_fun \<phi> \<psi> = (if safe_assignment (fv \<phi>) \<psi> then True else False)"
-
-code_deps my_fun
-(* No code equations for ord_string8_inst.less_eq_string8, 
-  equal_string8_inst.equal_string8, 
-  ord_string8_inst.less_string8, 
-  one_double_inst.one_double, 
-  copysign_double, 
-  compare_double, 
-  Code_Double.is_zero 
-*)
-
-export_code my_fun checking OCaml?
-export_code my_fun checking Scala?
-export_code my_fun checking SML? *)
-
 declare Let_def[simp del]
 
 section \<open>Data refinement\<close>
@@ -1086,12 +1045,6 @@ next
     using valid_result_mmtaux by blast
 qed simp_all
 
-term maux
-term init_mmsaux
-term init_mmasaux
-term valid_mmtaux
-typ mmasaux
-
 (* global_interpretation default_maux: maux valid_mmsaux "init_mmsaux :: _ \<Rightarrow> event_data mmsaux" 
   add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux result_mmsaux
   valid_mmuaux "init_mmuaux :: _ \<Rightarrow> event_data mmuaux" add_new_mmuaux' 
@@ -1887,6 +1840,27 @@ lift_definition finite_multiset_cfi :: "(event_data \<times> enat, bool) comp_fu
 lemma finite_multiset_code[code]:
   "finite_multiset M = (if finite M then set_fold_cfi finite_multiset_cfi True M else False)"
   using finite_multiset_def finite_multiset_eq by transfer auto
+
+
+thm default_mmasaux.init_since'_def 
+thm default_mmauaux.init_until'_def
+thm verimon_maux.init_trigger'_def
+thm verimon_maux.init_and_trigger'_def
+thm mtaux.init_and_trigger'_def
+thm default_maux.meinit0.simps(13)[unfolded default_mmasaux.init_since'_def]
+
+
+lemmas meinit0_code_simps = default_maux.meinit0.simps[unfolded verimon_maux.init_and_trigger'_def]
+lemmas vmeinit0_code_simps = verimon_maux.meinit0.simps[unfolded verimon_maux.init_and_trigger'_def]
+declare default_maux.meinit0.simps [code del]
+declare meinit0_code_simps [code]
+  and vmeinit0_code_simps [code]
+declare default_mmasaux.init_since'_def [code_unfold]
+  and default_mmauaux.init_until'_def [code_unfold]
+  and verimon_maux.init_since'_def [code_unfold]
+  and verimon_maux.init_until'_def [code_unfold]
+  and verimon_maux.init_trigger'_def [code_unfold]
+  and verimon_maux.init_and_trigger'_def [code_unfold]
 
 (*<*)
 end
