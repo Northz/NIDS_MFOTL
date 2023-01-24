@@ -166,7 +166,7 @@ definition "mbest5 \<equiv> mstep ({(STR ''P3'',[0]), (STR ''P3'',[1]), (STR ''P
 definition "mbest6 \<equiv> mstep ({(STR ''P1'',[4]), (STR ''P3'',[1]), (STR ''P3'',[2]), (STR ''P1'',[5])}, 6) (snd mbest5)"
 definition "mbest7 \<equiv> mstep ({(STR ''P2'',[4])}, 12) (snd mbest6)"
 
-value "mbest"  \<comment> \<open> @{value "mbest"} \<close>
+(* value "mbest"  \<comment> \<open> @{value "mbest"} \<close>
 value "mbest0" \<comment> \<open> @{value "mbest0"} \<close>
 value "mbest1" \<comment> \<open> @{value "mbest1"} \<close>
 value "mbest2" \<comment> \<open> @{value "mbest2"} \<close>
@@ -174,7 +174,7 @@ value "mbest3" \<comment> \<open> @{value "mbest3"} \<close>
 value "mbest4" \<comment> \<open> @{value "mbest4"} \<close>
 value "mbest5" \<comment> \<open> @{value "mbest5"} \<close>
 value "mbest6" \<comment> \<open> @{value "mbest6"} \<close>
-value "mbest7" \<comment> \<open> @{value "mbest7"} \<close>
+value "mbest7" \<comment> \<open> @{value "mbest7"} \<close> *)
 
 
 subsubsection \<open> vaccine refrigeration times - conjunction negated historically \<close>
@@ -204,7 +204,7 @@ definition "mpackages5 \<equiv> mstep ({(STR ''travelling'',[4]), (STR ''travell
 definition "mpackages6 \<equiv> mstep ({(STR ''travelling'',[4]), (STR ''travelling'',[5]), (STR ''arrived'',[6])}, 6) (snd mpackages5)"
 definition "mpackages7 \<equiv> mstep ({(STR ''travelling'',[4]), (STR ''arrived'',[5]), (STR ''travelling'',[7])}, 7) (snd mpackages6)"
 
-value mpackages  \<comment> \<open> @{value "mpackages"} \<close>
+(* value mpackages  \<comment> \<open> @{value "mpackages"} \<close>
 value mpackages0 \<comment> \<open> @{value "mpackages0"} \<close>
 value mpackages1 \<comment> \<open> @{value "mpackages1"} \<close>
 value mpackages2 \<comment> \<open> @{value "mpackages2"} \<close>
@@ -212,7 +212,7 @@ value mpackages3 \<comment> \<open> @{value "mpackages3"} \<close>
 value mpackages4 \<comment> \<open> @{value "mpackages4"} \<close>
 value mpackages5 \<comment> \<open> @{value "mpackages5"} \<close>
 value mpackages6 \<comment> \<open> @{value "mpackages6"} \<close>
-value mpackages7 \<comment> \<open> @{value "mpackages7"} \<close>
+value mpackages7 \<comment> \<open> @{value "mpackages7"} \<close> *)
 
 (* other possible specifications *)
 
@@ -261,7 +261,7 @@ lemma "safe_formula pirated"
   apply (auto simp: pirated_def enat_0 release_safe_0_def)
   by transfer (clarsimp simp: pirated_def enat_0)
 
-definition "mpiracy \<equiv> minit right_pir"
+definition "mpiracy \<equiv> minit pirated"
 definition "mpiracy0 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 0) mpiracy"
 definition "mpiracy1 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 1) (snd mpiracy0)"
 definition "mpiracy2 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 2) (snd mpiracy1)"
@@ -296,6 +296,44 @@ value vmpiracy2 \<comment> \<open> @{value "vmpiracy2"} \<close>
 value vmpiracy3 \<comment> \<open> @{value "vmpiracy3"} \<close>
 value vmpiracy4 \<comment> \<open> @{value "vmpiracy4"} \<close>
 value vmpiracy5 \<comment> \<open> @{value "vmpiracy5"} \<close>
+
+
+definition "rpiracy \<equiv> minit right_pir"
+definition "rpiracy0 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 0) rpiracy"
+definition "rpiracy1 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 1) (snd rpiracy0)"
+definition "rpiracy2 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 2) (snd rpiracy1)"
+definition "rpiracy3 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 3) (snd rpiracy2)"
+definition "rpiracy4 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 4) (snd rpiracy3)"
+definition "rpiracy5 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 5) (snd rpiracy4)"
+
+
+
+definition "lpiracy \<equiv> minit left_pir"
+definition "lpiracy0 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 0) lpiracy"
+definition "lpiracy1 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 1) (snd lpiracy0)"
+definition "lpiracy2 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 2) (snd lpiracy1)"
+definition "lpiracy3 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 3) (snd lpiracy2)"
+definition "lpiracy4 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 4) (snd lpiracy3)"
+definition "lpiracy5 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 5) (snd lpiracy4)"
+
+value rpiracy 
+value rpiracy0 
+value rpiracy1
+value rpiracy2
+value rpiracy3
+value rpiracy4
+value rpiracy5
+
+value lpiracy 
+value lpiracy0 
+value lpiracy1
+value lpiracy2
+value lpiracy3
+value lpiracy4
+value lpiracy5
+
+
+thm release_safe_0_def[unfolded always_safe_0_def] sat_release_rewrite_0
 
 end
 

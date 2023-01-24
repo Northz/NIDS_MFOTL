@@ -1969,47 +1969,6 @@ lemma progress_eventually: "progress P (eventually I \<phi>) j
   unfolding eventually_def
   by (auto intro: arg_cong[where f = Inf])
 
-lemma progress_eventually_once[simp]: "progress P (eventually I (once J \<phi>)) j 
-  = progress P (eventually I \<phi>) j"
-  apply (auto simp: progress_eventually intro!: arg_cong[where f = Inf])
-  oops (* not valid anymore because definition has changed, is this simp-rule useful? *)
-
-lemma progress_historically_safe_0 [simp]: "progress P (historically_safe_0 I \<phi>) j = min j (
-  if bounded I then
-    (progress P \<phi> j) - 1 \<comment> \<open>? in in the past.\<close>
-  else
-    progress P \<phi> j
-  )"
-  unfolding historically_safe_0_def
-  oops
-  by auto
-
-lemma progress_historically_safe_bounded [simp]: 
-  "progress P (historically_safe_bounded I \<phi>) j = 
-    min j (Inf {i. \<forall>k. k < j \<and> k \<le> progress P \<phi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)})"
-proof -
-  define A where "A =  {i. \<forall>k. k < j \<and> k \<le> progress P \<phi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
-  have "progress P \<phi> j \<in> A"
-    unfolding A_def
-    by auto
-  then have "\<Sqinter> A \<le> progress P \<phi> j"
-    by (simp add: cInf_lower)
-  then  have " min (min j (local.progress P \<phi> j)) (\<Sqinter> A) =
-    min j (\<Sqinter> A)"
-    by auto
-  moreover have "memR (int_remove_lower_bound I) = memR I"
-    by (transfer) (auto)
-  ultimately show ?thesis
-    unfolding historically_safe_bounded_def A_def
-    oops
-    by auto
-qed
-
-lemma progress_historically_safe_unbounded [simp]: "progress P (historically_safe_unbounded I \<phi>) j = min j (progress P \<phi> j)"
-  unfolding historically_safe_unbounded_def
-  oops
-  by auto
-
 lemma memR_flip_int_double_upper: "memR I t \<Longrightarrow> memR (flip_int_double_upper I) t"
   by transfer auto
 
@@ -2112,49 +2071,6 @@ proof -
   finally show ?thesis .
 qed
 
-lemma progress_always_safe_bounded [simp]: "progress P (always_safe_bounded I \<phi>) j 
-  = (case j of 0 \<Rightarrow> 0
-  | Suc x \<Rightarrow> \<Sqinter> {i. memR I (\<tau> \<sigma> (\<Sqinter> {i. memR I (\<tau> \<sigma> (min x (progress P \<phi> j)) - \<tau> \<sigma> i)}) - \<tau> \<sigma> i)})"
-proof -
-  have "(local.progress P \<phi> j + 1) \<in> {i. \<forall>k. k < j \<and> k \<le> local.progress P \<phi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
-    by auto
-  then have non_empty: "{i. \<forall>k. k < j \<and> k \<le> local.progress P \<phi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)} \<noteq> {}"
-    by blast
-  have subset: "{i. \<forall>k. k < j \<and> k \<le> local.progress P \<phi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)} \<subseteq> {i. \<forall>k. k < j \<and> k \<le> j \<and> k \<le> local.progress P \<phi> j \<and> k \<le> \<Sqinter> {i. \<forall>k. k < j \<and> k \<le> local.progress P \<phi> j \<longrightarrow> memR (int_remove_lower_bound I) (\<tau> \<sigma> k - \<tau> \<sigma> i)} \<longrightarrow>
-                 memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
-    by auto
-  have min_eq: "min (\<Sqinter> {i. \<forall>k. k < j \<and> k \<le> local.progress P \<phi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)})
-     (\<Sqinter> {i. \<forall>k. k < j \<and> k \<le> j \<and> k \<le> local.progress P \<phi> j \<and> k \<le> \<Sqinter> {i. \<forall>k. k < j \<and> k \<le> local.progress P \<phi> j \<longrightarrow> memR (int_remove_lower_bound I) (\<tau> \<sigma> k - \<tau> \<sigma> i)} \<longrightarrow>
-                 memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}) =
-    \<Sqinter> {i. \<forall>k. k < j \<and> k \<le> j \<and> k \<le> local.progress P \<phi> j \<and> k \<le> \<Sqinter> {i. \<forall>k. k < j \<and> k \<le> local.progress P \<phi> j \<longrightarrow> memR (int_remove_lower_bound I) (\<tau> \<sigma> k - \<tau> \<sigma> i)} \<longrightarrow>
-                 memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}
-  "
-    using Inf_leq[OF non_empty subset]
-    by auto
-
-  have sub: "\<Sqinter> {i. \<forall>k. k < j \<and> k \<le> local.progress P \<phi> j \<longrightarrow> memR (flip_int_double_upper I) (\<tau> \<sigma> k - \<tau> \<sigma> i)} \<le>
-    \<Sqinter> {i. \<forall>k. k < j \<and> k \<le> local.progress P \<phi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
-    using memR_flip_int_double_upper
-    by (auto intro: Inf_leq[OF progress_nonempty])
-
-  have "progress P (always_safe_bounded I \<phi>) j = progress P (eventually I (formula.Or (once (int_remove_lower_bound I) \<phi>) (eventually (int_remove_lower_bound I) \<phi>))) j"
-    unfolding always_safe_bounded_def
-    by (auto simp add: min_eq )
-  moreover have "\<dots> = min (local.progress P (Formula.eventually I \<phi>) j) (case j of 0 \<Rightarrow> 0
-   | Suc x \<Rightarrow> \<Sqinter> {i. memR I (\<tau> \<sigma> (\<Sqinter> {i. memR I (\<tau> \<sigma> (min x (progress P \<phi> j)) - \<tau> \<sigma> i)}) - \<tau> \<sigma> i)})"
-    unfolding progress_eventually_or Safety.progress_eventually_once progress_eventually_double_upper
-    by auto
-  moreover have "\<dots> = (case j of 0 \<Rightarrow> 0
-   | Suc x \<Rightarrow> \<Sqinter> {i. memR I (\<tau> \<sigma> (\<Sqinter> {i. memR I (\<tau> \<sigma> (min x (progress P \<phi> j)) - \<tau> \<sigma> i)}) - \<tau> \<sigma> i)})"
-    unfolding progress_eventually Inf_memR_conv
-    apply (auto split: nat.splits)
-    by (metis min_x_Inf min.idem)
-  ultimately show ?thesis
-    unfolding progress_eventually
-    by auto
-  oops
-qed
-
 lemma progress_release_rewrite_0:
   assumes "mem I 0"
   shows "progress P (release_safe_0 \<phi> I \<psi>) j = progress P (formula.Release \<phi> I \<psi>) j"
@@ -2206,84 +2122,6 @@ lemma progress_eventually_monos:
   using assms 
   by (auto simp: progress_eventually intro!: Inf_leq
           elim!: allE[of "\<lambda>x. \<exists>k<j'. k \<le> _ \<and> \<not> memR _ (\<tau> \<sigma> k - \<tau> \<sigma> x)" j'])
-
-lemma progress_trigger_0_lower_bound: 
-  "progress P (trigger_safe_0 \<phi> I \<psi>) j \<le> progress P (formula.Trigger \<phi> I \<psi>) j"
-  apply (clarsimp simp: trigger_safe_0_def, intro conjI impI allI iffI)
-     apply (clarsimp simp: historically_safe_0_def)
-  using min.cobounded2 min.coboundedI1 apply blast
-     apply (clarsimp simp: historically_safe_0_def)
-  using min.cobounded2 min.coboundedI1 apply blast
-     apply (clarsimp simp: historically_safe_0_def)
-  apply (meson n_not_Suc_n progress_historically_safe_0)
-       apply (clarsimp simp: historically_safe_0_def)
-  oops
-  using min.coboundedI1 by blast
-
-lemma progress_trigger_unbounded_lower_bound: 
-  "progress P (trigger_safe_unbounded \<phi> I \<psi>) j \<le> progress P (formula.Trigger \<phi> I \<psi>) j"
-  thm progress.simps
-  oops
-  by (auto simp add: trigger_safe_unbounded_def)
-
-lemma progress_and_trigger_unbounded_lower_bound: 
-  "progress P (and_trigger_safe_unbounded \<alpha> \<phi> I \<psi>) j 
-  \<le> progress P (formula.And \<alpha> (formula.Trigger \<phi> I \<psi>)) j"
-proof -
-  have
-    "progress P (trigger_safe_unbounded \<phi> I \<psi>) j \<le> progress P \<phi> j"
-    "progress P (trigger_safe_unbounded \<phi> I \<psi>) j \<le> progress P \<psi> j"
-    using progress_trigger_unbounded_lower_bound
-    by auto
-  then show ?thesis
-    by (auto simp add: and_trigger_safe_unbounded_def)
-  oops
-qed
-
-lemma progress_trigger_bounded_lower_bound: 
-  "progress P (trigger_safe_bounded \<phi> I \<psi>) j \<le> progress P (formula.Trigger \<phi> I \<psi>) j"
-proof -
-  define A where "A = {i. \<forall>k. k < j \<and> k \<le> progress P \<psi> j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
-
-  have leq_\<phi>: "0 < j \<Longrightarrow> min (min (min j (\<Sqinter> A))
-            (min j (local.progress P \<phi> j)))
-       (min (Suc (min (local.progress P \<phi> j) (local.progress P \<psi> j))) j)
-      \<le> local.progress P \<phi> j"
-    by auto
-  have leq_\<psi>: "0 < j \<Longrightarrow> min (min (min j (\<Sqinter> A))
-            (min j (local.progress P \<phi> j)))
-       (min (Suc (min (local.progress P \<phi> j) (local.progress P \<psi> j))) j)
-      \<le> local.progress P \<psi> j"
-  proof -
-    have "progress P \<psi> j \<in> A"
-      unfolding A_def
-      by auto
-    then have "Inf A \<le> progress P \<psi> j"
-      by (simp add: cInf_lower)
-    then show ?thesis by auto
-  qed
-
-  show ?thesis 
-    oops
-    apply (auto simp add: trigger_safe_bounded_def)
-    using leq_\<phi> leq_\<psi>
-    unfolding A_def
-    by blast+
-qed
-
-lemma progress_and_trigger_bounded_lower_bound: 
-  "progress P (and_trigger_safe_bounded \<alpha> \<phi> I \<psi>) j 
-  \<le> progress P (formula.And \<alpha> (formula.Trigger \<phi> I \<psi>)) j"
-proof -
-  have
-    "progress P (trigger_safe_bounded \<phi> I \<psi>) j \<le> progress P \<phi> j"
-    "progress P (trigger_safe_bounded \<phi> I \<psi>) j \<le> progress P \<psi> j"
-    using progress_trigger_bounded_lower_bound
-    by auto
-  then show ?thesis
-    oops
-    by (auto simp add: and_trigger_safe_bounded_def)
-qed
 
 lemma progress_and_release_rewrite_bounded:
   assumes "\<not> mem I 0" "bounded I"
@@ -5273,16 +5111,6 @@ fun formula_of_constraint :: "Formula.trm \<times> bool \<times> mconstraint \<t
 lemma safe_release_bdd_iff: "safe_formula (release_safe_bounded \<phi>' I \<psi>') \<longleftrightarrow> 
   safe_formula \<phi>' \<and> safe_formula \<psi>' \<and> fv \<phi>' = fv \<psi>'"
   using release_safe_unbounded safe_formula_release_bounded by blast
-
-lemma (in maux) "minit0 n (and_release_safe_bounded \<phi> \<phi>' I \<psi>') = K"
-  apply (clarsimp simp: and_release_safe_bounded_def )
-  apply (subst release_safe_bounded_def)
-  back 
-  back
-  back
-  apply (simp add: safe_release_bdd_iff)
-  oops
-
 
 inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> nat 
   \<Rightarrow> event_data list set \<Rightarrow> ('msaux, 'muaux, 'mtaux) mformula \<Rightarrow> ty Formula.formula \<Rightarrow> bool" for \<sigma> j 

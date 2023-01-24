@@ -1,0 +1,10 @@
+session Testing_Verified_Monitor = MFOTL_Monitor_Devel +
+  sessions
+    IEEE_Floating_Point
+    Generic_Join_Devel
+    "HOL-Data_Structures"
+    MFODL_Monitor_Devel
+  theories
+    Monitor_Impl
+  document_files
+    "root.tex"
