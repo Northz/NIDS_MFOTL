@@ -72,7 +72,8 @@ type lformula =
   | LPastAlways of (interval * lformula labeled)
   | LSince of (interval * lformula labeled * lformula labeled)
   | LUntil of (interval * lformula labeled * lformula labeled)
-
+  | LTrigger of (interval * lformula labeled * lformula labeled)
+  | LRelease of (interval * lformula labeled * lformula labeled)
 
 let has_label l labels =
   List.mem l labels
@@ -244,6 +245,8 @@ let rec go_down (f : MFOTL.formula) : lformula labeled =
     | PastAlways (intv,f) -> LPastAlways (intv, (go_down f))
     | Since (i,f1,f2) -> LSince (i, (go_down f1), (go_down f2))
     | Until (i,f1,f2) -> LUntil (i, (go_down f1), (go_down f2))
+    | Trigger (i,f1,f2) -> LTrigger (i, (go_down f1), (go_down f2))
+    | Release (i,f1,f2) -> LRelease (i, (go_down f1), (go_down f2))
     | Implies (f1,f2) -> failwith "[Filter_empty_tp.go_down] formula contains Implies"
     (* (\* rewrite p => q to ~p or q *\) *)
     (* LOr ((go_down (Neg f1)), (go_down f2)) *)

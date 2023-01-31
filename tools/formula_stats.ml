@@ -114,7 +114,9 @@ let rec analyze lets f =
   | Always (_, f)
   | PastAlways (_, f) -> lift_unary ~temporal:true (go f)
   | Since (_, f1, f2)
-  | Until (_, f1, f2) -> combine ~temporal:true (go f1) (go f2)
+  | Until (_, f1, f2) 
+  | Trigger (_, f1, f2)
+  | Release (_, f1, f2) -> combine ~temporal:true (go f1) (go f2)
   | Frex (_, r)
   | Prex (_, r) -> failwith "[analyze] not supported"
   in go f
