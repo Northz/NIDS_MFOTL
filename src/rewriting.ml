@@ -180,10 +180,10 @@ let rec elim_syntactic_sugar g =
     | Eventually (intv, f) -> Eventually (intv, elim f)
     | Once (intv, f) -> Once (intv, elim f)
     | Always (intv, f) -> if !Misc.verified 
-      then Release (intv, Neg (Exists (["x"], Equal (Var "x", Var "x"))), elim f) 
+      then Release (intv, Neg (Equal (Cst (Str "x"), Cst (Str "x"))), elim f) 
       else Neg (Eventually (intv, elim (Neg f)))
     | PastAlways (intv, f) -> if !Misc.verified 
-      then Trigger (intv, Neg (Exists (["x"], Equal (Var "x", Var "x"))), elim f) 
+      then Trigger (intv, Neg (Equal (Cst (Str "x"), Cst (Str "x"))), elim f) 
       else Neg (Once (intv, elim (Neg f)))
     | Since (intv, f1, f2) -> Since (intv, elim f1, elim f2)
     | Until (intv, f1, f2) -> Until (intv, elim f1, elim f2)
@@ -221,8 +221,12 @@ let push_negation g =
     | Neg (Implies (f1, f2) as f) -> push (Neg (push f))
     | Neg (Equiv (f1, f2) as f) -> push (Neg (push f))
     | Neg (Let (p,f1,f2)) -> Let (p,f1, push (Neg f2))
-    | Neg (Since (intv, f1, f2)) -> Trigger (intv, push (Neg f1), push (Neg f2))
-    | Neg (Until (intv, f1, f2)) -> Release (intv, push (Neg f1), push (Neg f2))
+    | Neg (Since (intv, f1, f2)) -> if !Misc.verified 
+      then Trigger (intv, push (Neg f1), push (Neg f2))
+      else Neg (Since (intv, push f1, push f2))
+    | Neg (Until (intv, f1, f2)) -> if !Misc.verified 
+      then Release (intv, push (Neg f1), push (Neg f2))
+      else Neg (Until (intv, push f1, push f2))
     | Neg (Trigger (intv, f1, f2)) -> Since (intv, push (Neg f1), push (Neg f2))
     | Neg (Release (intv, f1, f2)) -> Until (intv, push (Neg f1), push (Neg f2))
 
@@ -458,7 +462,7 @@ let rec is_monitorable f =
     failwith "[Rewriting.is_monitorable] The operators IMPLIES, EQUIV, FORALL, ALWAYS and PAST_ALWAYS should have been eliminated when the -no_rw option is not present. If the -no_rw option is present, make sure to eliminate these operators yourself."
   | Trigger _ 
   | Release _ ->
-    failwith "[Rewriting.is_monitorable] The operators TRIGGER and RELEASE are only available without rewriting in the verified monitor. If the -no_rw flag is present, please rewrite them manually. Otherwise, use the -verified flag."
+    failwith "[Rewriting.is_monitorable] The operators TRIGGER and RELEASE are only available with the -verified flag."
 
 
 (** Range-restrictions, safe-range and TSF safe-range checks, and

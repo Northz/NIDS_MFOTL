@@ -1,0 +1,1 @@
+NOT (NOT off_route(x) UNTIL[0,2] NOT no_sign(x))

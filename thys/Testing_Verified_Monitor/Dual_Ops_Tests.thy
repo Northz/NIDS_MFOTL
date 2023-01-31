@@ -52,71 +52,62 @@ lemma mem_clopen_ivlL_simp[simp]: "mem \<^bold>\<langle>a,b\<^bold>] x \<longlef
 
 subsection \<open> MFOTL encodings and extra notation \<close>
 
-fun list_to_neqs :: "nat list \<Rightarrow> ty Formula.formula" 
-  where "list_to_neqs [] = \<not>\<^sub>F (\<^bold>c (EInt 0) =\<^sub>F \<^bold>c (EInt 0))"
-  | "list_to_neqs [x] = \<not>\<^sub>F (\<^bold>v x =\<^sub>F \<^bold>v x)"
-  | "list_to_neqs (x # xs) = \<not>\<^sub>F (\<^bold>v x =\<^sub>F \<^bold>v x) \<and>\<^sub>F list_to_neqs xs "
-
-term Set.insert
-value "list_to_neqs (let X = {0,2,6,2,7,10} in filter (\<lambda>x. x \<in> X) [0 ..< Suc (Max (Set.insert 0 (X)))])"
-
-lemma fv_list_to_neqs [simp]: "FV (list_to_neqs xs) = set xs"
-  by (induct xs rule: list_to_neqs.induct) auto
-
-lemma non_sat_the_list_to_neqs: "\<not> \<langle>\<sigma>, v, V, i\<rangle> \<Turnstile>\<^sub>M list_to_neqs xs"
-  by (induct xs rule: list_to_neqs.induct, simp_all)
-
-lemma safe_formula_list_to_neqs: 
-  "safe_formula (list_to_neqs [])"
-  by simp
-
-lemma unsafe_formula_list_to_neqs: 
-  "xs \<noteq> [] \<Longrightarrow> \<not> safe_formula (list_to_neqs xs)"
-  by (induct xs rule: list_to_neqs.induct) 
-    simp_all
-
 context
 begin
 
-abbreviation Bot_vars :: "ty Formula.formula \<Rightarrow> ty Formula.formula"
-  where "Bot_vars \<alpha> \<equiv> list_to_neqs (filter (\<lambda>x. x \<in> FV \<alpha>) [0 ..< Suc (Max (Set.insert 0 (FV \<alpha>)))])"
+(* For updating with the value of a single predicate *)
+abbreviation "updS pred vals mapp \<equiv> Mapping.update (pred,1) vals mapp"
 
-abbreviation "Top_vars \<alpha> \<equiv> \<not>\<^sub>F (Bot_vars \<alpha>)"
+abbreviation "upd0 pred vals \<equiv> updS pred vals Mapping.empty"
+
+abbreviation Top_const :: "ty Formula.formula"
+  where "Top_const \<equiv> \<^bold>c (EInt 0) =\<^sub>F \<^bold>c (EInt 0)"
+
+abbreviation Bot_const :: "ty Formula.formula"
+  where "Bot_const \<equiv> Formula.Neg Top_const"
 
 abbreviation "Implies \<alpha> \<beta> \<equiv> \<not>\<^sub>F \<alpha> \<or>\<^sub>F \<beta>"
 
-abbreviation "EventuallyV I \<alpha> \<equiv> (Top_vars \<alpha>) \<^bold>U I \<alpha>"
+abbreviation "EventuallyC I \<alpha> \<equiv> Top_const \<^bold>U I \<alpha>"
 
-abbreviation "Globally_RelV I \<alpha> \<equiv> (Bot_vars \<alpha>) \<^bold>R I \<alpha>"
+abbreviation "GloballyCE I \<alpha> \<equiv> Formula.Neg (EventuallyC I (Formula.Neg \<alpha>))"
 
-abbreviation "OnceV I \<alpha> \<equiv> (Top_vars \<alpha>) \<^bold>S I \<alpha>"
+abbreviation "GloballyCR I \<alpha> \<equiv> Bot_const \<^bold>R I \<alpha>"
 
-abbreviation "Historically_TrigV I \<alpha> \<equiv> (Bot_vars \<alpha>) \<^bold>T I \<alpha>"
+abbreviation "OnceC I \<alpha> \<equiv> Top_const \<^bold>S I \<alpha>"
+
+abbreviation "HistoricallyCO I \<alpha> \<equiv> Formula.Neg (OnceC I (Formula.Neg \<alpha>))"
+
+abbreviation "HistoricallyCT I \<alpha> \<equiv> Bot_const \<^bold>T I \<alpha>"
 
 end
 
-bundle MFOTL_extra_no_notation
+bundle MFODL_extra_no_notation
 begin 
 
-no_notation Top_vars ("\<top>\<^sub>v")
-     and Bot_vars ("\<bottom>\<^sub>v")
-     and EventuallyV ("\<^bold>F _ _" [55, 65] 65)
-     and Globally_RelV ("\<^bold>G _ _" [55, 65] 65)
-     and OnceV ("\<^bold>P _ _" [55, 65] 65)
-     and Historically_TrigV ("\<^bold>H _ _" [55, 65] 65)
+no_notation Top_const ("\<top>\<^sub>c")
+     and Bot_const ("\<bottom>\<^sub>c")
+     and EventuallyC ("\<^bold>F _ _" [55, 65] 65)
+     and GloballyCE ("\<^bold>G\<^sub>E _ _" [55, 65] 65)
+     and GloballyCR ("\<^bold>G\<^sub>R _ _" [55, 65] 65)
+     and OnceC ("\<^bold>P _ _" [55, 65] 65)
+     and HistoricallyCO ("\<^bold>H\<^sub>O _ _" [55, 65] 65)
+     and HistoricallyCT ("\<^bold>H\<^sub>T _ _" [55, 65] 65)
      and Implies (infixr "\<longrightarrow>\<^sub>F" 72)
 
 end
 
-bundle MFOTL_extra_notation
+bundle MFODL_extra_notation
 begin
 
-notation Top_vars ("\<top>\<^sub>v")
-     and Bot_vars ("\<bottom>\<^sub>v")
-     and EventuallyV ("\<^bold>F _ _" [55, 65] 65)
-     and Globally_RelV ("\<^bold>G _ _" [55, 65] 65)
-     and OnceV ("\<^bold>P _ _" [55, 65] 65)
-     and Historically_TrigV ("\<^bold>H _ _" [55, 65] 65)
+notation Top_const ("\<top>\<^sub>c")
+     and Bot_const ("\<bottom>\<^sub>c")
+     and EventuallyC ("\<^bold>F _ _" [55, 65] 65)
+     and GloballyCE ("\<^bold>G\<^sub>E _ _" [55, 65] 65)
+     and GloballyCR ("\<^bold>G\<^sub>R _ _" [55, 65] 65)
+     and OnceC ("\<^bold>P _ _" [55, 65] 65)
+     and HistoricallyCO ("\<^bold>H\<^sub>O _ _" [55, 65] 65)
+     and HistoricallyCT ("\<^bold>H\<^sub>T _ _" [55, 65] 65)
      and Implies (infixr "\<longrightarrow>\<^sub>F" 72)
 
 end
@@ -124,122 +115,60 @@ end
 
 subsection \<open> Example evaluations \<close>
 
-unbundle MFOTL_extra_notation \<comment> \<open> enable notation \<close>
+unbundle MFODL_extra_notation \<comment> \<open> enable notation \<close>
 
-subsubsection \<open> quality assessment - operations on globally \<close>
+lemma "\<langle>\<sigma>, v, V, i\<rangle> \<Turnstile>\<^sub>M \<^bold>G\<^sub>E I \<phi> = \<langle>\<sigma>, v, V, i\<rangle> \<Turnstile>\<^sub>M \<^bold>G\<^sub>R I \<phi>"
+  by auto
 
-lemma "\<langle>\<sigma>, v, V, i\<rangle> \<Turnstile>\<^sub>M \<not>\<^sub>F (\<^bold>F \<^bold>[2,3\<^bold>] \<not>\<^sub>F ((STR ''P'') \<dagger> [\<^bold>v 0])) 
-  \<longleftrightarrow> \<langle>\<sigma>, v, V, i\<rangle> \<Turnstile>\<^sub>M (\<^bold>G \<^bold>[2,3\<^bold>] ((STR ''P'') \<dagger> [\<^bold>v 0]))"
-  by (auto simp add: enat_0)
-
-term "(
-  (\<^bold>F \<^bold>[0,2\<^bold>\<rangle> \<not>\<^sub>F (STR ''P1'' \<dagger> [\<^bold>v 0]))
-  \<and>\<^sub>F (\<^bold>F \<^bold>[0,2\<^bold>\<rangle> \<not>\<^sub>F (STR ''P2'' \<dagger> [\<^bold>v 0]))
-  \<and>\<^sub>F (\<^bold>F \<^bold>[0,2\<^bold>\<rangle> \<not>\<^sub>F (STR ''P3'' \<dagger> [\<^bold>v 0]))
- )"
-
-definition "prod_line_best \<equiv> (
-  (\<^bold>G \<^bold>[0,2\<^bold>\<rangle> (STR ''P1'' \<dagger> [\<^bold>v 0]))
-  \<and>\<^sub>F (\<^bold>G \<^bold>[2,4\<^bold>\<rangle> (STR ''P2'' \<dagger> [\<^bold>v 0]))
-  \<and>\<^sub>F (\<^bold>G \<^bold>[4,6\<^bold>\<rangle> (STR ''P3'' \<dagger> [\<^bold>v 0]))
-  )"
-
-definition "prod_line_good \<equiv> (
-  (\<^bold>G \<^bold>[0,2\<^bold>\<rangle> (STR ''P1'' \<dagger> [\<^bold>v 0]))
-  \<or>\<^sub>F (\<^bold>G \<^bold>[2,4\<^bold>\<rangle> (STR ''P2'' \<dagger> [\<^bold>v 0]))
-  \<or>\<^sub>F (\<^bold>G \<^bold>[4,6\<^bold>\<rangle> (STR ''P3'' \<dagger> [\<^bold>v 0]))
-  )"
-
-lemma "\<not> safe_formula prod_line_best"
-  "\<not> safe_formula prod_line_good"
-  by (auto simp add: prod_line_best_def prod_line_good_def 
-      enat_0 safe_assignment_def Let_def pairw_union_eq safe_dual_def)
+lemma "\<langle>\<sigma>, v, V, i\<rangle> \<Turnstile>\<^sub>M \<^bold>H\<^sub>O I \<phi> = \<langle>\<sigma>, v, V, i\<rangle> \<Turnstile>\<^sub>M \<^bold>H\<^sub>T I \<phi>"
+  by auto
 
 
-definition "mbest \<equiv> minit prod_line_best"
-definition "mbest0 \<equiv> mstep ({(STR ''P1'',[0]), (STR ''P1'',[1]), (STR ''P1'',[2]), (STR ''P1'',[3])}, 0) mbest"
-definition "mbest1 \<equiv> mstep ({(STR ''P1'',[0]), (STR ''P1'',[1]), (STR ''P1'',[2]), (STR ''P1'',[3])}, 1) (snd mbest0)"
-definition "mbest2 \<equiv> mstep ({(STR ''P2'',[0]), (STR ''P2'',[1]), (STR ''P1'',[2]), (STR ''P2'',[3])}, 2) (snd mbest1)"
-definition "mbest3 \<equiv> mstep ({(STR ''P2'',[0]), (STR ''P2'',[1]), (STR ''P2'',[2]), (STR ''P2'',[3])}, 3) (snd mbest2)"
-definition "mbest4 \<equiv> mstep ({(STR ''P3'',[0]), (STR ''P2'',[1]), (STR ''P2'',[2]), (STR ''P3'',[3])}, 4) (snd mbest3)"
-definition "mbest5 \<equiv> mstep ({(STR ''P3'',[0]), (STR ''P3'',[1]), (STR ''P2'',[2]), (STR ''P3'',[3])}, 5) (snd mbest4)"
-definition "mbest6 \<equiv> mstep ({(STR ''P1'',[4]), (STR ''P3'',[1]), (STR ''P3'',[2]), (STR ''P1'',[5])}, 6) (snd mbest5)"
-definition "mbest7 \<equiv> mstep ({(STR ''P2'',[4])}, 12) (snd mbest6)"
+subsubsection \<open> monitoring bad quality - historically \<close>
 
-(* value "mbest"  \<comment> \<open> @{value "mbest"} \<close>
-value "mbest0" \<comment> \<open> @{value "mbest0"} \<close>
-value "mbest1" \<comment> \<open> @{value "mbest1"} \<close>
-value "mbest2" \<comment> \<open> @{value "mbest2"} \<close>
-value "mbest3" \<comment> \<open> @{value "mbest3"} \<close>
-value "mbest4" \<comment> \<open> @{value "mbest4"} \<close>
-value "mbest5" \<comment> \<open> @{value "mbest5"} \<close>
-value "mbest6" \<comment> \<open> @{value "mbest6"} \<close>
-value "mbest7" \<comment> \<open> @{value "mbest7"} \<close> *)
+abbreviation "heating \<equiv> STR ''heating''"
 
+definition badT :: "ty Formula.formula"
+  where "badT \<equiv> \<^bold>H\<^sub>T \<^bold>[0,3\<^bold>] (heating \<dagger> [\<^bold>v 0])"
 
-subsubsection \<open> vaccine refrigeration times - conjunction negated historically \<close>
+definition badO :: "ty Formula.formula"
+  where "badO \<equiv> \<^bold>H\<^sub>O \<^bold>[0,3\<^bold>] (heating \<dagger> [\<^bold>v 0])"
 
-lemma "(p \<and> \<not> q) \<longleftrightarrow> \<not> (p \<longrightarrow> q)"
-  by simp
+lemma "safe_formula badT"
+  "\<not> safe_formula badO"
+  by (simp_all add: badT_def badO_def safe_dual_def enat_0)
 
-lemma "\<langle>\<sigma>,v,V,i\<rangle> \<Turnstile> (STR ''arrived'' \<dagger> [\<^bold>v 0]) \<and>\<^sub>F (\<^bold>P \<^bold>[2, 3\<^bold>] \<not>\<^sub>F (STR ''travelling'' \<dagger> [\<^bold>v 0])) 
-  \<longleftrightarrow> \<langle>\<sigma>,v,V,i\<rangle> \<Turnstile> (STR ''arrived'' \<dagger> [\<^bold>v 0]) \<and>\<^sub>F \<not>\<^sub>F (\<^bold>H \<^bold>[2, 3\<^bold>] (STR ''travelling'' \<dagger> [\<^bold>v 0]))"
-  by simp
+definition "mbad \<equiv> minit badT"
+definition "mbad0 \<equiv> mstep ((upd0 heating [{[Some (EInt 1)], [Some (EInt 2)], [Some (EInt 3)]}]), 0) mbad"
+definition "mbad1 \<equiv> mstep ((upd0 heating [{[Some (EInt 1)], [Some (EInt 2)], [Some (EInt 3)]}]), 1) (snd mbad0)"
+definition "mbad2 \<equiv> mstep ((upd0 heating [{[Some (EInt 3)], [Some (EInt 4)], [Some (EInt 5)]}]), 2) (snd mbad1)"
+definition "mbad3 \<equiv> mstep ((upd0 heating [{[Some (EInt 3)], [Some (EInt 4)], [Some (EInt 5)]}]), 3) (snd mbad2)"
+definition "mbad4 \<equiv> mstep ((upd0 heating [{[Some (EInt 3)], [Some (EInt 4)], [Some (EInt 5)], [Some (EInt 6)]}]), 4) (snd mbad3)"
+definition "mbad5 \<equiv> mstep ((upd0 heating [{[Some (EInt 6)]}]), 5) (snd mbad4)"
+definition "mbad6 \<equiv> mstep ((upd0 heating [{[Some (EInt 6)]}]), 6) (snd mbad5)"
+definition "mbad7 \<equiv> mstep (Mapping.empty, 6) (snd mbad6)"
 
-definition "safe_packages \<equiv> (
-  (STR ''arrived'' \<dagger> [\<^bold>v 0])
-  \<and>\<^sub>F \<not>\<^sub>F (\<^bold>H \<^bold>[2, 2\<^bold>] (STR ''travelling'' \<dagger> [\<^bold>v 0]))
-  )"
+value "mbad"  \<comment> \<open> @{value "mbad"} \<close> 
+value "mbad0" \<comment> \<open> @{value "mbad0"} \<close>
+value "mbad1" \<comment> \<open> @{value "mbad1"} \<close>
+value "mbad2" \<comment> \<open> @{value "mbad2"} \<close>
+value "mbad3" \<comment> \<open> @{value "mbad3"} \<close>
+value "mbad4" \<comment> \<open> @{value "mbad4"} \<close>
+value "mbad5" \<comment> \<open> @{value "mbad5"} \<close>
+value "mbad6" \<comment> \<open> @{value "mbad6"} \<close>
+value "mbad7" \<comment> \<open> @{value "mbad7"} \<close>
 
-lemma "\<not> safe_formula safe_packages"
-  by (auto simp: safe_packages_def enat_0 safe_dual_def)
-
-definition "mpackages \<equiv> minit safe_packages"
-definition "mpackages0 \<equiv> mstep ({(STR ''travelling'',[1]), (STR ''standbySTR '',[2]), (STR ''standbySTR '',[3])}, 0) mpackages"
-definition "mpackages1 \<equiv> mstep ({(STR ''travelling'',[1]), (STR ''standbySTR '',[2]), (STR ''standbySTR '',[3])}, 1) (snd mpackages0)"
-definition "mpackages2 \<equiv> mstep ({(STR ''travelling'',[1]), (STR ''travelling'',[2]), (STR ''standbySTR '',[3])}, 2) (snd mpackages1)"
-definition "mpackages3 \<equiv> mstep ({(STR ''travelling'',[1]), (STR ''arrived'',[2]), (STR ''travelling'',[3])}, 3) (snd mpackages2)"
-definition "mpackages4 \<equiv> mstep ({(STR ''arrived'',[1]), (STR ''travelling'',[5]), (STR ''arrived'',[3])}, 4) (snd mpackages3)"
-definition "mpackages5 \<equiv> mstep ({(STR ''travelling'',[4]), (STR ''travelling'',[5]), (STR ''travelling'',[6])}, 5) (snd mpackages4)"
-definition "mpackages6 \<equiv> mstep ({(STR ''travelling'',[4]), (STR ''travelling'',[5]), (STR ''arrived'',[6])}, 6) (snd mpackages5)"
-definition "mpackages7 \<equiv> mstep ({(STR ''travelling'',[4]), (STR ''arrived'',[5]), (STR ''travelling'',[7])}, 7) (snd mpackages6)"
-
-(* value mpackages  \<comment> \<open> @{value "mpackages"} \<close>
-value mpackages0 \<comment> \<open> @{value "mpackages0"} \<close>
-value mpackages1 \<comment> \<open> @{value "mpackages1"} \<close>
-value mpackages2 \<comment> \<open> @{value "mpackages2"} \<close>
-value mpackages3 \<comment> \<open> @{value "mpackages3"} \<close>
-value mpackages4 \<comment> \<open> @{value "mpackages4"} \<close>
-value mpackages5 \<comment> \<open> @{value "mpackages5"} \<close>
-value mpackages6 \<comment> \<open> @{value "mpackages6"} \<close>
-value mpackages7 \<comment> \<open> @{value "mpackages7"} \<close> *)
-
-(* other possible specifications *)
-
-term "MFOTL_Safety.safe_formula (
-  (STR ''arrived'' \<dagger> [\<^bold>v 0])
-  \<and>\<^sub>F (\<^bold>P \<^bold>[0, 24\<^bold>] (\<^bold>H \<^bold>[0, 3\<^bold>] (STR ''travelling'' \<dagger> [\<^bold>v 0])))
-  )"
 
 
 subsubsection \<open> financial crime investigation - historically with many variables \<close>
 
 definition "suspect \<equiv> (
-  (\<^bold>H \<^bold>[30, 35\<^bold>] (\<exists>\<^sub>F:TInt. STR ''failed_trans_from_paid_to'' \<dagger> [\<^bold>v 0,\<^bold>v 1,\<^bold>v 2,\<^bold>v 3]))
+  (\<^bold>H\<^sub>T \<^bold>[30, 35\<^bold>] (\<exists>\<^sub>F:TInt. STR ''failed_trans_from_paid_to'' \<dagger> [\<^bold>v 0,\<^bold>v 1,\<^bold>v 2,\<^bold>v 3]))
   \<and>\<^sub>F (STR ''approved_trans_from_paid_to'' \<dagger> [\<^bold>v 0,\<^bold>v 1,\<^bold>v 2,\<^bold>v 3])
   )"
 
 lemma "\<not> safe_formula suspect"
   by (auto simp: suspect_def enat_0 safe_dual_def)
-
-(* other possible specifications *)
-
-(* term "ssfv (
-  (\<^bold>H \<^bold>[30, 35\<^bold>] (\<exists>\<^sub>F:TInt. (\<^bold>P \<^bold>[0, 10\<^bold>] STR ''trans_from_paid_to'' \<dagger> [\<^bold>v 0,\<^bold>v 1,\<^bold>v 2,\<^bold>v 3])
-  \<and>\<^sub>F (STR ''declined'' \<dagger> [\<^bold>v 0])))
-  \<and>\<^sub>F (\<^bold>P \<^bold>[0, 10\<^bold>] STR ''trans_from_paid_to'' \<dagger> [\<^bold>v 4,\<^bold>v 1,\<^bold>v 2,\<^bold>v 3])
-  \<and>\<^sub>F (STR ''approved'' \<dagger> [\<^bold>v 4])
-  )" *)
 
 
 subsubsection \<open> monitoring piracy - applied release \<close>
@@ -247,8 +176,6 @@ subsubsection \<open> monitoring piracy - applied release \<close>
 abbreviation "off_route \<equiv> STR ''off_route''"
 abbreviation "no_signal \<equiv> STR ''no_signal''"
 abbreviation "received \<equiv> STR ''received''"
-abbreviation "pir_upd pred vals mapp \<equiv> Mapping.update (pred,1) vals mapp"
-abbreviation "pir_upd0 pred vals \<equiv> pir_upd pred vals Mapping.empty"
 
 definition pirated :: "ty Formula.formula"
   where "pirated \<equiv> (off_route \<dagger> [\<^bold>v 0]) \<^bold>R \<^bold>[0,2\<^bold>] (no_signal \<dagger> [\<^bold>v 0])"
@@ -267,12 +194,12 @@ lemma "safe_formula pirated"
   by transfer (clarsimp simp: pirated_def enat_0)
 
 definition "mpiracy \<equiv> minit pirated"
-definition "mpiracy0 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 0) mpiracy"
-definition "mpiracy1 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 1) (snd mpiracy0)"
-definition "mpiracy2 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 2) (snd mpiracy1)"
-definition "mpiracy3 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 3) (snd mpiracy2)"
-definition "mpiracy4 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 4) (snd mpiracy3)"
-definition "mpiracy5 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 5) (snd mpiracy4)"
+definition "mpiracy0 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 0) mpiracy"
+definition "mpiracy1 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 1) (snd mpiracy0)"
+definition "mpiracy2 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 2) (snd mpiracy1)"
+definition "mpiracy3 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 3) (snd mpiracy2)"
+definition "mpiracy4 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 4) (snd mpiracy3)"
+definition "mpiracy5 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 5) (snd mpiracy4)"
 definition "mpiracy6 \<equiv> mstep (Mapping.empty, 6) (snd mpiracy5)"
 definition "mpiracy7 \<equiv> mstep (Mapping.empty, 7) (snd mpiracy6)"
 definition "mpiracy8 \<equiv> mstep (Mapping.empty, 8) (snd mpiracy7)"
@@ -280,12 +207,12 @@ definition "mpiracy9 \<equiv> mstep (Mapping.empty, 9) (snd mpiracy8)"
 definition "mpiracy10 \<equiv> mstep (Mapping.empty, 10) (snd mpiracy9)"
 
 definition "vmpiracy \<equiv> vminit pirated"
-definition "vmpiracy0 \<equiv> vmstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 0) vmpiracy"
-definition "vmpiracy1 \<equiv> vmstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 1) (snd vmpiracy0)"
-definition "vmpiracy2 \<equiv> vmstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 2) (snd vmpiracy1)"
-definition "vmpiracy3 \<equiv> vmstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 3) (snd vmpiracy2)"
-definition "vmpiracy4 \<equiv> vmstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 4) (snd vmpiracy3)"
-definition "vmpiracy5 \<equiv> vmstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 5) (snd vmpiracy4)"
+definition "vmpiracy0 \<equiv> vmstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 0) vmpiracy"
+definition "vmpiracy1 \<equiv> vmstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 1) (snd vmpiracy0)"
+definition "vmpiracy2 \<equiv> vmstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 2) (snd vmpiracy1)"
+definition "vmpiracy3 \<equiv> vmstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 3) (snd vmpiracy2)"
+definition "vmpiracy4 \<equiv> vmstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 4) (snd vmpiracy3)"
+definition "vmpiracy5 \<equiv> vmstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 5) (snd vmpiracy4)"
 definition "vmpiracy6 \<equiv> vmstep (Mapping.empty, 6) (snd vmpiracy5)"
 definition "vmpiracy7 \<equiv> vmstep (Mapping.empty, 7) (snd vmpiracy6)"
 definition "vmpiracy8 \<equiv> vmstep (Mapping.empty, 8) (snd vmpiracy7)"
@@ -321,20 +248,20 @@ value vmpiracy10 \<comment> \<open> @{value "fst vmpiracy10"} \<close>
 
 
 definition "rpiracy \<equiv> minit right_pir"
-definition "rpiracy0 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 0) rpiracy"
-definition "rpiracy1 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 1) (snd rpiracy0)"
-definition "rpiracy2 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 2) (snd rpiracy1)"
-definition "rpiracy3 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 3) (snd rpiracy2)"
-definition "rpiracy4 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 4) (snd rpiracy3)"
-definition "rpiracy5 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 5) (snd rpiracy4)"
+definition "rpiracy0 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 0) rpiracy"
+definition "rpiracy1 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 1) (snd rpiracy0)"
+definition "rpiracy2 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 2) (snd rpiracy1)"
+definition "rpiracy3 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 3) (snd rpiracy2)"
+definition "rpiracy4 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 4) (snd rpiracy3)"
+definition "rpiracy5 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 5) (snd rpiracy4)"
 
 definition "lpiracy \<equiv> minit left_pir"
-definition "lpiracy0 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 0) lpiracy"
-definition "lpiracy1 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 1) (snd lpiracy0)"
-definition "lpiracy2 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 2) (snd lpiracy1)"
-definition "lpiracy3 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 3) (snd lpiracy2)"
-definition "lpiracy4 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 4) (snd lpiracy3)"
-definition "lpiracy5 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 5) (snd lpiracy4)"
+definition "lpiracy0 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 0) lpiracy"
+definition "lpiracy1 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 1) (snd lpiracy0)"
+definition "lpiracy2 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 2) (snd lpiracy1)"
+definition "lpiracy3 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 3) (snd lpiracy2)"
+definition "lpiracy4 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 4) (snd lpiracy3)"
+definition "lpiracy5 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 5) (snd lpiracy4)"
 
 value rpiracy 
 value rpiracy0 
@@ -379,21 +306,21 @@ thm disjunct3_def[unfolded right_pir_def left_pir_def]
 
 (* (no_signal x) \<^bold>U \<^bold>[0,2\<^bold>] (no_signal x \<and>\<^sub>F off_route x) *)
 definition "mdisjunct1 \<equiv> minit disjunct1"
-definition "mdisjunct1_0 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 0) mdisjunct1"
-definition "mdisjunct1_1 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 1) (snd mdisjunct1_0)"
-definition "mdisjunct1_2 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 2) (snd mdisjunct1_1)"
-definition "mdisjunct1_3 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 3) (snd mdisjunct1_2)"
-definition "mdisjunct1_4 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 4) (snd mdisjunct1_3)"
-definition "mdisjunct1_5 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 5) (snd mdisjunct1_4)"
+definition "mdisjunct1_0 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 0) mdisjunct1"
+definition "mdisjunct1_1 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 1) (snd mdisjunct1_0)"
+definition "mdisjunct1_2 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 2) (snd mdisjunct1_1)"
+definition "mdisjunct1_3 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 3) (snd mdisjunct1_2)"
+definition "mdisjunct1_4 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 4) (snd mdisjunct1_3)"
+definition "mdisjunct1_5 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 5) (snd mdisjunct1_4)"
 
 (* (no_signal x) \<^bold>U \<^bold>[3,4\<^bold>] (\<^bold>Y (no_signal x)) *)
 definition "mdisjunct2 \<equiv> minit disjunct2"
-definition "mdisjunct2_0 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 0) mdisjunct2"
-definition "mdisjunct2_1 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 1) (snd mdisjunct2_0)"
-definition "mdisjunct2_2 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 2) (snd mdisjunct2_1)"
-definition "mdisjunct2_3 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 3) (snd mdisjunct2_2)"
-definition "mdisjunct2_4 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 4) (snd mdisjunct2_3)"
-definition "mdisjunct2_5 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 5) (snd mdisjunct2_4)"
+definition "mdisjunct2_0 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 0) mdisjunct2"
+definition "mdisjunct2_1 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 1) (snd mdisjunct2_0)"
+definition "mdisjunct2_2 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 2) (snd mdisjunct2_1)"
+definition "mdisjunct2_3 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 3) (snd mdisjunct2_2)"
+definition "mdisjunct2_4 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 4) (snd mdisjunct2_3)"
+definition "mdisjunct2_5 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 5) (snd mdisjunct2_4)"
 definition "mdisjunct2_6 \<equiv> mstep (Mapping.empty, 6) (snd mdisjunct2_5)"
 definition "mdisjunct2_7 \<equiv> mstep (Mapping.empty, 7) (snd mdisjunct2_6)"
 definition "mdisjunct2_8 \<equiv> mstep (Mapping.empty, 8) (snd mdisjunct2_7)"
@@ -402,12 +329,12 @@ definition "mdisjunct2_10 \<equiv> mstep (Mapping.empty, 10) (snd mdisjunct2_9)"
 
 (* (no_signal x) \<^bold>U \<^bold>[0,2\<^bold>] ((no_signal x) \<and>\<^sub>F (\<^bold>X \<^bold>[3,\<infinity>\<^bold>) \<top>)) *)
 definition "mdisjunct3 \<equiv> minit disjunct3"
-definition "mdisjunct3_0 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 0) mdisjunct3"
-definition "mdisjunct3_1 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 1) (snd mdisjunct3_0)"
-definition "mdisjunct3_2 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 2) (snd mdisjunct3_1)"
-definition "mdisjunct3_3 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 3) (snd mdisjunct3_2)"
-definition "mdisjunct3_4 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 4) (snd mdisjunct3_3)"
-definition "mdisjunct3_5 \<equiv> mstep (pir_upd received [{[Some (EInt 3)]}] (pir_upd off_route [{[Some (EInt 1)]}] (pir_upd0 no_signal [{[Some (EInt 2)]}])), 5) (snd mdisjunct3_4)"
+definition "mdisjunct3_0 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 0) mdisjunct3"
+definition "mdisjunct3_1 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 1) (snd mdisjunct3_0)"
+definition "mdisjunct3_2 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (upd0 no_signal [{[Some (EInt 1)], [Some (EInt 2)]}]), 2) (snd mdisjunct3_1)"
+definition "mdisjunct3_3 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 3) (snd mdisjunct3_2)"
+definition "mdisjunct3_4 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 4) (snd mdisjunct3_3)"
+definition "mdisjunct3_5 \<equiv> mstep (updS received [{[Some (EInt 3)]}] (updS off_route [{[Some (EInt 1)]}] (upd0 no_signal [{[Some (EInt 2)]}])), 5) (snd mdisjunct3_4)"
 
 value mdisjunct1  
 value mdisjunct1_0 
