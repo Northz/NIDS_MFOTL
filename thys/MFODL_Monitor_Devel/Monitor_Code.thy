@@ -4,27 +4,6 @@ theory Monitor_Code
 begin
 (*>*)
 
-(* code_thms vminit_safe *)
-
-
-term default_mmasaux.init_since'
-term default_mmauaux.init_until' 
-term verimon_maux.init_trigger'
-
-
-(*definition "my_fun \<phi> \<psi> = (if safe_assignment (fv \<phi>) \<psi> then True else False)"
-
-export_code get_and_list checking Scala?
-export_code my_fun checking OCaml?
-
-export_code convert_multiway checking Scala?
-export_code convert_multiway checking OCaml?
-export_code vminit_safe checking OCaml?
-export_code minit_safe checking OCaml?
-export_code vmstep checking OCaml?
-export_code mstep checking OCaml?*)
-
-
 (* export_code convert_multiway mmonitorable_exec vminit_safe minit_safe vmstep mstep
    checking OCaml? *)
 
@@ -39,11 +18,6 @@ export_code
   (*rewrite functions*)
   rewrite_trigger
   in OCaml module_name Monitor file_prefix "verified"
-
-term "RBT_set t1 - RBT_set t2"
-term RBT_set
-thm rbt_minus_def rbt_minus_code
-find_theorems name: RBT name: minus name: def
 
 (*<*)
 end

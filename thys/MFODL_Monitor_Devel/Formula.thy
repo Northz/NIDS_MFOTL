@@ -123,6 +123,15 @@ instance ..
 
 end
 
+lemma mult_commute: "(x::rec_safety) * y = y * x"
+  by (cases x; cases y; clarsimp)
+
+lemma mult_assoc: "(x::rec_safety) * y * z = x * (y * z)"
+  by (simp add: mult.assoc)
+
+lemma mult_sup_distrib: "(x::rec_safety) * (a \<squnion> b) = x * a \<squnion> x * b"
+  by (cases x; cases a; cases b; clarsimp)
+
 lemma (in semilattice_sup) comp_fun_idem_on_sup: "comp_fun_idem_on UNIV sup"
   using comp_fun_idem_sup by (simp add: comp_fun_idem_def')
 
@@ -285,6 +294,30 @@ qualified datatype (discs_sels) 't formula = Pred name "trm list"
   | Trigger "'t formula" \<I> "'t formula" | Release "'t formula" \<I> "'t formula"
   | MatchF \<I> "'t formula Regex.regex" | MatchP \<I> "'t formula Regex.regex"
   | TP trm | TS trm
+
+lemma Neg_splits:
+  "P (case \<phi> of Formula.formula.Neg \<psi> \<Rightarrow> f \<psi> | \<phi> \<Rightarrow> g \<phi>) =
+   ((\<forall>\<psi>. \<phi> = Formula.formula.Neg \<psi> \<longrightarrow> P (f \<psi>)) \<and> ((\<not> Formula.is_Neg \<phi>) \<longrightarrow> P (g \<phi>)))"
+  "P (case \<phi> of Formula.formula.Neg \<psi> \<Rightarrow> f \<psi> | _ \<Rightarrow> g \<phi>) =
+   (\<not> ((\<exists>\<psi>. \<phi> = Formula.formula.Neg \<psi> \<and> \<not> P (f \<psi>)) \<or> ((\<not> Formula.is_Neg \<phi>) \<and> \<not> P (g \<phi>))))"
+  by (cases \<phi>; auto simp: Formula.is_Neg_def)+
+
+lemma case_Neg_iff: "(case \<gamma> of Neg x \<Rightarrow> P x | _ \<Rightarrow> False) 
+    \<longleftrightarrow> (\<exists>\<gamma>'. \<gamma> = Neg \<gamma>' \<and> P \<gamma>')" 
+  by (cases \<gamma>) auto
+
+lemma case_NegE: "(case \<phi> of Neg \<phi>' \<Rightarrow> P \<phi>' | _ \<Rightarrow> False) 
+  \<Longrightarrow> (\<And>\<phi>'. \<phi> = Neg \<phi>' \<Longrightarrow> P \<phi>' \<Longrightarrow> Q) \<Longrightarrow> Q"
+  using case_Neg_iff
+  by auto
+
+lemma case_release_iff: 
+  "(case \<phi> of Release \<phi>' I \<psi>' \<Rightarrow> True | _ \<Rightarrow> False) \<longleftrightarrow> (\<exists>\<phi>' I \<psi>'. \<phi> = Release \<phi>' I \<psi>')"
+  by (auto split: formula.splits)
+
+lemma case_trigger_iff: 
+  "(case \<phi> of Trigger \<phi>' I \<psi>' \<Rightarrow> True | _ \<Rightarrow> False) \<longleftrightarrow> (\<exists>\<phi>' I \<psi>'. \<phi> = Trigger \<phi>' I \<psi>')"
+  by (auto split: formula.splits)
 
 qualified definition "FF = Eq (Const (EInt 0)) (Const (EInt 1))"
 qualified definition "TT \<equiv> Eq (Const (EInt 0)) (Const (EInt 0))"
@@ -460,7 +493,6 @@ fun contains_pred :: "name \<times> nat \<Rightarrow> 't formula \<Rightarrow> b
 lemma TT_no_pred [simp]: 
   "\<not> contains_pred p Formula.TT"
   by (simp add: Formula.TT_def)
-
 
 subsubsection \<open>Semantics\<close>
 
@@ -929,6 +961,14 @@ lemma sat_release_eq[simp]: "sat \<sigma> V v i (Release \<phi> I \<psi>) = sat 
 definition once :: "\<I> \<Rightarrow> 't formula \<Rightarrow> 't formula" where
   "once I \<phi> = Since TT I \<phi>"
 
+lemma syntax_once_simps [simp]:
+  "once I \<psi> \<noteq> (Formula.Eq t1 t2)"
+  "once I \<psi> \<noteq> (Formula.Less t1 t2)"
+  "once I \<psi> \<noteq> (Formula.LessEq t1 t2)"
+  "once I \<psi> \<noteq> (Formula.Neg \<phi>)"
+  unfolding once_def
+  by auto
+
 lemma once_fv[simp]: "fv (once I \<phi>) = fv \<phi>"
   by (simp add: once_def)
 
@@ -945,11 +985,16 @@ lemma sat_historically[simp]: "sat \<sigma> V v i (historically I \<phi>) = (\<f
   unfolding historically_def
   by auto
 
-(*lemma sat_historically_eq[simp]: "sat \<sigma> V v i (Historically I \<phi>) = sat \<sigma> V v i (historically I \<phi>)"
-  by auto*)
-
 definition eventually :: "\<I> \<Rightarrow> 't formula \<Rightarrow> 't formula" where
   "eventually I \<phi> = Until TT I \<phi>"
+
+lemma syntax_eventually_simps [simp]:
+  "Formula.eventually I \<psi> \<noteq> (Formula.Eq t1 t2)"
+  "Formula.eventually I \<psi> \<noteq> (Formula.Less t1 t2)"
+  "Formula.eventually I \<psi> \<noteq> (Formula.LessEq t1 t2)"
+  "Formula.eventually I \<psi> \<noteq> (Formula.Neg \<phi>)"
+  unfolding Formula.eventually_def
+  by auto
 
 lemma eventually_fv[simp]: "fv (eventually I \<phi>) = fv \<phi>"
   by (simp add: eventually_def)
@@ -960,18 +1005,22 @@ lemma eventually_fvi[simp]: "fvi b (eventually I \<phi>) = fvi b \<phi>"
 lemma sat_eventually[simp]: "sat \<sigma> V v i (eventually I \<phi>) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j \<phi>)"
   by (auto simp: eventually_def)
 
+lemma contains_pred_eventually [simp]: 
+  "contains_pred p (Formula.eventually I \<psi>') \<longleftrightarrow> contains_pred p \<psi>'"
+  unfolding Formula.eventually_def
+  by simp
+
+lemma contains_pred_once [simp]: 
+  "contains_pred p (once I \<psi>') \<longleftrightarrow> contains_pred p \<psi>'"
+  unfolding once_def
+  by simp
+
 definition always :: "\<I> \<Rightarrow> 't formula \<Rightarrow> 't formula" where
   "always I \<phi> = (Neg (eventually I (Neg \<phi>)))"
-
-(*lemma "sat \<sigma> V v i (Always I \<phi>) = sat \<sigma> V v i (Neg (eventually I (Neg \<phi>)))"
-  by auto*)
 
 lemma sat_always[simp]: "sat \<sigma> V v i (always I \<phi>) = (\<forall>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v j \<phi>)"
   unfolding always_def
   by auto
-
-(*lemma sat_always_eq[simp]: "sat \<sigma> V v i (Always I \<phi>) = sat \<sigma> V v i (always I \<phi>)"
-  by auto*)
 
 (* case distrinction since intervals aren't allowed to be empty and flip_int [0, \<infinity>] would be *)
 definition historically_safe_0 :: "\<I> \<Rightarrow> 't formula \<Rightarrow> 't formula" where
@@ -1050,6 +1099,16 @@ next
   assume "sat \<sigma> V v i (Until \<phi> I (Prev all \<phi>))"
   then show "sat \<sigma> V v i (Until \<phi> I TT)" by auto
 qed
+
+lemma contains_pred_always_safe_bounded [simp]:
+  "contains_pred p (always_safe_bounded I \<psi>') \<longleftrightarrow> contains_pred p \<psi>'"
+  unfolding always_safe_bounded_def
+  by simp
+
+lemma contains_pred_release_safe_bounded [simp]: "contains_pred p (release_safe_bounded \<phi>' I \<psi>') 
+  \<longleftrightarrow> contains_pred p \<phi>' \<or> contains_pred p \<psi>'"
+  unfolding release_safe_bounded_def
+  by auto
 
 
 subsection \<open>Past-only formulas\<close>
@@ -1308,8 +1367,6 @@ lemma up_cl_ivl_nmem0I: "up_cl_ivl \<sigma> I i = {} \<Longrightarrow> \<not> me
   unfolding up_cl_ivl_def
   by (transfer, clarsimp simp: downclosed_def upclosed_def)
     (metis bot_nat_0.extremum diff_self_eq_0 le_refl)
-
-thm fvi.simps(16-)
 
 lemma release_fvi:
   "Formula.fvi b (\<phi> \<^bold>R I \<psi>) = Formula.fvi b (release_safe_0 \<phi> I \<psi>)"
@@ -2991,23 +3048,6 @@ lemma map_formula_fvi:
 proof (induction \<phi> arbitrary: b) 
 qed (auto simp add: assms release_safe_0_def always_safe_0_def)
 
-(*lemma map_formula_safe:
-  assumes "\<And>b \<phi>. Formula.fvi b (f \<phi>) = Formula.fvi b \<phi>"
-  assumes "\<And>\<phi>. safe_formula (f \<phi>) = safe_formula \<phi>"
-  assumes "\<And>\<phi>. \<not>safe_formula \<phi> \<Longrightarrow> f \<phi> = \<phi>"
-  shows "safe_formula (map_formula f \<phi>) = safe_formula \<phi>"
-proof (induction \<phi> rule: safe_formula.induct)
-  case (6 p \<phi> \<psi>)
-  then show ?case by (auto simp add: map_formula_fvi[OF assms(1)] assms(2-3))
-next
-  case ("7_1" v va)
-  then show ?case
-    using map_formula_fvi[OF assms(1)] assms
-    sorry
-
-qed (auto simp add: map_formula_fvi[OF assms(1)] assms(2-3))*)
- 
-
 lemma map_formula_sat:
   assumes "\<And>b \<phi>. Formula.fvi b (f \<phi>) = Formula.fvi b \<phi>"
   assumes "\<And>\<sigma> V v i \<phi>. Formula.sat \<sigma> V v i (f \<phi>) = Formula.sat \<sigma> V v i \<phi>"
@@ -3177,7 +3217,7 @@ next
       by auto
     show ?thesis
       unfolding Trigger rewrite
-      by (simp add: fvi.simps(17))
+      by simp
   next
     case False
     then have rewrite: "rewrite_trigger (formula.Trigger \<alpha> I \<beta>) = formula.Trigger \<alpha> I \<beta>"

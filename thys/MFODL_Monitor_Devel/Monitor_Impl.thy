@@ -393,16 +393,18 @@ proof (induction I xs ts arbitrary: zs xs' ts' rule: meprev_next.induct)
        (auto simp: xs_def ts_def ts''_def mbuf_t_empty.rep_eq mbuf_t_Cons.rep_eq split: prod.splits)
 qed
 
-fun mebuf2_add (* :: "event_data table list \<Rightarrow> event_data table list \<Rightarrow> event_data mebuf2 \<Rightarrow> event_data mebuf2" *) where
+fun mebuf2_add where
   "mebuf2_add xs' ys' (xs, ys) = (xs @@ xs', ys @@ ys')"
 
-lemma mbuf2_add: "mbuf2_add xs ys (map_prod Rep_mbuf_t Rep_mbuf_t buf) = map_prod Rep_mbuf_t Rep_mbuf_t (mebuf2_add xs ys buf)"
+lemma mbuf2_add: "mbuf2_add xs ys (map_prod Rep_mbuf_t Rep_mbuf_t buf) 
+  = map_prod Rep_mbuf_t Rep_mbuf_t (mebuf2_add xs ys buf)"
   by (cases buf) (auto simp: mbuf_t_append.rep_eq)
 
-fun mebuf2S_add :: "event_data table list \<Rightarrow> event_data table list \<Rightarrow> ts list \<Rightarrow> event_data mebuf2S \<Rightarrow> event_data mebuf2S" where
-  "mebuf2S_add xs' ys' ts' (xs, ys, ts, skew) = (xs @@ xs', ys @@ ys', ts @@ ts', skew)"
+fun mebuf2S_add :: "event_data table list \<Rightarrow> event_data table list \<Rightarrow> ts list 
+  \<Rightarrow> event_data mebuf2S \<Rightarrow> event_data mebuf2S" 
+  where "mebuf2S_add xs' ys' ts' (xs, ys, ts, skew) = (xs @@ xs', ys @@ ys', ts @@ ts', skew)"
 
-fun mebuf2_take(*  :: "(event_data table \<Rightarrow> event_data table \<Rightarrow> 'b) \<Rightarrow> event_data mebuf2 \<Rightarrow> 'b list \<times> event_data mebuf2" *) where
+fun mebuf2_take where
   "mebuf2_take f (xs, ys) = (case mbuf_t_cases xs of (None, xs') \<Rightarrow> ([], (xs', ys)) | (Some x, xs') \<Rightarrow>
     (case mbuf_t_cases ys of (None, ys') \<Rightarrow> ([], (x ## xs', ys')) | (Some y, ys') \<Rightarrow>
     let (zs, buf) = mebuf2_take f (xs', ys') in (f x y # zs, buf)))"
@@ -878,9 +880,6 @@ end (* maux *)
 
 section \<open>Instantiation of the generic algorithm and code setup\<close>
 
-(* lemma [code_unfold del, symmetric, code_post del]: "card \<equiv> Code_Cardinality.card'" by simp
-declare [[code drop: card]] Set_Impl.card_code[code] *)
-
 (*
   The following snippet (context \<dots> end) is taken from HOL-Library.Code_Cardinality.
   We do not include the entire theory because the remaining code setup is superseded
@@ -921,17 +920,6 @@ derive (rbt) set_impl string8
 derive (rbt) mapping_impl string8
 derive (rbt) set_impl event_data
 derive (rbt) mapping_impl event_data
-
-(* (* TODO: why was it used in dual-ops? *)
-
-definition add_new_mmuaux' :: "args \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> event_data mmuaux \<Rightarrow>
-  event_data mmuaux" where
-  "add_new_mmuaux' = add_new_mmuaux"
-
-interpretation muaux valid_mmuaux init_mmuaux add_new_mmuaux' length_mmuaux eval_mmuaux
-  using valid_init_mmuaux valid_add_new_mmuaux valid_length_mmuaux valid_eval_mmuaux
-  unfolding add_new_mmuaux'_def
-  by unfold_locales assumption+ *)
 
 type_synonym 'a vmsaux = "nat \<times> (nat \<times> 'a table) list"
 
@@ -988,7 +976,6 @@ global_interpretation verimon_maux: maux valid_vmsaux init_vmsaux add_new_ts_vms
   and vmeinit0 = "maux.meinit0 (init_vmsaux :: _ \<Rightarrow> event_data vmsaux) (init_vmuaux :: _ \<Rightarrow> event_data vmuaux) (init_mmtaux :: _ \<Rightarrow> event_data mmtaux) :: _ \<Rightarrow> ty Formula.formula \<Rightarrow> _"
   and vminit = "maux.minit (init_vmsaux :: _ \<Rightarrow> event_data vmsaux) (init_vmuaux :: _ \<Rightarrow> event_data vmuaux) (init_mmtaux :: _ \<Rightarrow> event_data mmtaux) :: ty Formula.formula \<Rightarrow> _"
   and vminit_safe = "maux.minit_safe (init_vmsaux :: _ \<Rightarrow> event_data vmsaux) (init_vmuaux :: _ \<Rightarrow> event_data vmuaux) (init_mmtaux :: _ \<Rightarrow> event_data mmtaux) :: ty Formula.formula \<Rightarrow> _"
-  (* and vmupdate_since = "maux.update_since add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> event_data table)" *)
   and vmeval_since = "maux.eval_since add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> event_data table)"
   and vmeeval_since = "maux.eeval_since add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> event_data table)"
   and vmeval = "maux.meval add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _) update_mmtaux result_mmtaux"
@@ -1045,20 +1032,6 @@ next
     using valid_result_mmtaux by blast
 qed simp_all
 
-(* global_interpretation default_maux: maux valid_mmsaux "init_mmsaux :: _ \<Rightarrow> event_data mmsaux" 
-  add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux result_mmsaux
-  valid_mmuaux "init_mmuaux :: _ \<Rightarrow> event_data mmuaux" add_new_mmuaux' 
-  length_mmuaux eval_mmuaux valid_mmtaux init_mmtaux update_mmtaux result_mmtaux
-  defines minit0 = "maux.minit0 (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) (init_mmtaux :: _ \<Rightarrow> event_data mmtaux) :: _ \<Rightarrow> Formula.formula \<Rightarrow> _"
-  and minit = "maux.minit (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) (init_mmtaux :: _ \<Rightarrow> event_data mmtaux) :: Formula.formula \<Rightarrow> _"
-  and minit_safe = "maux.minit_safe (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) (init_mmtaux :: _ \<Rightarrow> event_data mmtaux) :: Formula.formula \<Rightarrow> _"
-  and mupdate_since = "maux.update_since add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> event_data table)"
-  and meval = "maux.meval add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _) update_mmtaux result_mmtaux"
-  and mstep = "maux.mstep add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _) update_mmtaux result_mmtaux"
-  and msteps0_stateless = "maux.msteps0_stateless add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _) update_mmtaux result_mmtaux"
-  and msteps_stateless = "maux.msteps_stateless add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _) update_mmtaux result_mmtaux"
-  and monitor = "maux.monitor init_mmsaux add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) init_mmuaux add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _) init_mmtaux update_mmtaux result_mmtaux"
-======= *)
 global_interpretation default_maux: maux 
   (* msaux *) valid_mmasaux "init_mmasaux :: _ \<Rightarrow> mmasaux" add_new_ts_mmasaux gc_join_mmasaux 
     add_new_table_mmasaux result_mmasaux
@@ -1069,7 +1042,6 @@ global_interpretation default_maux: maux
   and meinit0 = "maux.meinit0 (init_mmasaux :: _ \<Rightarrow> mmasaux) (init_mmauaux :: _ \<Rightarrow> mmauaux) (init_mmtaux :: _ \<Rightarrow> event_data mmtaux) :: _ \<Rightarrow> ty Formula.formula \<Rightarrow> _"
   and minit = "maux.minit (init_mmasaux :: _ \<Rightarrow> mmasaux) (init_mmauaux :: _ \<Rightarrow> mmauaux) (init_mmtaux :: _ \<Rightarrow> event_data mmtaux) :: ty Formula.formula \<Rightarrow> _"
   and minit_safe = "maux.minit_safe (init_mmasaux :: _ \<Rightarrow> mmasaux) (init_mmauaux :: _ \<Rightarrow> mmauaux) (init_mmtaux :: _ \<Rightarrow> event_data mmtaux) :: ty Formula.formula \<Rightarrow> _"
-  (* and mupdate_since = "maux.update_since add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> event_data table)" *)
   and meval_since = "maux.eval_since add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> event_data table)"
   and meeval_since = "maux.eeval_since add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> event_data table)"
   and meval = "maux.meval add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> _) add_new_mmauaux (eval_mmauaux' :: _ \<Rightarrow> _ \<Rightarrow> mmauaux \<Rightarrow> _) update_mmtaux result_mmtaux"
@@ -1162,17 +1134,13 @@ lemma LPDs_code[code]: "LPDs r = LPDs_aux {r}"
 lemma is_empty_table_unfold [code_unfold]:
   "X = empty_table \<longleftrightarrow> Set.is_empty X"
   "empty_table = X \<longleftrightarrow> Set.is_empty X"
-  (* "Code_Cardinality.eq_set X empty_table \<longleftrightarrow> Set.is_empty X"
-  "Code_Cardinality.eq_set empty_table X \<longleftrightarrow> Set.is_empty X" *)
   "set_eq X empty_table \<longleftrightarrow> Set.is_empty X"
   "set_eq empty_table X \<longleftrightarrow> Set.is_empty X"
   "X = (set_empty impl) \<longleftrightarrow> Set.is_empty X"
   "(set_empty impl) = X \<longleftrightarrow> Set.is_empty X"
-  (* "Code_Cardinality.eq_set X (set_empty impl) \<longleftrightarrow> Set.is_empty X"
-  "Code_Cardinality.eq_set (set_empty impl) X \<longleftrightarrow> Set.is_empty X" *)
   "set_eq (set_empty impl) X \<longleftrightarrow> Set.is_empty X"
   "set_eq X (set_empty impl) \<longleftrightarrow> Set.is_empty X"
-  unfolding set_eq_def set_empty_def empty_table_def Set.is_empty_def (* Code_Cardinality.eq_set_def  *)
+  unfolding set_eq_def set_empty_def empty_table_def Set.is_empty_def
   by auto
 
 lemma tabulate_rbt_code[code]: "Monitor.mrtabulate (xs :: mregex list) f =
@@ -1210,7 +1178,6 @@ lemma lexordp_eq_code[code]: "lexordp_eq xs ys \<longleftrightarrow> (case xs of
     | y # ys \<Rightarrow> if x < y then True else if x > y then False else lexordp_eq xs ys))"
   by (subst lexordp_eq.simps) (auto split: list.split)
 
-(* <<<<<<< HEAD *)
 definition "filter_mapping m X t = Mapping.filter (filter_cond X m t) m"
 
 lemma filter_mapping_empty[simp]: "filter_mapping m {} t = m"
@@ -1367,10 +1334,6 @@ lemma upd_nested_max_tstp_code[code]:
     else Code.abort (STR ''upd_nested_max_tstp: infinite'') (\<lambda>_. upd_nested_max_tstp m d X))"
   by transfer (auto simp add: upd_nested_max_tstp_fold)
 
-(* (* TODO: why was it used in dual-ops? *)
-declare [[code drop: add_new_mmuaux']]
-declare add_new_mmuaux'_def[unfolded add_new_mmuaux.simps, folded upd_nested_max_tstp_def, code] *)
-
 definition "filter_join pos X m = Mapping.filter (join_filter_cond pos X) m"
 
 lemma filter_join_False_empty: "filter_join False {} m = m"
@@ -1454,35 +1417,8 @@ lemma mapping_delete_set_code[code]:
   "mapping_delete_set m A = (if finite A then set_fold_cfi mapping_delete_set_cfi m A else Code.abort (STR ''mapping_delete_set: infinite'') (\<lambda>_. mapping_delete_set m A))"
   using mapping_delete_fold[of A m] by (simp add: mapping_delete_set_cfi.rep_eq set_fold_cfi.rep_eq)
 
-
 declare [[code drop: join_mmsaux]]
 declare join_mmsaux.simps[folded filter_join_def, code]
-
-(*
-definition set_minus :: "'a set \<Rightarrow> 'a set \<Rightarrow> 'a set" where
-  "set_minus X Y = X - Y"
-
-lift_definition remove_cfi :: "('a, 'a set) comp_fun_idem"
-  is "\<lambda>b a. a - {b}"
-  by unfold_locales auto
-
-lemma set_minus_finite:
-  assumes fin: "finite Y"
-  shows "set_minus X Y = Finite_Set.fold (\<lambda>a X. X - {a}) X Y"
-proof -
-  interpret comp_fun_idem "\<lambda>a X. X - {a}"
-    by unfold_locales auto
-  from assms show ?thesis
-    by (induction Y arbitrary: X rule: finite.induct) (auto simp add: set_minus_def)
-qed
-
-lemma set_minus_code[code]: "set_minus X Y =
-  (if finite Y \<and> card Y < card X then set_fold_cfi remove_cfi X Y else X - Y)"
-  by transfer (use set_minus_finite in \<open>auto simp add: set_minus_def\<close>)
-
-declare [[code drop: bin_join]]
-declare bin_join.simps[folded set_minus_def, code]
-*)
 
 definition remove_Union where
   "remove_Union A X B = A - (\<Union>x \<in> X. B x)"
@@ -1644,17 +1580,6 @@ lift_definition insert_rank_cfc::"aggargs \<Rightarrow> type \<Rightarrow> (even
 
 lemma [code_unfold]: "Finite_Set.fold (insert_rank args type) (v, m) data = set_fold_cfc (insert_rank_cfc args type) (v, m) data"
   by(transfer) auto
-
-(* definition finite' :: "'a set \<Rightarrow> bool" where
-  "finite' = finite"
-
-lemma finite'_code [code]: (* do we need it? *)
-  "finite' (set (xs::'a :: finite_UNIV list)) \<longleftrightarrow> True"
-  "finite' (List.coset xs) \<longleftrightarrow> of_phantom (finite_UNIV :: 'a finite_UNIV)"
-  by (simp_all add: finite'_def card_gt_0_iff finite_UNIV) *)
-
-(* declare insert_maggaux'.simps [code del]
-declare insert_maggaux'.simps [folded finite'_def, code] *)
 
 lemma [code_unfold]: "X - Mapping.keys tuple_in = Set.filter (\<lambda>k. Mapping.lookup tuple_in k = None) X"
   by(transfer) auto
@@ -1841,20 +1766,15 @@ lemma finite_multiset_code[code]:
   "finite_multiset M = (if finite M then set_fold_cfi finite_multiset_cfi True M else False)"
   using finite_multiset_def finite_multiset_eq by transfer auto
 
-
-thm default_mmasaux.init_since'_def 
-thm default_mmauaux.init_until'_def
-thm verimon_maux.init_trigger'_def
-thm verimon_maux.init_and_trigger'_def
-thm mtaux.init_and_trigger'_def
-thm default_maux.meinit0.simps(13)[unfolded default_mmasaux.init_since'_def]
-
-
 lemmas meinit0_code_simps = default_maux.meinit0.simps[unfolded verimon_maux.init_and_trigger'_def]
+
 lemmas vmeinit0_code_simps = verimon_maux.meinit0.simps[unfolded verimon_maux.init_and_trigger'_def]
+
 declare default_maux.meinit0.simps [code del]
+
 declare meinit0_code_simps [code]
   and vmeinit0_code_simps [code]
+
 declare default_mmasaux.init_since'_def [code_unfold]
   and default_mmauaux.init_until'_def [code_unfold]
   and verimon_maux.init_since'_def [code_unfold]

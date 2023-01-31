@@ -1012,62 +1012,9 @@ fun add_new_ts_mmsaux' :: "args \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Right
     (tuple_in, add) = fold (upd_set_keys (\<lambda>X t. {as \<in> X. valid_tuple tuple_since (t, as)})) move (tuple_in, {}) in
     (nt, gc, maskL, maskR, data_prev, data_in, table_in \<union> add, wf_table_union wf_table_in (wf_table_of_set_args args add), tuple_in, wf_table_since, tuple_since))"
 
-(* dual-ops:                                            
-fun add_new_ts_past :: "\<I> \<Rightarrow> ts \<Rightarrow>
-  ('a \<Rightarrow> 'b table) \<Rightarrow>
-  ((ts \<times> 'a) queue \<times> (ts \<times> 'a) queue \<times> (('b tuple, ts) mapping) \<times> (('b tuple, ts) mapping)) \<Rightarrow>
-  ((ts \<times> 'a) queue \<times> (ts \<times> 'a) queue \<times> (('b tuple, ts) mapping))
-" where
-  "add_new_ts_past I nt f (data_prev, data_in, tuple_in, tuple_since) =
-    (let (data_prev, move) = takedropWhile_queue (\<lambda>(t, _). memL I (nt - t)) data_prev;
-    data_in = fold (\<lambda>(t, X) data_in. append_queue (t, X) data_in) move data_in;
-    tuple_in = fold (\<lambda>(t, X) tuple_in. upd_set tuple_in (\<lambda>_. t)
-      {as \<in> f X. valid_tuple tuple_since (t, as)}) move tuple_in in
-    (data_prev, data_in, tuple_in)
-  )"
-
-fun add_new_ts_mmsaux' :: "args \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
-  "add_new_ts_mmsaux' args nt (t, gc, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) = (
-    let (data_prev, data_in, tuple_in) = add_new_ts_past (args_ivl args) nt id (data_prev, data_in, tuple_in, tuple_since)
-    in
-    (nt, gc, maskL, maskR, data_prev, data_in, tuple_in, tuple_since)
-)"
-*)
-
-
 lemma Mapping_keys_fold_upd_set: "k \<in> Mapping.keys (fold (\<lambda>(t, X) m. upd_set m (\<lambda>_. t) (Z t X))
   xs m) \<Longrightarrow> k \<in> Mapping.keys m \<or> (\<exists>(t, X) \<in> set xs. k \<in> Z t X)"
   by (induction xs arbitrary: m) (fastforce simp add: Mapping_upd_set_keys)+
-
-(* <<<<<<< HEAD
-(* add_new_ts_mmsaux' only changes data_prev, data_in & tuple_in. write conditions explicitly *)
-lemma valid_add_new_ts_past_unfolded:
-  assumes table_tuple_in: "table (args_n args) (args_R args) (Mapping.keys tuple_in)"
-  assumes auxlist_tuples: "ts_tuple_rel_f f (set auxlist) =
-    {tas \<in> ts_tuple_rel_f f (set (linearize data_prev) \<union> set (linearize data_in)).
-    valid_tuple tuple_since tas}"
-  assumes data_prev_props:
-    "(\<forall>as \<in> \<Union>((f o snd) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_R args) as)"
-    "sorted (map fst (linearize data_prev))"
-    "(\<forall>t \<in> fst ` set (linearize data_prev). t \<le> cur \<and> \<not> memL (args_ivl args) (cur - t))"
-  assumes data_in_props:
-    "sorted (map fst (linearize data_in))"
-    "(\<forall>t \<in> fst ` set (linearize data_in). t \<le> cur \<and> memL (args_ivl args) (cur - t))"
-  assumes max_ts_tuple_in: "newest_tuple_in_mapping f data_in tuple_in (\<lambda>x. valid_tuple tuple_since x)"
-  assumes nt_mono: "nt \<ge> cur"
-  assumes add_new_ts_appl: "(data_prev', data_in', tuple_in') = add_new_ts_past (args_ivl args) nt f (data_prev, data_in, tuple_in, tuple_since)"
-  shows
-    "table (args_n args) (args_R args) (Mapping.keys tuple_in')"
-    "\<forall>as \<in> \<Union>((f o snd) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_R args) as"
-    "ts_tuple_rel_f f (set auxlist) =
-    {tas \<in> ts_tuple_rel_f f (set (linearize data_prev') \<union> set (linearize data_in')).
-    valid_tuple tuple_since tas}"
-    "sorted (map fst (linearize data_prev'))"
-    "(\<forall>t \<in> fst ` set (linearize data_prev'). t \<le> nt \<and> \<not> memL (args_ivl args) (nt - t))"
-    "sorted (map fst (linearize data_in'))"
-    "(\<forall>t \<in> fst ` set (linearize data_in'). t \<le> nt \<and> memL (args_ivl args) (nt - t))"
-    "newest_tuple_in_mapping f data_in' tuple_in' (\<lambda>x. valid_tuple tuple_since x)"
-======= *)
 
 lemma valid_add_new_ts_mmsaux'_unfolded:
   assumes valid_before: "valid_mmsaux args cur
@@ -1259,9 +1206,6 @@ lemma valid_add_new_ts_mmsaux': "valid_mmsaux args cur aux auxlist \<Longrightar
 
 definition add_new_ts_mmsaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
   "add_new_ts_mmsaux args nt aux = add_new_ts_mmsaux' args nt (shift_end args nt aux)"
-
-(* definition add_new_ts_mmsaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
-  "add_new_ts_mmsaux args nt aux = add_new_ts_mmsaux' args nt (shift_end_mmsaux args nt aux)" *)
 
 lemma valid_add_new_ts_mmsaux:
   assumes "valid_mmsaux args cur aux auxlist" "nt \<ge> cur"
@@ -4405,8 +4349,6 @@ lemma valid_length_mmuaux:
   shows "length_mmuaux args aux = length auxlist"
   using assms by (cases aux) (auto simp add: valid_mmuaux_def dest: list_all2_lengthD)
 
-(* begin trigger (mtaux) *)
-
 (* simply stores all tables for \<phi> and \<psi> in [0, b] *)
 type_synonym 'a mtaux = "(ts \<times> 'a table \<times> 'a table) list"
 
@@ -7157,13 +7099,6 @@ proof -
     "newest_tuple_in_mapping fst data_prev tuple_in_once (\<lambda>x. True)"
     by auto
 
-  (*
-
-  "ts_tuple_rel_binary_lhs (set ((auxlist_data_prev args mt) auxlist)) =
-    {tas \<in> (ts_tuple_rel_binary_lhs (set (linearize data_prev))) \<union> (ts_tuple_rel_f (\<lambda>_. {}) (set (linearize data_in))).
-    valid_tuple tuple_in_once tas}"
-
-*)
   have nt_mono: "nt \<ge> cur" "nt \<le> nt" using nt_mono by auto
   have shift_end_props:
     "table (args_n args) (args_L args) (Mapping.keys tuple_in_once')"
@@ -7381,7 +7316,6 @@ proof -
       {
         assume assm: "(t, X) \<notin> set (takeWhile (\<lambda>(t, X). memL (args_ivl args) (nt - t)) (linearize data_prev))"
         then have "\<exists>j. j<i \<and> \<not>((\<lambda>(t, X). memL (args_ivl args) (nt - t)) ((linearize data_prev)!j))"
-        (* generated subproof *)
         proof -
           have f1: "i = length (takeWhile (\<lambda>(n, p). memL (args_ivl args) (nt - n)) (linearize data_prev)) \<or> length (takeWhile (\<lambda>(n, p). memL (args_ivl args) (nt - n)) (linearize data_prev)) < i"
             using assm i_props(2)
@@ -7519,7 +7453,7 @@ proof -
       case True
       then show ?thesis
         using assm mem0
-        by (simp add: Mapping.lookup_empty)
+        by simp
     next
       case False
       from assm have "as \<in> Mapping.keys tuple_in_once'"
@@ -8023,7 +7957,6 @@ proof -
     have filter_map_simp: "filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) = filter ((\<lambda>(t, _). memR (args_ivl args) (nt - t)) \<circ> (\<lambda>(t, l, r). (t, r)))"
       by (metis (mono_tags, lifting) case_prod_beta' fst_conv o_apply)
 
-    (* check if defined correctly *)
     have data_in'_aux_eq: "map (\<lambda>(t, l, r). (t, r)) data_in'_aux = linearize data_in'"
       using in_eqs(1) auxlist_eqs(2)
       unfolding data_in'_aux_def data_in'_eq
@@ -9759,7 +9692,6 @@ proof -
                   using n_props(1) data_in'_aux_eq
                   unfolding lin_data_in''_aux_mv_def lin_data_in''_mv_def
                   using length_map[of "\<lambda>(t, l, y). (t, y)" "(filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (xs @ [x]))"]
-                  (* generated subproof *)
                   proof -
                     show "n < length (data_in'_aux @ filter (\<lambda>(n, p). memR (args_ivl args) (nt - n)) (xs @ [x]))"
                       by (metis atLeastLessThan_iff data_in''_aux_eq length_map lin_data_in''_aux_mv_def n_props(1))
