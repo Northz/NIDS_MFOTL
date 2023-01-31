@@ -4,21 +4,6 @@ open Relation
 open Tuple
 open MFOTL
 
-(* Immutable version of types used in eformula *)
-type mozinfo = { mozauxrels: (int * timestamp * relation) Dllist.dllist}
-
-type moinfo  = { moauxrels: (timestamp * relation) Dllist.dllist}
-
-type msinfo  = { msrel2: relation option;
-                 msaux: Optimized_mtl.msaux}
-
-type mezinfo = { mezlastev: Neval.cell;
-                 mezauxrels: (int * timestamp * relation) Dllist.dllist}
-
-type meinfo  = { melastev: Neval.cell;
-                 meauxrels: (timestamp * relation) Dllist.dllist}
-
-
 (*  IMPORTANT/TODO
     The int pointers in the marshalled states can only be used if we work under the assumption that:
     1. Each split state marshals the whole formula (given by implementation)
@@ -26,16 +11,6 @@ type meinfo  = { melastev: Neval.cell;
 
     If 2. is no longer given by the project, the pointers will be different for different Monpoly instances and can no longer just be combined when merging
 *)
-type muinfo  = { mulast   :  Neval.cell;
-                 mufirst  :  bool;
-                 mures    :  relation;
-                 murel2   :  relation option;
-                 mraux    :  (int * timestamp * (int * relation) Sk.dllist) Sj.dllist;
-                 msaux    :  (int * relation) Sk.dllist}
-type muninfo = { mlast1   :  Neval.cell;
-                 mlast2   :  Neval.cell;
-                 mlistrel1:  (int * timestamp * relation) Dllist.dllist;
-                 mlistrel2:  (int * timestamp * relation) Dllist.dllist;}
 
 (* Immutable version of eformula used for marshalling *)
 type mformula =
@@ -51,13 +26,7 @@ type mformula =
   | MPrev of interval * mformula * pinfo * int
   | MNext of interval * mformula * ninfo * int
   | MSince of mformula * mformula * sinfo * int
-  | MOnceA of interval * mformula * oainfo * int
-  | MOnceZ of interval * mformula * mozinfo * int
-  | MOnce of interval * mformula  * moinfo * int
-  | MNUntil of comp_two * interval * mformula * mformula * muninfo * int
-  | MUntil of comp_two * interval * mformula * mformula * muinfo * int
-  | MEventuallyZ of interval * mformula * mezinfo * int
-  | MEventually of interval * mformula * meinfo * int
+  | MUntil of mformula * mformula * uinfo * int
 
 (* For each formula, returns list of relevant free variables according to sub structure *)
 let free_vars f =
@@ -76,13 +45,7 @@ let free_vars f =
   | MPrev          (_, f1, _, _)             -> get_pred f1
   | MNext          (_, f1, _, _)             -> get_pred f1
   | MSince         (f1, f2, _, _)            -> Misc.union (get_pred f1) (get_pred f2)
-  | MOnceA         (_, f1, _, _)             -> get_pred f1
-  | MOnceZ         (_, f1, _, _)             -> get_pred f1
-  | MOnce          (_, f1, _, _)             -> get_pred f1
-  | MNUntil        (c, _, f1, f2, _, _)      -> Misc.union (get_pred f1) (get_pred f2)
-  | MUntil         (c, _, f1, f2, _, _)      -> Misc.union (get_pred f1) (get_pred f2)
-  | MEventuallyZ   (_, f1, _, _)             -> get_pred f1
-  | MEventually    (_, f1, _, _)             -> get_pred f1
+  | MUntil         (f1, f2, _, _)            -> Misc.union (get_pred f1) (get_pred f2)
   in
   get_pred f
 
@@ -103,12 +66,6 @@ let predicates f =
   | MPrev          (_, f1, _, _)             -> get_pred f1
   | MNext          (_, f1, _, _)             -> get_pred f1
   | MSince         (f1, f2, _, _)            -> Misc.union (get_pred f1) (get_pred f2)
-  | MOnceA         (_, f1, _, _)             -> get_pred f1
-  | MOnceZ         (_, f1, _, _)             -> get_pred f1
-  | MOnce          (_, f1, _, _)             -> get_pred f1
-  | MNUntil        (_, _, f1, f2, _, _)      -> Misc.union (get_pred f1) (get_pred f2)
-  | MUntil         (_, _, f1, f2, _, _)      -> Misc.union (get_pred f1) (get_pred f2)
-  | MEventuallyZ   (_, f1, _, _)             -> get_pred f1
-  | MEventually    (_, f1, _, _)             -> get_pred f1
+  | MUntil         (f1, f2, _, _)            -> Misc.union (get_pred f1) (get_pred f2)
   in
   get_pred f

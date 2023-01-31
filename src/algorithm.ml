@@ -129,287 +129,6 @@ let dllist_add_last auxrels tsq rel2 =
     else
       Dllist.add_last (tsq,rel2) auxrels
 
-let update_once_all intv tsq inf =
-  let auxrels = inf.oaauxrels in
-  let rec comp () =
-    if not (Mqueue.is_empty auxrels) then
-      let (tsj,relj) = Mqueue.top auxrels in
-      if MFOTL.in_right_ext (MFOTL.ts_minus tsq tsj) intv then
-        begin
-          ignore (Mqueue.pop auxrels);
-          inf.ores <- Relation.union inf.ores relj;
-          comp ()
-        end
-  in
-  comp ()
-
-(* Remark: we could remove all auxrels that are covered by the tree and
-   gain some memory (sooner). However detecting [lw] would be harder. *)
-let update_once_zero intv q tsq inf rel2 discard =
-  let auxrels = inf.ozauxrels in
-
-  let rec elim_old_ozauxrels () =
-    (* remove old elements that fell out of the interval *)
-    if not (Dllist.is_empty auxrels) then
-      let (_, tsj, arel) = Dllist.get_first auxrels in
-      if not (MFOTL.in_left_ext (MFOTL.ts_minus tsq tsj) intv) then
-        begin
-          if inf.ozlast != Dllist.void && inf.ozlast == Dllist.get_first_cell auxrels then
-            inf.ozlast <- Dllist.void;
-          ignore(Dllist.pop_first auxrels);
-          elim_old_ozauxrels()
-        end
-  in
-  elim_old_ozauxrels ();
-
-  if not (Relation.is_empty rel2) then
-    Dllist.add_last (q,tsq,rel2) inf.ozauxrels;
-
-  if Dllist.is_empty auxrels || discard then
-    Relation.empty
-  else
-    let cond = fun _ -> true in
-    let f = fun (j,_,rel) -> (j,rel) in
-    let subseq, new_last = get_new_elements auxrels inf.ozlast cond f in
-    let lw,_,_ = Dllist.get_first auxrels in
-    let rw =
-      if subseq = [] then
-        let j,_,_ = Dllist.get_data inf.ozlast in j
-      else
-        begin
-          assert (new_last != Dllist.void);
-          inf.ozlast <- new_last;
-          let rw = fst (List.hd subseq) in
-          assert (rw = let j,_,_ = Dllist.get_data new_last in j);
-          rw
-        end
-    in
-    if Misc.debugging Dbg_eval then
-      begin
-        Printf.eprintf "[update_once_zero] lw = %d rw = %d " lw rw;
-        Misc.prerrnl_list "subseq = " prerr_auxel subseq;
-      end;
-    let newt = Sliding.slide string_of_int Relation.union subseq (lw, rw) inf.oztree in
-    inf.oztree <- newt;
-    Sliding.stree_res newt
-
-
-let update_once intv tsq inf discard =
-  let auxrels = inf.oauxrels in
-  let rec elim_old_oauxrels () =
-    (* remove old elements that fell out of the interval *)
-    if not (Dllist.is_empty auxrels) then
-      let (tsj,_) = Dllist.get_first auxrels in
-      if not (MFOTL.in_left_ext (MFOTL.ts_minus tsq tsj) intv) then
-        begin
-          if inf.olast != Dllist.void && inf.olast == Dllist.get_first_cell auxrels then
-            inf.olast <- Dllist.void;
-          ignore(Dllist.pop_first auxrels);
-          elim_old_oauxrels()
-        end
-  in
-  elim_old_oauxrels ();
-
-  (* In the following we distiguish between the new window and the new
-     elements: the new window may contain old elements (the old and new
-     windows may overlap). *)
-
-  if Dllist.is_empty auxrels || discard then
-    Relation.empty
-  else
-    let lw = fst (Dllist.get_first auxrels) in
-    if MFOTL.in_right_ext (MFOTL.ts_minus tsq lw) intv then
-      (* the new window is not empty *)
-      let cond = fun (tsj,_) -> MFOTL.in_right_ext (MFOTL.ts_minus tsq tsj) intv in
-      let subseq, new_last = get_new_elements auxrels inf.olast cond (fun x -> x) in
-      let rw =
-        if subseq = [] then
-          fst (Dllist.get_data inf.olast)
-        else
-          begin
-            assert (new_last != Dllist.void);
-            inf.olast <- new_last;
-            let rw = fst (List.hd subseq) in
-            assert (rw = fst (Dllist.get_data new_last));
-            rw
-          end
-      in
-      if Misc.debugging Dbg_eval then
-        begin
-          Printf.eprintf "[update_once] lw = %s rw = %s "
-            (MFOTL.string_of_ts lw)
-            (MFOTL.string_of_ts rw);
-          Misc.prerrnl_list "subseq = " prerr_sauxel subseq;
-        end;
-      let newt = Sliding.slide MFOTL.string_of_ts Relation.union subseq (lw, rw) inf.otree in
-      inf.otree <- newt;
-      Sliding.stree_res newt
-    else
-      begin
-        (* the new window is empty,
-           because not even the oldest element satisfies the constraint *)
-        inf.otree <- LNode {l = MFOTL.ts_invalid;
-                            r = MFOTL.ts_invalid;
-                            res = Some (Relation.empty)};
-        inf.olast <- Dllist.void;
-        Relation.empty
-      end
-
-
-
-
-
-let update_old_until q tsq i intv inf discard  =
-  (* eliminate those entries (q-1,reli) from rels;
-     return the tuples which hold at q *)
-  let elim_old j rels =
-    assert(j>=q-1);
-    if not (Sk.is_empty rels) then
-      let (k,relk) = Sk.get_first rels in
-      if k=q-1 then
-        begin
-          ignore(Sk.pop_first rels);
-          if not (Sk.is_empty rels) && fst (Sk.get_first rels) = q then
-            let (k',relk') = Sk.pop_first rels in
-            assert(k'=q && j>=q);
-            let newrelk' = Relation.union relk relk' in
-            Sk.add_first (k',newrelk') rels;
-            newrelk'
-          else
-          if (j>q-1) then
-            begin
-              Sk.add_first (k+1,relk) rels;
-              relk
-            end
-          else
-            Relation.empty
-        end
-      else
-        begin
-          assert(k>q-1);
-          if k=q then
-            relk
-          else
-            Relation.empty
-        end
-    else (* Sk.is_empty rels = true *)
-      Relation.empty
-  in
-
-
-  let rec elim_old_raux () =
-    (* remove old elements that fell out of the interval *)
-    if not (Sj.is_empty inf.raux) then
-      let (j,tsj,_) = Sj.get_first inf.raux in
-      if j<q || not (MFOTL.in_right_ext (MFOTL.ts_minus tsj tsq) intv) then
-        begin
-          ignore(Sj.pop_first inf.raux);
-          elim_old_raux()
-        end
-  in
-
-  elim_old_raux ();
-
-  Sj.iter (
-    fun (j,tsj,rrels) ->
-      assert(j>=q);
-      assert(MFOTL.in_right_ext (MFOTL.ts_minus tsj tsq) intv);
-      let relq = elim_old j rrels in
-      if (not discard) && not (Relation.is_empty relq) then
-        inf.ures <- Relation.union inf.ures relq;
-      if Misc.debugging Dbg_eval then
-        Relation.prerr_reln "[update_aux] res: " inf.ures;
-  ) inf.raux;
-
-  (* saux holds elements (k,relk) for the last seen index,
-     i.e. [i] *)
-  assert(i>=q-1);
-  if i=q-1 then
-    Sk.clear inf.saux
-  else
-    ignore(elim_old i inf.saux)
-
-
-(* Auxiliary functions for the f1 Until_I f2 case.
-
-   The saux list contains tuples (k,Sk) (ordered incrementally by k),
-   with q <= k <= i, such that the tuples in Sk satisfy f1
-   continuously between k and i, and k is minimal (that is, if a tuple
-   is in Sk it will not also be in Sk' with k'>k.)
-
-   The raux list contains tuples (j,tj,Lj) (ordered incrementaly by
-   j), with q <= j <= i, where Lj is a list of tuples (k,Rk) (ordered
-   incrementaly by k), with q <= k <= j, such that the tuples in Rk
-   satisfy f2 at j and satisfy f1 continuously between k and j-1, and
-   k is minimal (that is, if a tuple is in Rk it will not also be in
-   Rk' with j>=k'>k.)
-
-   NOTE: The iteration through raux to eliminate those tuples <k,Sk>
-   with k<q (ie. k=q-1) seems unnecessary. If a tuple in Sk satisfies
-   f1 continuously from k to j, then it also satisfies f1 continuously
-   from q to j.
-*)
-
-
-let combine2 comp j rels rel2 =
-  let nrels = Sk.empty() in
-  let curr_rel2 = ref rel2 in
-  Sk.iter
-    (fun (k,rel) ->
-       let nrel = comp !curr_rel2 rel in
-       if not (Relation.is_empty nrel) then
-         Sk.add_last (k,nrel) nrels;
-       curr_rel2 := Relation.diff !curr_rel2 nrel;
-    ) rels;
-  if not (Relation.is_empty !curr_rel2) then
-    Sk.add_last (j,!curr_rel2) nrels;
-  nrels
-
-let get_relq q rels =
-  if not (Sj.is_empty rels) then
-    let (k,relk) = Sj.get_first rels in
-    if k = q then Some relk
-    else None
-  else
-    None
-
-let update_until q tsq i tsi intv rel1 rel2 inf comp discard =
-  if Misc.debugging Dbg_eval then
-    prerr_uinf "[update_until] inf: " inf;
-  assert(i >= q);
-  let nsaux = combine2 Relation.inter i inf.saux rel1 in
-  if (MFOTL.in_right_ext (MFOTL.ts_minus tsi tsq) intv) &&
-     not (Relation.is_empty rel2) then
-    begin
-      let rrels = combine2 comp i inf.saux rel2 in
-      Sj.add_last (i,tsi,rrels) inf.raux;
-      if not discard then
-        match get_relq q rrels with
-        | Some rel -> inf.ures <- Relation.union inf.ures rel
-        | None -> ()
-    end;
-  inf.saux <- nsaux
-
-
-let elim_old_eventually q tsq intv inf =
-  let auxrels = inf.eauxrels in
-
-  let rec elim_old_eauxrels () =
-    (* remove old elements that fell out of the interval *)
-    if not (Dllist.is_empty auxrels) then
-      let (tsj, _) = Dllist.get_first auxrels in
-      if not (MFOTL.in_right_ext (MFOTL.ts_minus tsj tsq) intv) then
-        begin
-          if inf.elast != Dllist.void && inf.elast == Dllist.get_first_cell auxrels then
-            inf.elast <- Dllist.void;
-          ignore(Dllist.pop_first auxrels);
-          elim_old_eauxrels()
-        end
-  in
-
-  elim_old_eauxrels ()
-
-
 let warn_if_empty_aggreg {op; default} {Aggreg.empty_rel; Aggreg.rel} =
   if empty_rel then
     (match op with
@@ -443,19 +162,13 @@ let add_let_index f n rels =
     | EAggOnce (_,_,f1,_)
     | EAggreg (_,_,f1,_)
     | ENext (_,f1,_,_)
-    | EPrev (_,f1,_,_)
-    | EOnceA (_,f1,_,_)
-    | EOnceZ (_,f1,_,_)
-    | EOnce (_,f1,_,_)
-    | EEventuallyZ (_,f1,_,_)
-    | EEventually (_,f1,_,_) ->
+    | EPrev (_,f1,_,_) ->
       update f1
 
     | EAnd (_,f1,f2,_,_)
     | EOr (_,f1,f2,_,_)
     | ESince (f1,f2,_,_)
-    | ENUntil (_,_,f1,f2,_,_)
-    | EUntil (_,_,f1,f2,_,_) ->
+    | EUntil (f1,f2,_,_) ->
       update f1;
       update f2
   in
@@ -689,34 +402,6 @@ let rec eval f crt discard =
        )
     ), loc
 
-
-  | EOnceA ((c,_) as intv, f2, inf, loc) ->
-    (match eval f2 crt false with
-     | None -> None
-     | Some rel2 ->
-       if Misc.debugging Dbg_eval then
-         Printf.eprintf "[eval,OnceA] q=%d\n" q;
-
-       Perf.profile_enter ~tp:q ~loc;
-       let result =
-         if c = CBnd MFOTL.ts_null then
-           begin
-             inf.ores <- Relation.union inf.ores rel2;
-             Some inf.ores
-           end
-         else
-           begin
-             if not (Relation.is_empty rel2) then
-               mqueue_add_last inf.oaauxrels tsq rel2;
-
-             update_once_all intv tsq inf;
-             Some inf.ores
-           end
-       in
-       Perf.profile_exit ~tp:q ~loc;
-       result
-    ), loc
-
   | EAggOnce (inf, state, f, loc) ->
     (match eval f crt false with
      | Some rel ->
@@ -729,427 +414,46 @@ let rec eval f crt discard =
      | None -> None
     ), loc
 
-  (* We distinguish between whether the left margin of [intv] is
-     zero or not, as we need to have two different ways of
-     representing the margins of the windows in the tree: when 0
-     is not included we can use the timestamps and merge
-     relations at equal timestamps; otherwise, when 0 is not
-     included, we need to use the timepoints. *)
-  | EOnceZ (intv,f2,inf,loc) ->
-    (match eval f2 crt false with
-     | None -> None
-     | Some rel2 ->
-       if Misc.debugging Dbg_eval then
-         Printf.eprintf "[eval,OnceZ] q=%d\n" q;
-
-       Perf.profile_enter ~tp:q ~loc;
-       let result = update_once_zero intv q tsq inf rel2 discard in
-       Perf.profile_exit ~tp:q ~loc;
-       Some result
-    ), loc
-
-  | EOnce (intv,f2,inf,loc) ->
-    (match eval f2 crt false with
-     | None -> None
-     | Some rel2 ->
-       if Misc.debugging Dbg_eval then
-         Printf.eprintf "[eval,Once] q=%d\n" q;
-
-       Perf.profile_enter ~tp:q ~loc;
-       if not (Relation.is_empty rel2) then
-         dllist_add_last inf.oauxrels tsq rel2;
-
-       let result = update_once intv tsq inf discard in
-       Perf.profile_exit ~tp:q ~loc;
-       Some result
-    ), loc
-
-  | EUntil (comp,intv,f1,f2,inf,loc) ->
-    (* contents of inf:  (f = f1 UNTIL_intv f2)
-       ulast:        last cell of neval for which both f1 and f2 are evaluated
-       ufirst:       boolean flag indicating if we are at the first
-                     iteration after the evaluation of f (i.e. q was
-                     just moved); in this case we remove auxiliary
-                     relations at old q
-       ures:         the current partial result (for f)
-       urel2:        the evaluation of f2 at ulast
-       raux, saux:   the auxiliary relations
-    *)
-
+  | EUntil (f1,f2,inf,loc) ->
     if Misc.debugging Dbg_eval then
-      begin
-        let str = Printf.sprintf "[eval,Until] q=%d inf: " q in
-        prerr_uinf str inf
-      end;
+      Printf.eprintf "[eval,Until] q=%d\n" q;
 
-    if inf.ufirst then
-      begin
-        Perf.profile_enter ~tp:q ~loc;
-        inf.ufirst <- false;
-        let (i,_) = Neval.get_data inf.ulast in
-        update_old_until q tsq i intv inf discard;
-        if Misc.debugging Dbg_eval then
-          prerr_uinf "[eval,Until,after_update] inf: " inf;
-        Perf.profile_exit ~tp:q ~loc
-      end;
-
-    (* we first evaluate f2, and then f1 *)
-
-    let rec evalf1 i tsi rel2 ncrt =
-      (match eval f1 ncrt false with
-       | Some rel1 ->
-         Perf.profile_enter ~tp:q ~loc;
-         update_until q tsq i tsi intv rel1 rel2 inf comp discard;
-         Perf.profile_exit ~tp:q ~loc;
-         inf.urel2 <- None;
-         inf.ulast <- ncrt;
-         evalf2 ()
-       | None ->
-         inf.urel2 <- (Some rel2);
-         None
-      )
-
-    and evalf2 () =
+    let rec update_and_get_result () =
       if Neval.is_last inf.ulast then
         None
       else
-        let ncrt = Neval.get_next inf.ulast in
-        let (i,tsi) = Neval.get_data ncrt in
-        if not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv) then
-          (* we have the lookahead, we can compute the result *)
-          begin
-            if Misc.debugging Dbg_eval then
-              Printf.eprintf "[eval,Until] evaluation possible q=%d tsq=%s\n"
-                q (MFOTL.string_of_ts tsq);
-            let res = inf.ures in
-            inf.ures <- Relation.empty;
-            inf.ufirst <- true;
-            Some res
-          end
-        else
-          begin
+        begin
+          let ncrt = Neval.get_next inf.ulast in
+          let (i, tsi) = Neval.get_data ncrt in
+          Perf.profile_enter ~tp:q ~loc;
+          Optimized_mtl.update_lookahead_muaux i tsi inf.uaux;
+          let result = Optimized_mtl.take_result_muaux inf.uaux in
+          Perf.profile_exit ~tp:q ~loc;
+          match result with
+          | Some _ as x -> x
+          | None ->
             (match inf.urel2 with
-             | Some rel2 -> evalf1 i tsi rel2 ncrt
+             | Some rel2 -> eval_f1 rel2 ncrt
              | None ->
                (match eval f2 ncrt false with
                 | None -> None
-                | Some rel2 -> evalf1 i tsi rel2 ncrt
+                | Some rel2 -> eval_f1 rel2 ncrt
                )
             )
-          end
-    in
-    evalf2(), loc
-
-  | ENUntil (comp,intv,f1,f2,inf,loc) ->
-    (* contents of inf:  (f = NOT f1 UNTIL_intv f2)
-       ulast1:       last cell of neval for which f1 is evaluated
-       ulast2:       last cell of neval for which f2 is evaluated
-       listrel1:     list of evaluated relations for f1
-       listrel2:     list of evaluated relations for f2
-
-       NOTE: a possible optimization would be to not store empty relations
-    *)
-
-    (* evaluates the subformula f as much as possible *)
-    let rec eval_subf f list last  =
-      if Neval.is_last last then
-        last
-      else
-        let ncrt = Neval.get_next last in
-        match eval f ncrt false with
-        | None -> last
-        | Some rel ->
-          (* store the result and try the next time point *)
-          let i, tsi = Neval.get_data ncrt in
-          Dllist.add_last (i, tsi, rel) list;
-          eval_subf f list ncrt
-    in
-
-    (* evaluate the two subformulas *)
-    inf.last1 <- eval_subf f1 inf.listrel1 inf.last1;
-    inf.last2 <- eval_subf f2 inf.listrel2 inf.last2;
-
-    (* checks whether the position to be evaluated is beyond the interval *)
-    let has_lookahead last =
-      let ncrt =
-        if Neval.is_last last then
-          last
-        else
-          Neval.get_next last
-      in
-      let _, tsi = Neval.get_data ncrt in
-      not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv)
-    in
-
-    if has_lookahead inf.last1 && has_lookahead inf.last2 then
-      (* we have the lookahead for both f1 and f2 (to be consistent with Until),
-        we can compute the result
-
-        NOTE: we could evaluate earlier with respect to f1, also in Until *)
-      begin
+        end
+    and eval_f1 rel2 ncrt =
+      match eval f1 ncrt false with
+      | Some rel1 ->
+        inf.urel2 <- None;
+        inf.ulast <- ncrt;
         Perf.profile_enter ~tp:q ~loc;
-        (* we iteratively compute the union of the relations [f1]_j
-          with q <= j <= j0-1, where j0 is the first index which
-          satisfies the temporal constraint relative to q *)
-        let f1union = ref Relation.empty in
-        let crt1_j = ref (Dllist.get_first_cell inf.listrel1) in
-        let rec iter1 () =
-          let j,tsj,relj = Dllist.get_data !crt1_j in
-          if j < q then
-            begin (* clean up from previous evaluation *)
-              assert (j = q-1);
-              ignore(Dllist.pop_first inf.listrel1);
-              crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
-              iter1 ()
-            end
-          else if not (MFOTL.in_right_ext (MFOTL.ts_minus tsj tsq) intv) then
-            begin
-              f1union := Relation.union !f1union relj;
-              if not (Dllist.is_last inf.listrel1 !crt1_j) then
-                begin
-                  crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
-                  iter1 ()
-                end
-            end
-        in
-        iter1 ();
-
-        (* we now iterate through the remaining indexes, updating the
-          union, and also computing the result *)
-        let res = ref Relation.empty in
-        let crt2_j = ref (Dllist.get_first_cell inf.listrel2) in
-        let rec iter2 () =
-          let j2,tsj2,rel2 = Dllist.get_data !crt2_j in
-          if j2 < q || not (MFOTL.in_right_ext (MFOTL.ts_minus tsj2 tsq) intv) then
-            begin (* clean up from previous evaluation *)
-              if not (Dllist.is_last inf.listrel2 !crt2_j) then
-                begin
-                  ignore(Dllist.pop_first inf.listrel2);
-                  crt2_j := Dllist.get_next inf.listrel2 !crt2_j;
-                  iter2 ()
-                end
-            end
-          else
-            begin
-              if MFOTL.in_left_ext (MFOTL.ts_minus tsj2 tsq) intv then
-                begin
-                  let resj = comp rel2 !f1union in
-                  res := Relation.union !res resj;
-                  let j1,tsj1,rel1 = Dllist.get_data !crt1_j in
-                  assert(j1 = j2);
-                  f1union := Relation.union !f1union rel1;
-                  let is_last1 = Dllist.is_last inf.listrel1 !crt1_j in
-                  let is_last2 = Dllist.is_last inf.listrel2 !crt2_j in
-                  if (not is_last1) && (not is_last2) then
-                    begin
-                      crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
-                      crt2_j := Dllist.get_next inf.listrel2 !crt2_j;
-                      iter2 ()
-                    end
-                end
-            end
-        in
-        iter2();
+        Optimized_mtl.add_new_tables_muaux rel1 rel2 inf.uaux;
         Perf.profile_exit ~tp:q ~loc;
-        Some !res, loc
-      end
-    else
-      None, loc
-
-
-
-
-
-  | EEventuallyZ (intv,f2,inf,loc) ->
-    (* contents of inf:
-       elastev: Neval.cell  last cell of neval for which f2 is evaluated
-       eauxrels: info       the auxiliary relations (up to elastev)
-    *)
-    if Misc.debugging Dbg_eval then
-      prerr_ezinf "[eval,EventuallyZ] inf: " inf;
-
-    let rec ez_update () =
-      if Neval.is_last inf.ezlastev then
-        None
-      else
-        let ncrt = Neval.get_next inf.ezlastev in
-        let (i,tsi) = Neval.get_data ncrt in
-        (* Printf.eprintf "[eval,Eventually] e_update: ncrt.i = %d\n%!" i; *)
-        if not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv) then
-          (* we have the lookahead, we can compute the result *)
-          begin
-            Perf.profile_enter ~tp:q ~loc;
-            if Misc.debugging Dbg_eval then
-              Printf.eprintf "[eval,EventuallyZ] evaluation possible q=%d tsq=%s tsi=%s\n%!"
-                q (MFOTL.string_of_ts tsq) (MFOTL.string_of_ts tsi);
-
-            let auxrels = inf.ezauxrels in
-            let result =
-            if Dllist.is_empty auxrels then
-              Some Relation.empty
-            else if discard then
-              begin
-                let lw, _, _ = Dllist.get_first auxrels in
-                if lw = q then (* at next iteration this first element will be too old *)
-                  begin
-                    if inf.ezlast != Dllist.void && inf.ezlast == Dllist.get_first_cell auxrels then
-                      inf.ezlast <- Dllist.void;
-                    ignore(Dllist.pop_first auxrels);
-                  end;
-                Some Relation.empty
-              end
-            else
-              begin
-                if inf.ezlast != Dllist.void && inf.ezlast == Dllist.get_first_cell auxrels then
-                  (* TODO: when can such a case occur? *)
-                  inf.ezlast <- Dllist.void;
-
-                let lw, _, _ = Dllist.get_first auxrels in
-                assert (lw >= q); (* TODO: when lw > q *)
-                let cond = fun (_,tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv in
-                let f = fun (j,_,rel) -> (j,rel) in
-                let subseq, new_last = get_new_elements auxrels inf.ezlast cond f in
-                let rw =
-                  if subseq = [] then
-                    (* TODO: why j? when does this case occur? *)
-                    let j, _, _  = Dllist.get_data inf.ezlast in j
-                  else
-                    begin
-                      assert (new_last != Dllist.void);
-                      inf.ezlast <- new_last;
-                      let rw = fst (List.hd subseq) in
-                      assert (rw = let j, _, _ = Dllist.get_data new_last in j);
-                      rw
-                    end
-                in
-
-                if Misc.debugging Dbg_eval then
-                  begin
-                    Printf.eprintf "[eval,EventuallyZ] lw = %d rw = %d " lw rw;
-                    Misc.prerrnl_list "subseq = " prerr_auxel subseq;
-                  end;
-
-                let newt = Sliding.slide string_of_int Relation.union subseq (lw, rw) inf.eztree in
-
-                if lw = q then (* at next iteration this first element will be too old *)
-                  begin
-                    if new_last == Dllist.get_first_cell auxrels then
-                      inf.ezlast <- Dllist.void;
-                    ignore(Dllist.pop_first auxrels);
-                  end;
-
-                inf.eztree <- newt;
-                Some (Sliding.stree_res newt)
-              end
-            in
-            Perf.profile_exit ~tp:q ~loc;
-            result
-          end
-        else (* we don't have the lookahead -> we cannot compute the result *)
-          begin
-            match eval f2 ncrt false with
-            | None -> None
-            | Some rel2 ->
-              (* we update the auxiliary relations *)
-              if not (Relation.is_empty rel2) then
-                Dllist.add_last (i,tsi,rel2) inf.ezauxrels;
-              inf.ezlastev <- ncrt;
-              ez_update ()
-          end
+        update_and_get_result ()
+      | None -> inf.urel2 <- Some rel2; None
     in
-    ez_update (), loc
+    update_and_get_result (), loc
 
-
-  | EEventually (intv,f2,inf,loc) ->
-    (* contents of inf:
-       elastev:  Neval.cell  last cell of neval for which f2 is evaluated
-       eauxrels: info        the auxiliary relations (up to elastev)
-    *)
-    if Misc.debugging Dbg_eval then
-      prerr_einfn "[eval,Eventually] inf: " inf;
-
-    (* we could in principle do this update less often: that is, we
-       can do after each evaluation, but we need to find out the
-       value of ts_{q+1} *)
-    Perf.profile_enter ~tp:q ~loc;
-    elim_old_eventually q tsq intv inf;
-    Perf.profile_exit ~tp:q ~loc;
-
-    let rec e_update () =
-      if Neval.is_last inf.elastev then
-        None
-      else
-        let ncrt = Neval.get_next inf.elastev in
-        let (i,tsi) = Neval.get_data ncrt in
-        (* Printf.eprintf "[eval,Eventually] e_update: ncrt.i = %d\n%!" i; *)
-        if not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv) then
-          (* we have the lookahead, we can compute the result *)
-          begin
-            Perf.profile_enter ~tp:q ~loc;
-            if Misc.debugging Dbg_eval then
-              Printf.eprintf "[eval,Eventually] evaluation possible q=%d tsq=%s tsi=%s\n%!"
-                q (MFOTL.string_of_ts tsq) (MFOTL.string_of_ts tsi);
-
-            let auxrels = inf.eauxrels in
-            let result =
-            if Dllist.is_empty auxrels || discard then
-              Some Relation.empty
-            else
-              let lw, _ = Dllist.get_first auxrels in
-              if MFOTL.in_left_ext (MFOTL.ts_minus lw tsq) intv then
-                (* the new window is not empty *)
-                let cond = fun (tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv in
-                let subseq, new_last = get_new_elements auxrels inf.elast cond (fun x -> x) in
-                let rw =
-                  if subseq = [] then
-                    fst (Dllist.get_data inf.elast)
-                  else
-                    begin
-                      assert (new_last != Dllist.void);
-                      inf.elast <- new_last;
-                      let rw = fst (List.hd subseq) in
-                      assert (rw = fst (Dllist.get_data new_last));
-                      rw
-                    end
-                in
-                if Misc.debugging Dbg_eval then
-                  begin
-                    Printf.eprintf "[eval,Eventually] lw = %s rw = %s "
-                      (MFOTL.string_of_ts lw)
-                      (MFOTL.string_of_ts rw);
-                    Misc.prerrnl_list "subseq = " prerr_sauxel subseq;
-                  end;
-                let newt = Sliding.slide MFOTL.string_of_ts Relation.union subseq (lw, rw) inf.etree in
-                inf.etree <- newt;
-                Some (Sliding.stree_res newt)
-              else
-                begin
-                  (* the new window is empty,
-                     because not even the oldest element satisfies the constraint *)
-                  inf.etree <- LNode {l = MFOTL.ts_invalid;
-                                      r = MFOTL.ts_invalid;
-                                      res = Some (Relation.empty)};
-                  inf.elast <- Dllist.void;
-                  Some Relation.empty
-                end
-            in
-            Perf.profile_exit ~tp:q ~loc;
-            result
-          end
-        else
-          begin
-            match eval f2 ncrt false with
-            | None -> None
-            | Some rel2 ->
-              (* we update the auxiliary relations *)
-              if (MFOTL.in_right_ext (MFOTL.ts_minus tsi tsq) intv) &&
-                 not (Relation.is_empty rel2) then
-                dllist_add_last inf.eauxrels tsi rel2;
-              inf.elastev <- ncrt;
-              e_update ()
-          end
-    in
-    e_update (), loc
   in
   let result, loc = wrapper f in
   if !Perf.profile_enabled then
@@ -1193,128 +497,145 @@ let add_index f i tsi db =
     | EAggOnce (_,_,f1,_)
     | EAggreg (_,_,f1,_)
     | ENext (_,f1,_,_)
-    | EPrev (_,f1,_,_)
-    | EOnceA (_,f1,_,_)
-    | EOnceZ (_,f1,_,_)
-    | EOnce (_,f1,_,_)
-    | EEventuallyZ (_,f1,_,_)
-    | EEventually (_,f1,_,_) ->
+    | EPrev (_,f1,_,_) ->
       update lets f1
 
     | EAnd (_,f1,f2,_,_)
     | EOr (_,f1,f2,_,_)
     | ESince (f1,f2,_,_)
-    | ENUntil (_,_,f1,f2,_,_)
-    | EUntil (_,_,f1,f2,_,_) ->
+    | EUntil (f1,f2,_,_) ->
       update lets f1;
       update lets f2
   in
   update [] f
 
+let premap_post g f =
+  match g with
+  | Some g' -> Some (fun x -> g' (f x))
+  | None -> Some (fun x -> Some (f x))
+
+let bind_post g f =
+  match g with
+  | Some g' -> Some (fun x -> Option.bind (f x) g')
+  | None -> Some f
+
+let apply_post = function
+  | Some f -> Relation.filter_map f
+  | None -> (fun rel -> rel)
+
+let force_post = function
+  | Some f -> f
+  | None -> (fun t -> Some t)
+
 let add_ext neval f =
   let neval0 = Neval.get_last neval in
   let loc = ref 0 in
   let next_loc () = incr loc; !loc in
-  let rec add_ext = function
+  let rec add_ext post = function
   | Pred p ->
-    EPred (p, Relation.eval_pred p, Queue.create(), next_loc())
+    let comp = Relation.eval_pred post p in
+    EPred (p, comp, Queue.create(), next_loc())
 
   | Let (p, f1, f2) ->
     let attr1 = MFOTL.free_vars f1 in
     let attrp = Predicate.pvars p in
     let new_pos = List.map snd (Table.get_matches attr1 attrp) in
-    let comp = Relation.reorder new_pos in
-    ELet (p, comp, add_ext f1, add_ext f2, {llast = neval0}, next_loc())
+    let post1 =
+      if Misc.is_id_permutation (List.length attr1) new_pos then
+        None
+      else
+        Some (fun t -> Some (Tuple.projections new_pos t))
+    in
+    let ff1 = add_ext post1 f1 in
+    let ff2 = add_ext post f2 in
+    ELet (p, (fun rel -> rel), ff1, ff2, {llast = neval0}, next_loc())
 
   | LetPast _ -> failwith "LETPAST is not supported except in -verified mode"
 
   | Equal (t1, t2) ->
-    let rel = Relation.eval_equal t1 t2 in
+    let rel = apply_post post (Relation.eval_equal t1 t2) in
     ERel (rel, next_loc())
 
   | Neg (Equal (t1, t2)) ->
-    let rel = Relation.eval_not_equal t1 t2 in
+    let rel = apply_post post (Relation.eval_not_equal t1 t2)
+    in
     ERel (rel, next_loc())
 
-  | Neg f -> ENeg (add_ext f, next_loc())
+  | Neg f ->
+    let ff = add_ext None f in
+    let ff' = ENeg (ff, next_loc()) in
+    (match post with
+    | None -> ff'
+    | Some g -> EExists (Relation.filter_map g, ff', next_loc())
+    )
 
   | Exists (vl, f1) ->
-    let ff1 = add_ext f1 in
     let attr1 = MFOTL.free_vars f1 in
     let pos = List.map (fun v -> Misc.get_pos v attr1) vl in
     let pos = List.sort Stdlib.compare pos in
-    let comp = Relation.project_away pos in
-    EExists (comp,ff1,next_loc())
+    let post' = premap_post post (Tuple.project_away pos) in
+    add_ext post' f1
 
   | Or (f1, f2) ->
-    let ff1 = add_ext f1 in
-    let ff2 = add_ext f2 in
     let attr1 = MFOTL.free_vars f1 in
     let attr2 = MFOTL.free_vars f2 in
-    let comp =
+    let post2 =
       if attr1 = attr2 then
-        Relation.union
+        post
       else
         let matches = Table.get_matches attr2 attr1 in
         let new_pos = List.map snd matches in
-        (* first reorder rel2 *)
-        (fun rel1 rel2 ->
-           let rel2' = Relation.reorder new_pos rel2 in
-           Relation.union rel1 rel2'
-        )
+        premap_post post (Tuple.projections new_pos)
     in
+    let ff1 = add_ext post f1 in
+    let ff2 = add_ext post2 f2 in
+    let comp = Relation.union in
     EOr (comp, ff1, ff2, {arel = None}, next_loc())
 
   | And (f1, f2) ->
     let attr1 = MFOTL.free_vars f1 in
     let attr2 = MFOTL.free_vars f2 in
-    let ff1 = add_ext f1 in
-    let f2_is_special = Rewriting.is_special_case attr1 f2 in
-    let ff2 =
-      if f2_is_special then ERel (Relation.empty, next_loc())
-      else match f2 with
-        | Neg f2' -> add_ext f2'
-        | _ -> add_ext f2
-    in
-    let comp =
-      if f2_is_special then
-        if Misc.subset attr2 attr1 then
-          let filter_cond = Tuple.get_filter attr1 f2 in
-          fun rel1 _ -> Relation.filter filter_cond rel1
-        else
-          let process_tuple = Tuple.get_tf attr1 f2 in
-          fun rel1 _ ->
-            Relation.fold
-              (fun t res ->
-                match process_tuple t with
-                | None -> res
-                | Some t' -> Relation.add t' res)
-              rel1 Relation.empty
+    if Rewriting.is_special_case attr1 f2 then
+      if Misc.subset attr2 attr1 then
+        let filter_cond = Tuple.get_filter attr1 f2 in
+        let post' = bind_post post (fun t ->
+          if filter_cond t then Some t else None) in
+        add_ext post' f1
       else
+        let process_tuple = Tuple.get_tf attr1 f2 in
+        let post' = bind_post post process_tuple in
+        add_ext post' f1
+    else
+      let ff1 = add_ext None f1 in
+      let ff2 =
+        match f2 with
+        | Neg f2' -> add_ext None f2'
+        | _ -> add_ext None f2
+      in
+      let comp =
         match f2 with
         | Neg _ ->
           if attr1 = attr2 then
-            fun rel1 rel2 -> Relation.diff rel1 rel2
+            Relation.filtermap_diff post
           else
             begin
               assert(Misc.subset attr2 attr1);
               let posl = List.map (fun v -> Misc.get_pos v attr1) attr2 in
-              fun rel1 rel2 -> Relation.minus posl rel1 rel2
+              Relation.minus post posl
             end
-
         | _ ->
           let matches1 = Table.get_matches attr1 attr2 in
           let matches2 = Table.get_matches attr2 attr1 in
           if attr1 = attr2 then
-            fun rel1 rel2 -> Relation.inter rel1 rel2
+            Relation.filtermap_inter post
           else if Misc.subset attr1 attr2 then
-            fun rel1 rel2 -> Relation.natural_join_sc1 matches2 rel1 rel2
+            Relation.natural_join_sc1 (force_post post) matches2
           else if Misc.subset attr2 attr1 then
-            fun rel1 rel2 -> Relation.natural_join_sc2 matches1 rel1 rel2
+            Relation.natural_join_sc2 (force_post post) matches1
           else
-            fun rel1 rel2 -> Relation.natural_join matches1 rel1 rel2
-    in
-    EAnd (comp, ff1, ff2, {arel = None}, next_loc())
+            Relation.natural_join (force_post post) matches1
+      in
+      EAnd (comp, ff1, ff2, {arel = None}, next_loc())
 
   | Aggreg (t_y, y, op, x, glist, Once (intv, f)) ->
     let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
@@ -1324,14 +645,14 @@ let add_ext neval f =
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
     let state =
       match op with
-      | Cnt -> Aggreg.cnt_once default intv 0 posG
-      | Min -> Aggreg.min_once default intv 0 posx posG
-      | Max -> Aggreg.max_once default intv 0 posx posG
-      | Sum -> Aggreg.sum_once default intv 0 posx posG
-      | Avg -> Aggreg.avg_once default intv 0 posx posG
-      | Med -> Aggreg.med_once default intv 0 posx posG
+      | Cnt -> Aggreg.cnt_once (force_post post) default intv 0 posG
+      | Min -> Aggreg.min_once (force_post post) default intv 0 posx posG
+      | Max -> Aggreg.max_once (force_post post) default intv 0 posx posG
+      | Sum -> Aggreg.sum_once (force_post post) default intv 0 posx posG
+      | Avg -> Aggreg.avg_once (force_post post) default intv 0 posx posG
+      | Med -> Aggreg.med_once (force_post post) default intv 0 posx posG
     in
-    EAggOnce ({op; default}, state, add_ext f, next_loc())
+    EAggOnce ({op; default}, state, add_ext None f, next_loc())
 
   | Aggreg (t_y, y, op, x, glist, f)  ->
     let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
@@ -1341,21 +662,21 @@ let add_ext neval f =
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
     let comp =
       match op with
-      | Cnt -> Aggreg.cnt default 0 posG
-      | Sum -> Aggreg.sum default 0 posx posG
-      | Min -> Aggreg.min default 0 posx posG
-      | Max -> Aggreg.max default 0 posx posG
-      | Avg -> Aggreg.avg default 0 posx posG
-      | Med -> Aggreg.med default 0 posx posG
+      | Cnt -> Aggreg.cnt (force_post post) default 0 posG
+      | Sum -> Aggreg.sum (force_post post) default 0 posx posG
+      | Min -> Aggreg.min (force_post post) default 0 posx posG
+      | Max -> Aggreg.max (force_post post) default 0 posx posG
+      | Avg -> Aggreg.avg (force_post post) default 0 posx posG
+      | Med -> Aggreg.med (force_post post) default 0 posx posG
     in
-    EAggreg ({op; default}, comp, add_ext f, next_loc())
+    EAggreg ({op; default}, comp, add_ext None f, next_loc())
 
   | Prev (intv, f) ->
-    let ff = add_ext f in
+    let ff = add_ext post f in
     EPrev (intv, ff, {plast = neval0}, next_loc())
 
   | Next (intv, f) ->
-    let ff = add_ext f in
+    let ff = add_ext post f in
     ENext (intv, ff, {init = true}, next_loc())
 
   | Since (intv,f1,f2) ->
@@ -1367,91 +688,46 @@ let add_ext neval f =
        | _ -> f1, true
       )
     in
-    let ff1 = add_ext ef1 in
-    let ff2 = add_ext f2 in
-    let saux = Optimized_mtl.init_msaux pos intv attr1 attr2 in
+    let ff1 = add_ext None ef1 in
+    let ff2 = add_ext None f2 in
+    let saux = Optimized_mtl.init_msaux post pos intv attr1 attr2 in
     let inf = {srel2 = None; saux} in
     ESince (ff1,ff2,inf, next_loc())
 
-  | Once ((_, Inf) as intv, f) ->
-    let ff = add_ext f in
-    EOnceA (intv,ff,{ores = Relation.empty;
-                     oaauxrels = Mqueue.create()}, next_loc())
-
   | Once (intv,f) ->
-    let ff = add_ext f in
-    if fst intv = CBnd MFOTL.ts_null then
-      EOnceZ (intv,ff,{oztree = LNode {l = -1;
-                                       r = -1;
-                                       res = Some (Relation.empty)};
-                       ozlast = Dllist.void;
-                       ozauxrels = Dllist.empty()}, next_loc())
-    else
-      EOnce (intv,ff,{otree = LNode {l = MFOTL.ts_invalid;
-                                     r = MFOTL.ts_invalid;
-                                     res = Some (Relation.empty)};
-                      olast = Dllist.void;
-                      oauxrels = Dllist.empty()}, next_loc())
+    let attr = MFOTL.free_vars f in
+    let ff1 = ERel (Relation.make_relation [Tuple.make_tuple []], next_loc()) in
+    let ff2 = add_ext None f in
+    let saux = Optimized_mtl.init_msaux post true intv [] attr in
+    let inf = {srel2 = None; saux} in
+    ESince (ff1,ff2,inf, next_loc())
 
   | Until (intv,f1,f2) ->
     let attr1 = MFOTL.free_vars f1 in
     let attr2 = MFOTL.free_vars f2 in
-    let ef1, neg =
+    let ef1, pos =
       (match f1 with
-       | Neg f1' -> f1',true
-       | _ -> f1,false
+       | Neg f1' -> f1', false
+       | _ -> f1, true
       )
     in
-    let ff1 = add_ext ef1 in
-    let ff2 = add_ext f2 in
-    if neg then
-      let comp =
-        let posl = List.map (fun v -> Misc.get_pos v attr2) attr1 in
-        assert(Misc.subset attr1 attr2);
-        fun relj rel1 -> Relation.minus posl relj rel1
-      in
-      let inf = {
-        last1 = neval0;
-        last2 = neval0;
-        listrel1 = Dllist.empty();
-        listrel2 = Dllist.empty()}
-      in
-      ENUntil (comp,intv,ff1,ff2,inf, next_loc())
-    else
-      let comp =
-        let matches2 = Table.get_matches attr2 attr1 in
-        fun relj rel1 -> Relation.natural_join_sc2 matches2 relj rel1
-      in
-      let inf = {ulast = neval0;
-                 ufirst = false;
-                 ures = Relation.empty;
-                 urel2 = None;
-                 raux = Sj.empty();
-                 saux = Sk.empty()}
-      in
-      EUntil (comp,intv,ff1,ff2,inf, next_loc())
-
+    let ff1 = add_ext None ef1 in
+    let ff2 = add_ext None f2 in
+    let uaux = Optimized_mtl.init_muaux post pos intv attr1 attr2 in
+    let inf = {ulast = neval0; urel2 = None; uaux} in
+    EUntil (ff1,ff2,inf, next_loc())
 
   | Eventually (intv,f) ->
-    let ff = add_ext f in
-    if fst intv = CBnd MFOTL.ts_null then
-      EEventuallyZ (intv,ff,{eztree = LNode {l = -1;
-                                             r = -1;
-                                             res = Some (Relation.empty)};
-                             ezlast = Dllist.void;
-                             ezlastev = neval0;
-                             ezauxrels = Dllist.empty()}, next_loc())
-    else
-      EEventually (intv,ff,{etree = LNode {l = MFOTL.ts_invalid;
-                                           r = MFOTL.ts_invalid;
-                                           res = Some (Relation.empty)};
-                            elast = Dllist.void;
-                            elastev = neval0;
-                            eauxrels = Dllist.empty()}, next_loc())
+    let attr = MFOTL.free_vars f in
+    let ff1 = ERel (Relation.make_relation [Tuple.make_tuple []], next_loc()) in
+    let ff2 = add_ext None f in
+    let uaux = Optimized_mtl.init_muaux post true intv [] attr in
+    let inf = {ulast = neval0; urel2 = None; uaux} in
+    EUntil (ff1,ff2,inf, next_loc())
 
   | _ -> failwith "[add_ext] internal error"
   in
-  add_ext f, neval0
+  add_ext None f, neval0
 
 
 type 'a state = {
@@ -1597,9 +873,6 @@ let merge_states files =
 (* MONITORING FUNCTION *)
 
 let process_index state =
-  if !Misc.verbose then
-    Printf.printf "At time point %d:\n%!" state.s_in_tp;
-
   let rec eval_loop () =
     let crt = Neval.get_next state.s_last in
     let (q, tsq) = Neval.get_data crt in
@@ -1675,6 +948,8 @@ module Monitor = struct
 
   let eval_tp ctxt =
     ctxt.s_in_tp <- ctxt.s_log_tp;
+    if !Misc.verbose then
+      Printf.printf "At time point %d:\n%!" ctxt.s_in_tp;
     ignore (Neval.append (ctxt.s_log_tp, ctxt.s_log_ts) ctxt.s_neval);
     add_index ctxt.s_extf ctxt.s_log_tp ctxt.s_log_ts ctxt.s_db;
     Hashtbl.clear ctxt.s_db;

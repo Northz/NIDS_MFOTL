@@ -506,6 +506,13 @@ let partition_map p f l =
   part [] l
 *)
 
+let is_id_permutation n l =
+  let rec check x = function
+    | [] -> x = n
+    | y::l -> x = y && check (x+1) l
+  in
+  check 0 l
+
 
 (* return current memory usage *)
 let mem_usage mem_str =

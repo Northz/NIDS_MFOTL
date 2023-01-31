@@ -33,16 +33,18 @@
  * covered by the GNU Lesser General Public License.
  *)
 
+open Tuple
+
 type result = {empty_rel: bool; rel: Relation.relation}
 
 type aggregator = Relation.relation -> result
 
-val cnt: Predicate.cst -> int -> int list -> aggregator
-val min: Predicate.cst -> int -> int -> int list -> aggregator
-val max: Predicate.cst -> int -> int -> int list -> aggregator
-val sum: Predicate.cst -> int -> int -> int list -> aggregator
-val avg: Predicate.cst -> int -> int -> int list -> aggregator
-val med: Predicate.cst -> int -> int -> int list -> aggregator
+val cnt: (tuple -> tuple option) -> Predicate.cst -> int -> int list -> aggregator
+val min: (tuple -> tuple option) -> Predicate.cst -> int -> int -> int list -> aggregator
+val max: (tuple -> tuple option) -> Predicate.cst -> int -> int -> int list -> aggregator
+val sum: (tuple -> tuple option) -> Predicate.cst -> int -> int -> int list -> aggregator
+val avg: (tuple -> tuple option) -> Predicate.cst -> int -> int -> int list -> aggregator
+val med: (tuple -> tuple option) -> Predicate.cst -> int -> int -> int list -> aggregator
 
 class type once_aggregator =
   object
@@ -50,22 +52,22 @@ class type once_aggregator =
     method get_result: result
   end
 
-val cnt_once: Predicate.cst -> MFOTL.interval -> int -> int list ->
-  once_aggregator
+val cnt_once: (tuple -> tuple option) -> Predicate.cst -> MFOTL.interval ->
+  int -> int list -> once_aggregator
 
-val min_once: Predicate.cst -> MFOTL.interval -> int -> int -> int list ->
-  once_aggregator
+val min_once: (tuple -> tuple option) -> Predicate.cst -> MFOTL.interval ->
+  int -> int -> int list -> once_aggregator
 
-val max_once: Predicate.cst -> MFOTL.interval -> int -> int -> int list ->
-  once_aggregator
+val max_once: (tuple -> tuple option) -> Predicate.cst -> MFOTL.interval ->
+  int -> int -> int list -> once_aggregator
 
-val sum_once: Predicate.cst -> MFOTL.interval -> int -> int -> int list ->
-  once_aggregator
+val sum_once: (tuple -> tuple option) -> Predicate.cst -> MFOTL.interval ->
+  int -> int -> int list -> once_aggregator
 
-val avg_once: Predicate.cst -> MFOTL.interval -> int -> int -> int list ->
-  once_aggregator
+val avg_once: (tuple -> tuple option) -> Predicate.cst -> MFOTL.interval ->
+  int -> int -> int list -> once_aggregator
 
-val med_once: Predicate.cst -> MFOTL.interval -> int -> int -> int list ->
-  once_aggregator
+val med_once: (tuple -> tuple option) -> Predicate.cst -> MFOTL.interval ->
+  int -> int -> int list -> once_aggregator
 
 val prerr_state: once_aggregator -> unit
