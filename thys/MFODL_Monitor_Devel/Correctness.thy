@@ -10,84 +10,19 @@ begin
 (*>*)
 
 
-subsection \<open>Specification\<close>
+section \<open>Correctness\<close>
 
-definition pprogress :: "'t Formula.formula \<Rightarrow> Formula.prefix \<Rightarrow> nat" where
-  "pprogress \<phi> \<pi> = (THE n. \<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> progress \<sigma> Map.empty \<phi> (plen \<pi>) = n)"
-
-lemma pprogress_eq: "prefix_of \<pi> \<sigma> \<Longrightarrow> pprogress \<phi> \<pi> = progress \<sigma> Map.empty \<phi> (plen \<pi>)"
-  unfolding pprogress_def using progress_prefix_conv
-  by blast
-
-locale wty_mfodl =
-  fixes \<phi> :: "ty Formula.formula" and SIG :: sig and ENV :: tyenv
-  assumes well_typed: "SIG, ENV \<turnstile> \<phi>"
-begin
-
-definition "traces = {\<sigma>. wty_trace SIG \<sigma>}"
-
-sublocale traces_downward_closed traces
-  by unfold_locales (auto simp add: traces_def wty_envs_def)
-
-end
-
-locale future_bounded_mfodl = wty_mfodl +
-   assumes future_bounded: "Safety.future_bounded \<phi>"
-
-sublocale future_bounded_mfodl \<subseteq> sliceable_timed_progress "Formula.nfv \<phi>" "Formula.fv \<phi>" traces "relevant_events \<phi>"
-  "\<lambda>\<sigma> v i. Formula.sat \<sigma> Map.empty v i \<phi>" "pprogress \<phi>"
-proof (unfold_locales, goal_cases)
-  case (1 \<pi>' \<pi>)
-  moreover obtain \<sigma> where "prefix_of \<pi>' \<sigma>"
-    using ex_prefix_of ..
-  moreover have "prefix_of \<pi> \<sigma>"
-    using prefix_of_antimono[OF \<open>\<pi> \<le> \<pi>'\<close> \<open>prefix_of \<pi>' \<sigma>\<close>] .
-  ultimately show ?case
-    by (simp add: pprogress_eq plen_mono progress_mono)
-next
-  case (2 \<sigma> x)
-  obtain j where "x \<le> progress \<sigma> Map.empty \<phi> j"
-    using future_bounded progress_ge by blast
-  then have "x \<le> pprogress \<phi> (take_prefix j \<sigma>)"
-    by (simp add: pprogress_eq[of _ \<sigma>])
-  then show ?case by force
-next
-  case (3 \<sigma> \<pi> \<sigma>' i v)
-  then have "i < progress \<sigma> Map.empty \<phi> (plen \<pi>)"
-    by (simp add: pprogress_eq)
-  with 3 show ?case
-    using sat_prefix_conv by blast
-next
-  case (4 \<pi> \<pi>')
-  then have "plen \<pi> = plen \<pi>'"
-    unfolding length_pts_eq_plen[symmetric] by auto
-  moreover obtain \<sigma> \<sigma>' where "prefix_of \<pi> \<sigma>" "prefix_of \<pi>' \<sigma>'"
-    using ex_prefix_of by blast+
-  moreover have "\<forall>i < plen \<pi>. \<tau> \<sigma> i = \<tau> \<sigma>' i"
-    using 4 calculation nth_pts_eq_\<tau>[OF calculation(3)] nth_pts_eq_\<tau>[OF calculation(2)]
-    by auto
-  ultimately show ?case
-    by (simp add: pprogress_eq progress_time_conv)
-qed
-
-locale verimon_spec = wty_mfodl +
-   assumes monitorable: "mmonitorable \<phi>"
-
-sublocale verimon_spec \<subseteq> future_bounded_mfodl
-  using monitorable by unfold_locales (simp add: mmonitorable_def)
-
-
-subsection \<open>Correctness\<close>
-
-subsubsection \<open>Invariants\<close>
+subsection \<open>Invariants\<close>
 
 definition wf_mbuf2 where
   "wf_mbuf2 i ja jb P Q buf \<longleftrightarrow> i \<le> ja \<and> i \<le> jb \<and> (case buf of (xs, ys) \<Rightarrow>
     list_all2 P [i..<ja] xs \<and> list_all2 Q [i..<jb] ys)"
 
-inductive list_all3 :: "('a \<Rightarrow> 'b \<Rightarrow> 'c \<Rightarrow> bool) \<Rightarrow> 'a list \<Rightarrow> 'b list \<Rightarrow> 'c list \<Rightarrow> bool" for P :: "('a \<Rightarrow> 'b \<Rightarrow> 'c \<Rightarrow> bool)" where
-  "list_all3 P [] [] []"
-| "P a1 a2 a3 \<Longrightarrow> list_all3 P q1 q2 q3 \<Longrightarrow> list_all3 P (a1 # q1) (a2 # q2) (a3 # q3)"
+(* TODO: move this lists' results to preliminaries *)
+inductive list_all3 :: "('a \<Rightarrow> 'b \<Rightarrow> 'c \<Rightarrow> bool) \<Rightarrow> 'a list \<Rightarrow> 'b list \<Rightarrow> 'c list \<Rightarrow> bool" 
+  for P :: "('a \<Rightarrow> 'b \<Rightarrow> 'c \<Rightarrow> bool)" 
+  where "list_all3 P [] [] []"
+  | "P a1 a2 a3 \<Longrightarrow> list_all3 P q1 q2 q3 \<Longrightarrow> list_all3 P (a1 # q1) (a2 # q2) (a3 # q3)"
 
 lemma list_all3_list_all2D: "list_all3 P xs ys zs \<Longrightarrow>
   (length xs = length ys \<and> list_all2 (case_prod P) (zip xs ys) zs)"
@@ -312,6 +247,7 @@ fun formula_of_constraint :: "Formula.trm \<times> bool \<times> mconstraint \<t
 | "formula_of_constraint (t1, False, MLess, t2) = Formula.Neg (Formula.Less t1 t2)"
 | "formula_of_constraint (t1, False, MLessEq, t2) = Formula.Neg (Formula.LessEq t1 t2)"
 
+(* TODO: move this lemma to safety *)
 lemma safe_release_bdd_iff: "safe_formula (release_safe_bounded \<phi>' I \<psi>') \<longleftrightarrow> 
   safe_formula \<phi>' \<and> safe_formula \<psi>' \<and> fv \<phi>' = fv \<psi>'"
   using release_safe_unbounded safe_formula_release_bounded by blast
@@ -538,6 +474,7 @@ proof -
     by (simp add: Let_def)
 qed
 
+(* TODO: move this lemma to safety *)
 lemma V_subst_letpast_gen:
   "safe_letpast p \<phi> \<le> NonFutuRec \<Longrightarrow>
   (safe_letpast p \<phi> = NonFutuRec \<Longrightarrow> (\<And>v j. j \<le> i \<Longrightarrow> f v j = g v j)) \<Longrightarrow>
@@ -752,12 +689,14 @@ next
     done
 qed simp_all
 
+(* TODO: move this lemma to safety *)
 lemma V_subst_letpast:
   "safe_letpast p \<phi> \<le> PastRec \<Longrightarrow>
   (\<And>v j. j < i \<Longrightarrow> f v j = g v j) \<Longrightarrow>
   Formula.sat \<sigma> (V(p \<mapsto> f)) v i \<phi> = Formula.sat \<sigma> (V(p \<mapsto> g)) v i \<phi>"
   by (intro V_subst_letpast_gen) (auto intro: order_trans)
 
+(* TODO: move this lemma to progress *)
 lemma le_letpast_progress_preservation:
   assumes P: "pred_mapping (\<lambda>x. x \<le> j) P"
     and P': "pred_mapping (\<lambda>x. x \<le> j') P'"
@@ -957,7 +896,7 @@ lemma (in maux) letpast_meval_ys: "(ys', i', buf', \<phi>f) = letpast_meval m j 
   apply(fastforce simp add: Let_def split:prod.splits list.splits if_splits)
   done
 
-subsubsection \<open>Initialisation\<close>
+subsection \<open>Initialisation\<close>
 
 lemma wf_mbuf2'_0: "pred_mapping (\<lambda>x. x = 0) P \<Longrightarrow> wf_mbuf2' \<sigma> P V 0 n R \<phi> \<psi> ([], [])"
   unfolding wf_mbuf2'_def wf_mbuf2_def by simp
@@ -1079,6 +1018,7 @@ lemma mem_restr_lift_envs'_zero[simp]: "mem_restr (lift_envs' 0 R) = mem_restr R
   using mem_restr_lift_envs'_append[of "[]" 0]
   by auto
 
+(* TODO: move this lemma to progress? *)
 lemma letpast_progress0: "pred_mapping (\<lambda>x. x = 0) P \<Longrightarrow> letpast_progress \<sigma> P p \<phi> 0 = 0"
   by (simp add: letpast_progress_def cInf_eq_minimum)
 
@@ -1587,7 +1527,10 @@ lemma (in maux) wf_mstate_minit:
   unfolding wf_mstate_def minit_def Let_def
   by (auto simp add: pts.rep_eq pnil.rep_eq intro!: wf_minit0 fvi_less_nfv wty_pnil)
 
-subsubsection \<open>Evaluation\<close>
+subsection \<open>Evaluation\<close>
+
+
+subsubsection \<open> Predicates \<close>
 
 lemma match_wf_tuple: "Some f = match ts xs \<Longrightarrow>
   wf_tuple n (\<Union>t\<in>set ts. Formula.fv_trm t) (Table.tabulate f 0 n)"
@@ -1610,6 +1553,7 @@ proof (induction ts "map Some xs" arbitrary: f xs rule: match.induct)
     by (auto 0 3 dest: match_fvi_trm_Some sym split: option.splits if_splits intro!: eval_trm_fv_cong)
 qed (auto split: if_splits)
 
+(* TODO: move this lemma to table *)
 lemma wf_tuple_tabulate_Some: "wf_tuple n A (Table.tabulate f 0 n) \<Longrightarrow> x \<in> A \<Longrightarrow> x < n \<Longrightarrow> \<exists>y. f x = Some y"
   unfolding wf_tuple_def by auto
 
@@ -1764,6 +1708,9 @@ lemma simple_match_eval_trm: "\<forall>t\<in>set ts. \<forall>i\<in>Formula.fv_t
   simple_match n 0 ts (map (Some \<circ> Formula.eval_trm (map the v)) ts) = v"
   using simple_match_eval_trm_gen[where m=0] by simp
 
+
+subsubsection \<open> Equalities \<close>
+
 lemma eq_rel_eval_trm: "v \<in> eq_rel n t1 t2 \<Longrightarrow> is_simple_eq t1 t2 \<Longrightarrow>
   \<forall>x\<in>Formula.fv_trm t1 \<union> Formula.fv_trm t2. x < n \<Longrightarrow>
   Formula.eval_trm (map the v) t1 = Formula.eval_trm (map the v) t2"
@@ -1799,6 +1746,9 @@ lemma qtable_eq_relI: "\<forall>x\<in>fv_trm t1. x < n \<Longrightarrow> \<foral
   using in_eq_rel_iff[of t1 n t2]
   by (auto simp: table_def)
 
+
+subsubsection \<open> Existential \<close>
+
 lemma wf_tuple_Suc_fviD: "wf_tuple (Suc n) (Formula.fvi b \<phi>) v \<Longrightarrow> wf_tuple n (Formula.fvi (Suc b) \<phi>) (tl v)"
   unfolding wf_tuple_def by (simp add: fvi_Suc nth_tl)
 
@@ -1820,6 +1770,7 @@ lemma qtable_project_fv: "qtable (Suc n) (fv \<phi>) (mem_restr (lift_envs R)) P
       (\<lambda>v. \<exists>x. P ((if 0 \<in> fv \<phi> then Some x else None) # v)) (tl ` X)"
   using neq0_conv by (fastforce simp: image_iff Bex_def fvi_Suc elim!: qtable_cong dest!: qtable_project)
 
+(* TODO: move this to preliminaries *)
 lemma nth_list_update_alt: "xs[i := x] ! j = (if i < length xs \<and> i = j then x else xs ! j)"
   by auto
 
@@ -7681,16 +7632,18 @@ next
     ultimately show ?case using args_props(3) by auto
   qed (auto)
 
-  have aux: "wf_trigger_aux \<sigma> V R args \<gamma> \<beta> aux' (Progress.progress \<sigma> P' (formula.Trigger \<alpha> I \<beta>) (j + \<delta>))"
+  have aux: "wf_trigger_aux \<sigma> V R args \<gamma> \<beta> aux' (progress \<sigma> P' (\<alpha> \<^bold>T I \<beta>) (j + \<delta>))"
     using update
     by auto
 
   have "wf_mformula \<sigma> (j + \<delta>) P' V n R \<eta> (formula.Trigger \<alpha> I \<beta>)"
     unfolding \<eta>_eq
-    using wf_mformula.Trigger_0[OF \<beta>_props(1) pos \<gamma>_props(1) pos_eq args_ivl args_n args_L args_R fv_l_n mem0 fvi_subset wf_buf_ts aux]
+    using wf_mformula.Trigger_0[OF \<beta>_props(1) pos \<gamma>_props(1) pos_eq args_ivl 
+        args_n args_L args_R fv_l_n mem0 fvi_subset wf_buf_ts aux]
     by auto
 
-  moreover have "list_all2 (\<lambda>i. qtable n (fv (formula.Trigger \<alpha> I \<beta>)) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Trigger \<alpha> I \<beta>))) [Progress.progress \<sigma> P (formula.Trigger \<alpha> I \<beta>) j..<Progress.progress \<sigma> P' (formula.Trigger \<alpha> I \<beta>) (j + \<delta>)] zs"
+  moreover have "list_all2 (\<lambda>i. qtable n (FV (\<alpha> \<^bold>T I \<beta>)) (mem_restr R) (\<lambda>v. \<langle>\<sigma>, V, v, i\<rangle> \<Turnstile>\<^sub>M \<alpha> \<^bold>T I \<beta>))
+    [progress \<sigma> P (formula.Trigger \<alpha> I \<beta>) j..<progress \<sigma> P' (\<alpha> \<^bold>T I \<beta>) (j + \<delta>)] zs"
     using update
     by auto
 
@@ -7906,7 +7859,7 @@ next
     by (auto simp add: list.rel_map intro!: wf_mformula.MTS list.rel_refl qtable_eval_mtrm)
 qed
 
-subsubsection \<open>Monitor step\<close>
+subsection \<open>Monitor step\<close>
 
 lemma wty_db_empty: "wty_db S {}"
   by (simp add: wty_db_def)
@@ -8039,7 +7992,71 @@ proof -
 qed
 
 
-subsubsection \<open>Monitor function\<close>
+section \<open>Specification\<close>
+
+definition pprogress :: "'t Formula.formula \<Rightarrow> Formula.prefix \<Rightarrow> nat" where
+  "pprogress \<phi> \<pi> = (THE n. \<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> progress \<sigma> Map.empty \<phi> (plen \<pi>) = n)"
+
+lemma pprogress_eq: "prefix_of \<pi> \<sigma> \<Longrightarrow> pprogress \<phi> \<pi> = progress \<sigma> Map.empty \<phi> (plen \<pi>)"
+  unfolding pprogress_def using progress_prefix_conv
+  by blast
+
+locale wty_mfodl =
+  fixes \<phi> :: "ty Formula.formula" and SIG :: sig and ENV :: tyenv
+  assumes well_typed: "SIG, ENV \<turnstile> \<phi>"
+begin
+
+definition "traces = {\<sigma>. wty_trace SIG \<sigma>}"
+
+sublocale traces_downward_closed traces
+  by unfold_locales (auto simp add: traces_def wty_envs_def)
+
+end
+
+locale future_bounded_mfodl = wty_mfodl +
+   assumes future_bounded: "Safety.future_bounded \<phi>"
+
+sublocale future_bounded_mfodl \<subseteq> sliceable_timed_progress "Formula.nfv \<phi>" "Formula.fv \<phi>" traces "relevant_events \<phi>"
+  "\<lambda>\<sigma> v i. Formula.sat \<sigma> Map.empty v i \<phi>" "pprogress \<phi>"
+proof (unfold_locales, goal_cases)
+  case (1 \<pi>' \<pi>)
+  moreover obtain \<sigma> where "prefix_of \<pi>' \<sigma>"
+    using ex_prefix_of ..
+  moreover have "prefix_of \<pi> \<sigma>"
+    using prefix_of_antimono[OF \<open>\<pi> \<le> \<pi>'\<close> \<open>prefix_of \<pi>' \<sigma>\<close>] .
+  ultimately show ?case
+    by (simp add: pprogress_eq plen_mono progress_mono)
+next
+  case (2 \<sigma> x)
+  obtain j where "x \<le> progress \<sigma> Map.empty \<phi> j"
+    using future_bounded progress_ge by blast
+  then have "x \<le> pprogress \<phi> (take_prefix j \<sigma>)"
+    by (simp add: pprogress_eq[of _ \<sigma>])
+  then show ?case by force
+next
+  case (3 \<sigma> \<pi> \<sigma>' i v)
+  then have "i < progress \<sigma> Map.empty \<phi> (plen \<pi>)"
+    by (simp add: pprogress_eq)
+  with 3 show ?case
+    using sat_prefix_conv by blast
+next
+  case (4 \<pi> \<pi>')
+  then have "plen \<pi> = plen \<pi>'"
+    unfolding length_pts_eq_plen[symmetric] by auto
+  moreover obtain \<sigma> \<sigma>' where "prefix_of \<pi> \<sigma>" "prefix_of \<pi>' \<sigma>'"
+    using ex_prefix_of by blast+
+  moreover have "\<forall>i < plen \<pi>. \<tau> \<sigma> i = \<tau> \<sigma>' i"
+    using 4 calculation nth_pts_eq_\<tau>[OF calculation(3)] nth_pts_eq_\<tau>[OF calculation(2)]
+    by auto
+  ultimately show ?case
+    by (simp add: pprogress_eq progress_time_conv)
+qed
+
+locale verimon_spec = wty_mfodl +
+   assumes monitorable: "mmonitorable \<phi>"
+
+sublocale verimon_spec \<subseteq> future_bounded_mfodl
+  using monitorable by unfold_locales (simp add: mmonitorable_def)
 
 context maux
 begin
@@ -8146,7 +8163,7 @@ lemma (in verimon) monitor_mverdicts:
     (auto simp: mmonitorable_def Mt_pnil well_typed)
 
 
-subsection \<open>Collected correctness results\<close>
+section \<open>Collected correctness results\<close>
 
 context verimon
 begin
