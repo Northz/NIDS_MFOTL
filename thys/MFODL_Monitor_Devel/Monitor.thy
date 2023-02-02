@@ -554,6 +554,9 @@ next
   then show ?case by (auto simp: safe_atms_def elim: ok_mono split: if_splits prod.splits)
 qed
 
+lemmas to_mregex_safe_atms =
+  to_mregex_ok[THEN conjunct1, THEN equalityD1, THEN set_mp, rotated]
+
 lemma from_mregex_shift: "from_mregex (shift r (length xs)) (xs @ ys) = from_mregex r ys"
   by (induct r) (auto simp: nth_append)
 
@@ -974,8 +977,6 @@ fun eq_rel :: "nat \<Rightarrow> Formula.trm \<Rightarrow> Formula.trm \<Rightar
 | "eq_rel n (Formula.Const x) (Formula.Var y) = singleton_table n y x"
 | "eq_rel n _ _ = undefined"
 
-
-
 fun meval_trm :: "Formula.trm \<Rightarrow> event_data tuple \<Rightarrow> event_data" where
   "meval_trm (Formula.Var x) v = the (v ! x)"
 | "meval_trm (Formula.Const x) v = x"
@@ -987,6 +988,11 @@ fun meval_trm :: "Formula.trm \<Rightarrow> event_data tuple \<Rightarrow> event
 | "meval_trm (Formula.Mod x y) v = meval_trm x v mod meval_trm y v"
 | "meval_trm (Formula.F2i x) v = EInt (integer_of_event_data (meval_trm x v))"
 | "meval_trm (Formula.I2f x) v = EFloat (double_of_event_data (meval_trm x v))"
+
+lemma meval_trm_eval_trm: "wf_tuple n A x \<Longrightarrow> fv_trm t \<subseteq> A \<Longrightarrow> \<forall>i\<in>A. i < n \<Longrightarrow>
+    meval_trm t x = Formula.eval_trm (map the x) t"
+  unfolding wf_tuple_def
+  by (induction t) simp_all
 
 definition packagg :: "args \<Rightarrow> ty Formula.formula \<Rightarrow> ty Formula.formula" where
   "packagg args f = (case args_agg args of None \<Rightarrow> f
@@ -1615,6 +1621,12 @@ primrec map_split where
 | "map_split f (x # xs) =
     (let (y, z) = f x; (ys, zs) = map_split f xs
     in (y # ys, z # zs))"
+
+lemma map_split_map: "map_split f (map g xs) = map_split (f o g) xs"
+  by (induct xs) auto
+
+lemma map_split_alt: "map_split f xs = (map (fst o f) xs, map (snd o f) xs)"
+  by (induct xs) (auto split: prod.splits)
 
 fun eval_assignment :: "nat \<times> Formula.trm \<Rightarrow> event_data tuple \<Rightarrow> event_data tuple" where
   "eval_assignment (x, t) y = (y[x:=Some (meval_trm t y)])"

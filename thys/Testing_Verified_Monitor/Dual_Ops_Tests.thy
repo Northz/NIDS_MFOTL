@@ -7,50 +7,11 @@ begin
 
 section \<open> Safety and monitor evaluation \<close>
 
-lift_definition clopen_ivlR :: "nat \<Rightarrow> enat \<Rightarrow> \<I>" is
-  "\<lambda>l. \<lambda>r. (if enat l < r then (\<lambda>i. l \<le> i, \<lambda>i. enat i < r, r \<noteq> \<infinity>) else (\<lambda>_. True, \<lambda>_. True, False))"
-  using enat_iless 
-  apply (auto simp: upclosed_def downclosed_def not_le order_subst2)
-  apply (meson enat_ord_simps(1) order_le_less_trans)
-  using not_less_iff_gr_or_eq by blast
-
-lift_definition clopen_ivlL :: "nat \<Rightarrow> enat \<Rightarrow> \<I>" is
-  "\<lambda>l. \<lambda>r. (if enat l < r then (\<lambda>i. l < i, \<lambda>i. enat i \<le> r, r \<noteq> \<infinity>) else (\<lambda>_. True, \<lambda>_. True, False))"
-  using enat_iless Suc_ile_eq
-  by (auto simp: upclosed_def downclosed_def not_le order_subst2)
-
-notation clopen_ivlR ("\<^bold>[_,_\<^bold>\<rangle>")
-    and clopen_ivlL ("\<^bold>\<langle>_,_\<^bold>]")
-
-lemma memL_interval_simp[simp]: "memL \<^bold>[a,b\<^bold>] x \<longleftrightarrow> (a \<le> b \<and> a \<le> x) \<or> (a > b)"
-  by transfer auto
-
-lemma memL_clopen_ivlR_simp[simp]: "memL \<^bold>[a,b\<^bold>\<rangle> x \<longleftrightarrow> (a < b \<and> a \<le> x) \<or> (a \<ge> b)"
-  by transfer auto
-
-lemma memL_clopen_ivlL_simp[simp]: "memL \<^bold>\<langle>a,b\<^bold>] x \<longleftrightarrow> (a < b \<and> a < x) \<or> (a \<ge> b)"
-  by transfer auto
-
-lemma memR_interval_simp[simp]: "memR \<^bold>[a,b\<^bold>] x \<longleftrightarrow> (x \<le> b \<and> a \<le> b) \<or> (a > b)"
-  by transfer auto
-
-lemma memR_clopen_ivlR_simp[simp]: "memR \<^bold>[a,b\<^bold>\<rangle> x \<longleftrightarrow> (a < b \<and> x < b) \<or> (a \<ge> b)"
-  by transfer auto
-
-lemma memR_clopen_ivlL_simp[simp]: "memR \<^bold>\<langle>a,b\<^bold>] x \<longleftrightarrow> (a < b \<and> x \<le> b) \<or> (a \<ge> b)"
-  by transfer auto
-
-lemma mem_interval_simp[simp]: "mem \<^bold>[a,b\<^bold>] x \<longleftrightarrow> (a \<le> b \<and> a \<le> x \<and> x \<le> b) \<or> (a > b)"
-  by transfer auto
-
-lemma mem_clopen_ivlR_simp[simp]: "mem \<^bold>[a,b\<^bold>\<rangle> x \<longleftrightarrow> (a \<le> x \<and> x < b) \<or> (a \<ge> b)"
-  by transfer auto
-
-lemma mem_clopen_ivlL_simp[simp]: "mem \<^bold>\<langle>a,b\<^bold>] x \<longleftrightarrow> (a < x \<and> x \<le> b) \<or> (a \<ge> b)"
-  by transfer auto
-
 
 subsection \<open> MFOTL encodings and extra notation \<close>
+
+unbundle MFODL_notation
+unbundle ivl_notation
 
 context
 begin
@@ -365,6 +326,8 @@ value mdisjunct3_3
 value mdisjunct3_4
 value mdisjunct3_5
 
+unbundle MFODL_no_notation
+unbundle ivl_no_notation
 
 end
 

@@ -509,6 +509,9 @@ lemma not_contains_pred_progress[simp]: "\<not> contains_pred p \<phi>
       intro!: arg_cong2[where f=min])
     (clarsimp simp: always_safe_bounded_def progress_eventually)
 
+lemma progress_regex_le: "pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> progress_regex \<sigma> P r j \<le> j"
+  by (auto intro!: progress_le_gen simp: Min_le_iff progress_regex_def)
+
 
 subsection \<open> Progress letpast \<close>
 
@@ -571,6 +574,10 @@ lemma not_contains_letpast_progress[simp]:
   "\<not> contains_pred p \<phi> \<Longrightarrow> letpast_progress \<sigma> (P(p \<mapsto> x)) q \<phi> j = letpast_progress \<sigma> P q \<phi> j"
   by (cases "p = q") (simp_all add: letpast_progress_def fun_upd_twist[of p q])
 
+lemma letpast_progress0: 
+  "pred_mapping (\<lambda>x. x = 0) P \<Longrightarrow> letpast_progress \<sigma> P p \<phi> 0 = 0"
+  by (simp add: letpast_progress_def cInf_eq_minimum)
+
 lemma letpast_progress_le:
   assumes "pred_mapping (\<lambda>x. x \<le> j) P"
   shows "letpast_progress \<sigma> P p \<phi> j \<le> j"
@@ -614,6 +621,41 @@ lemma letpast_progress_mono:
      apply (erule ssubst)
     using assms by (auto simp add: progress_le_gen progress_mono_gen simp del: fun_upd_apply)
   done
+
+lemma le_letpast_progress_preservation:
+  assumes P: "pred_mapping (\<lambda>x. x \<le> j) P"
+    and P': "pred_mapping (\<lambda>x. x \<le> j') P'"
+    and PP': "rel_mapping (\<le>) P P'"
+    and i: "i \<le> letpast_progress \<sigma> P p \<phi> j"
+    and jj': "j \<le> j'"
+  shows "progress \<sigma> (P(p \<mapsto> i)) \<phi> j \<le> letpast_progress \<sigma> P' p \<phi> j'"
+  unfolding letpast_progress_def
+  apply (rule cInf_greatest)
+   apply simp
+   apply (rule progress_fixpoint_ex[OF P'])
+  apply clarsimp
+  apply (subgoal_tac "i \<le> j")
+   apply (rule order_trans)
+    apply (rule progress_mono_gen[where P'="P'(p \<mapsto> i)", OF jj'])
+  using P apply simp
+  using P' jj' apply simp
+  using PP' apply simp
+   apply (rule ssubst, assumption)
+   apply (rule progress_mono_gen[OF order_refl])
+     apply (rule pred_mapping_map_upd[OF _ P'])
+  using jj' apply simp
+  using P' apply simp
+   apply (rule rel_mapping_le_map_upd)
+   apply (subgoal_tac "i \<le> letpast_progress \<sigma> P' p \<phi> j'")
+    apply (subst (asm) letpast_progress_def)
+    apply (subst (asm) le_cInf_iff)
+      apply simp
+      apply (rule progress_fixpoint_ex[OF P'])
+     apply simp
+    apply auto[]
+   apply (rule order_trans[OF i])
+   apply (rule letpast_progress_mono[OF P P' jj' PP'])
+  using i letpast_progress_le[OF P] by (rule order_trans)
 
 lemma safe_letpast_progress_upd':
   fixes \<phi> :: "'t Formula.formula"

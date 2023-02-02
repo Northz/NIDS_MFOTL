@@ -27,6 +27,141 @@ lemma zip_P: "\<And>xs P. (\<forall>(i,x) \<in> set (zip [0..<length xs] xs). P 
 lemma zip_idx: "\<And>xs P. \<forall>(i,x) \<in> set (zip [0..<length xs] xs). x = xs!i"
   by (metis (mono_tags, lifting) case_prodI2 map_nth zip_map_el)
 
+lemma upt_append: "a \<le> b \<Longrightarrow> b \<le> c \<Longrightarrow> [a..<b] @ [b..<c] = [a..<c]"
+  by (metis le_Suc_ex upt_add_eq_append)
+
+lemma hd_app: "hd (xs @ ys) = (case xs of [] \<Rightarrow> hd ys | x # _ \<Rightarrow> x)"
+  by (cases xs) auto
+
+lemma list_update_id2: "xs ! i = z \<Longrightarrow> xs[i:=z] = xs"
+  by (induction xs arbitrary: i) (auto split: nat.split)
+
+lemma nth_list_update_alt: "xs[i := x] ! j = (if i < length xs \<and> i = j then x else xs ! j)"
+  by auto
+
+lemma nth_filter: "i < length (filter P xs) \<Longrightarrow>
+  (\<And>i'. i' < length xs \<Longrightarrow> P (xs ! i') \<Longrightarrow> Q (xs ! i')) \<Longrightarrow> Q (filter P xs ! i)"
+  by (metis (lifting) in_set_conv_nth set_filter mem_Collect_eq)
+
+lemma nth_partition: "i < length xs \<Longrightarrow>
+  (\<And>i'. i' < length (filter P xs) \<Longrightarrow> Q (filter P xs ! i')) \<Longrightarrow>
+  (\<And>i'. i' < length (filter (Not \<circ> P) xs) \<Longrightarrow> Q (filter (Not \<circ> P) xs ! i')) \<Longrightarrow> Q (xs ! i)"
+  by (metis (no_types, lifting) in_set_conv_nth set_filter mem_Collect_eq comp_apply)
+
+lemma list_all2_upt_Cons: "P a x \<Longrightarrow> list_all2 P [Suc a..<b] xs \<Longrightarrow> Suc a \<le> b \<Longrightarrow>
+  list_all2 P [a..<b] (x # xs)"
+  by (simp add: list_all2_Cons2 upt_eq_Cons_conv)
+
+lemma list_all2_upt_append: "list_all2 P [a..<b] xs \<Longrightarrow> list_all2 P [b..<c] ys \<Longrightarrow>
+  a \<le> b \<Longrightarrow> b \<le> c \<Longrightarrow> list_all2 P [a..<c] (xs @ ys)"
+  by (induction xs arbitrary: a) (auto simp add: list_all2_Cons2 upt_eq_Cons_conv)
+
+lemma list_all2_hdD:
+  assumes "list_all2 P [i..<j] xs" "xs \<noteq> []"
+  shows "P i (hd xs)" "i < j"
+  using assms unfolding list_all2_conv_all_nth
+  by (auto simp: hd_conv_nth intro: zero_less_diff[THEN iffD1] dest!: spec[of _ 0])
+
+lemma list_all2_lastD:
+  assumes "list_all2 P [i..<j] xs" "xs \<noteq> []"
+  shows "P (j - 1) (last xs)"
+  using assms list_all2_hdD(2)[OF assms, THEN less_imp_add_positive] unfolding list_all2_conv_all_nth
+  by (auto dest!: spec[of _ "length xs - 1"] simp: last_conv_nth Suc_le_eq)
+
+lemma rel_mono_zip:
+  assumes before: "list_all2 P1 x y"
+  assumes impl: "(\<And>a b. (a, b) \<in> set (zip x y) \<Longrightarrow> P1 a b \<Longrightarrow> P2 a b)"
+  shows "list_all2 P2 x y"
+proof -
+  have eq_len: "length x = length y"
+    using before
+    unfolding list_all2_iff
+    by auto
+  moreover have "\<And>a b. (a, b)\<in>set (zip x y) \<Longrightarrow> P2 a b"
+  proof -
+    fix a b
+    assume "(a, b)\<in>set (zip x y)"
+    then show "P2 a b"
+      using before impl
+      unfolding list_all2_iff
+      by auto
+  qed
+
+  ultimately show ?thesis
+    unfolding list_all2_iff
+    by auto
+qed
+
+inductive list_all3 :: "('a \<Rightarrow> 'b \<Rightarrow> 'c \<Rightarrow> bool) \<Rightarrow> 'a list \<Rightarrow> 'b list \<Rightarrow> 'c list \<Rightarrow> bool" 
+  for P :: "('a \<Rightarrow> 'b \<Rightarrow> 'c \<Rightarrow> bool)" 
+  where "list_all3 P [] [] []"
+  | "P a1 a2 a3 \<Longrightarrow> list_all3 P q1 q2 q3 \<Longrightarrow> list_all3 P (a1 # q1) (a2 # q2) (a3 # q3)"
+
+lemma list_all3_list_all2D: "list_all3 P xs ys zs \<Longrightarrow>
+  (length xs = length ys \<and> list_all2 (case_prod P) (zip xs ys) zs)"
+  by (induct xs ys zs rule: list_all3.induct) auto
+
+lemma list_all2_list_all3I: "length xs = length ys \<Longrightarrow> list_all2 (case_prod P) (zip xs ys) zs \<Longrightarrow>
+  list_all3 P xs ys zs"
+  by (induct xs ys arbitrary: zs rule: list_induct2)
+    (auto simp: list_all2_Cons1 intro: list_all3.intros)
+
+lemma list_all3_list_all2_eq: "list_all3 P xs ys zs \<longleftrightarrow>
+  (length xs = length ys \<and> list_all2 (case_prod P) (zip xs ys) zs)"
+  using list_all2_list_all3I list_all3_list_all2D by blast
+
+lemma list_all3_mapD: "list_all3 P (map f xs) (map g ys) (map h zs) \<Longrightarrow>
+  list_all3 (\<lambda>x y z. P (f x) (g y) (h z)) xs ys zs"
+  by (induct "map f xs" "map g ys" "map h zs" arbitrary: xs ys zs rule: list_all3.induct)
+    (auto intro: list_all3.intros)
+
+lemma list_all3_mapI: "list_all3 (\<lambda>x y z. P (f x) (g y) (h z)) xs ys zs \<Longrightarrow>
+  list_all3 P (map f xs) (map g ys) (map h zs)"
+  by (induct xs ys zs rule: list_all3.induct)
+    (auto intro: list_all3.intros)
+
+lemma list_all3_map_iff: "list_all3 P (map f xs) (map g ys) (map h zs) \<longleftrightarrow>
+  list_all3 (\<lambda>x y z. P (f x) (g y) (h z)) xs ys zs"
+  using list_all3_mapD list_all3_mapI by blast
+
+lemmas list_all3_map =
+  list_all3_map_iff[where g=id and h=id, unfolded list.map_id id_apply]
+  list_all3_map_iff[where f=id and h=id, unfolded list.map_id id_apply]
+  list_all3_map_iff[where f=id and g=id, unfolded list.map_id id_apply]
+
+lemma list_all3_conv_all_nth:
+  "list_all3 P xs ys zs =
+  (length xs = length ys \<and> length ys = length zs \<and> (\<forall>i < length xs. P (xs!i) (ys!i) (zs!i)))"
+  by (auto simp add: list_all3_list_all2_eq list_all2_conv_all_nth)
+
+lemma list_all3_refl [intro?]:
+  "(\<And>x. x \<in> set xs \<Longrightarrow> P x x x) \<Longrightarrow> list_all3 P xs xs xs"
+  by (simp add: list_all3_conv_all_nth)
+
+lemma list_all3_list_all2_conv: "list_all3 R xs xs ys = list_all2 (\<lambda>x. R x x) xs ys"
+  by (auto simp: list_all3_conv_all_nth list_all2_conv_all_nth)
+
+lemma list_all3_Nil[simp]:
+  "list_all3 P xs ys [] \<longleftrightarrow> xs = [] \<and> ys = []"
+  "list_all3 P xs [] zs \<longleftrightarrow> xs = [] \<and> zs = []"
+  "list_all3 P [] ys zs \<longleftrightarrow> ys = [] \<and> zs = []"
+  unfolding list_all3_conv_all_nth by auto
+
+lemma list_all3_Cons:
+  "list_all3 P xs ys (z # zs) \<longleftrightarrow> (\<exists>x xs' y ys'. xs = x # xs' \<and> ys = y # ys' \<and> P x y z \<and> list_all3 P xs' ys' zs)"
+  "list_all3 P xs (y # ys) zs \<longleftrightarrow> (\<exists>x xs' z zs'. xs = x # xs' \<and> zs = z # zs' \<and> P x y z \<and> list_all3 P xs' ys zs')"
+  "list_all3 P (x # xs) ys zs \<longleftrightarrow> (\<exists>y ys' z zs'. ys = y # ys' \<and> zs = z # zs' \<and> P x y z \<and> list_all3 P xs ys' zs')"
+  unfolding list_all3_conv_all_nth
+  by (auto simp: length_Suc_conv Suc_length_conv nth_Cons split: nat.splits)
+
+lemma list_all3_mono_strong: "list_all3 P xs ys zs \<Longrightarrow>
+  (\<And>x y z. x \<in> set xs \<Longrightarrow> y \<in> set ys \<Longrightarrow> z \<in> set zs \<Longrightarrow> P x y z \<Longrightarrow> Q x y z) \<Longrightarrow>
+  list_all3 Q xs ys zs"
+  by (induct xs ys zs rule: list_all3.induct) (auto intro: list_all3.intros)
+
+lemma list_all3_list_all2I: "list_all3 (\<lambda>x y z. Q x z) xs ys zs \<Longrightarrow> list_all2 Q xs zs"
+  by (induct xs ys zs rule: list_all3.induct) auto
+
 
 subsection \<open> Logic and sets \<close>
 
@@ -46,7 +181,7 @@ lemma sub_pair_unfold: "A \<subseteq> {{}, X} \<longleftrightarrow> A = {} \<or>
   by blast
 
 
-subsection \<open> Finiteness \<close>
+subsection \<open> Finiteness and cardinality \<close>
 
 lemma finite_Union_image_Collect: 
   "finite A \<Longrightarrow> (\<And>X. X \<in> A \<Longrightarrow> finite (f X)) \<Longrightarrow> finite (\<Union>{f X|X. X \<in> A})"

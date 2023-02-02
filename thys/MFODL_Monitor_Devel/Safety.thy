@@ -552,18 +552,23 @@ lemma always_safe_bounded_safe[simp]: "safe_formula (always_safe_bounded I \<phi
 lemma always_safe_bounded_fv[simp]: "fv (always_safe_bounded I \<phi>) = fv \<phi>"
   by (auto simp add: always_safe_bounded_def)
 
-lemma safe_formula_release_bounded:
-  assumes "safe_formula \<phi> \<and> safe_formula \<psi> \<and> fv \<phi> = fv \<psi>"
-  shows "safe_formula (release_safe_bounded \<phi> I \<psi>)"
-  using assms
-  by (auto simp add: release_safe_bounded_def once_def 
-      historically_safe_unbounded_def safe_dual_def)
-
 lemma release_safe_unbounded: "safe_formula (release_safe_bounded \<phi>' I \<psi>') 
   \<Longrightarrow> safe_formula \<phi>' \<and> safe_formula \<psi>' \<and> fv \<phi>' = fv \<psi>'"
   unfolding release_safe_bounded_def always_safe_bounded_def once_def eventually_def 
     Formula.TT_def Formula.FF_def
   by (auto simp add: safe_assignment_def)
+
+lemma safe_release_bdd_iff: "safe_formula (release_safe_bounded \<phi>' I \<psi>') \<longleftrightarrow> 
+  safe_formula \<phi>' \<and> safe_formula \<psi>' \<and> fv \<phi>' = fv \<psi>'"
+  by (auto simp add: release_safe_bounded_def once_def 
+      historically_safe_unbounded_def safe_dual_def
+      safe_assignment_iff)
+
+lemma safe_formula_release_bounded:
+  assumes "safe_formula \<phi> \<and> safe_formula \<psi> \<and> fv \<phi> = fv \<psi>"
+  shows "safe_formula (release_safe_bounded \<phi> I \<psi>)"
+  using assms safe_release_bdd_iff
+  by blast
 
 lemma rewrite_trigger_safe_formula[simp]: 
   assumes safe: "safe_formula \<phi>"

@@ -183,6 +183,9 @@ qualified datatype (discs_sels) 't formula = Pred name "trm list"
 qualified abbreviation "frwd_diam r I \<equiv> MatchF I r"
 qualified abbreviation "bwrd_diam r I \<equiv> MatchP I r"
 
+lemma Neg_acyclic: "formula.Neg x = x \<Longrightarrow> P"
+  by (induct x) auto
+
 lemma Neg_splits:
   "P (case \<phi> of Formula.formula.Neg \<psi> \<Rightarrow> f \<psi> | \<phi> \<Rightarrow> g \<phi>) =
    ((\<forall>\<psi>. \<phi> = Formula.formula.Neg \<psi> \<longrightarrow> P (f \<psi>)) \<and> ((\<not> Formula.is_Neg \<phi>) \<longrightarrow> P (g \<phi>)))"
@@ -210,6 +213,9 @@ lemma case_release_iff:
 lemma case_trigger_iff: 
   "(case \<phi> of Trigger \<phi>' I \<psi>' \<Rightarrow> True | _ \<Rightarrow> False) \<longleftrightarrow> (\<exists>\<phi>' I \<psi>'. \<phi> = Trigger \<phi>' I \<psi>')"
   by (auto split: formula.splits)
+
+lemma case_Neg_in_iff: "x \<in> (case y of formula.Neg \<phi>' \<Rightarrow> {\<phi>'} | _ \<Rightarrow> {}) \<longleftrightarrow> y = formula.Neg x"
+  by (cases y) auto
 
 qualified definition "FF = Eq (Const (EInt 0)) (Const (EInt 1))"
 qualified definition "TT \<equiv> Eq (Const (EInt 0)) (Const (EInt 0))"
@@ -389,6 +395,9 @@ lemma TT_no_pred [simp]:
 subsubsection \<open>Semantics\<close>
 
 definition "ecard A = (if finite A then card A else \<infinity>)"
+
+lemma ecard_image: "inj_on f A \<Longrightarrow> ecard (f ` A) = ecard A"
+  unfolding ecard_def by (auto simp: card_image dest: finite_imageD)
 
 declare conj_cong[fundef_cong]
 fun letpast_sat where
