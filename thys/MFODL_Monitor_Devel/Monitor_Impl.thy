@@ -5,7 +5,6 @@ theory Monitor_Impl
     Optimized_Agg
     Optimized_MTL
     "HOL-Library.Code_Target_Nat"
-    (* "HOL-Library.Code_Cardinality" *)
     Containers.Containers
     "Generic_Join_Devel.Proj_Code"
 begin

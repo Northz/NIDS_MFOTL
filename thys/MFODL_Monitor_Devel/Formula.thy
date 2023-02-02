@@ -13,6 +13,8 @@ begin
 
 section \<open>Metric first-order dynamic logic\<close>
 
+lemma disjE_Not2: "P \<or> Q \<Longrightarrow> (P \<Longrightarrow> R) \<Longrightarrow> (\<not>P \<Longrightarrow> Q \<Longrightarrow> R) \<Longrightarrow> R"
+  by blast
 
 subsection \<open> Instantiations \<close>
 
@@ -32,125 +34,10 @@ definition "card_UNIV = Phantom(enat) 0"
 instance by intro_classes (simp_all add: finite_UNIV_enat_def card_UNIV_enat_def infinite_UNIV_char_0)
 end
 
-datatype rec_safety = Unused | PastRec | NonFutuRec | AnyRec
-
-instantiation rec_safety :: "{finite, bounded_semilattice_sup_bot, monoid_mult, mult_zero}"
-begin
-
-fun less_eq_rec_safety where
-  "Unused \<le> _ = True"
-| "PastRec \<le> PastRec = True"
-| "PastRec \<le> NonFutuRec = True"
-| "PastRec \<le> AnyRec = True"
-| "NonFutuRec \<le> NonFutuRec = True"
-| "NonFutuRec \<le> AnyRec = True"
-| "AnyRec \<le> AnyRec = True"
-| "(_::rec_safety) \<le> _ = False"
-
-definition "(x::rec_safety) < y \<longleftrightarrow> x \<le> y \<and> x \<noteq> y"
-
-definition [code_unfold]: "\<bottom> = Unused"
-
-fun sup_rec_safety where
-  "AnyRec \<squnion> _ = AnyRec"
-| "_ \<squnion> AnyRec = AnyRec"
-| "NonFutuRec \<squnion> _ = NonFutuRec"
-| "_ \<squnion> NonFutuRec = NonFutuRec"
-| "PastRec \<squnion> _ = PastRec"
-| "_ \<squnion> PastRec = PastRec"
-| "Unused \<squnion> Unused = Unused"
-
-definition [code_unfold]: "0 = Unused"
-definition [code_unfold]: "1 = NonFutuRec"
-
-fun times_rec_safety where
-  "Unused * _ = Unused"
-| "_ * Unused = Unused"
-| "AnyRec * _ = AnyRec"
-| "_ * AnyRec = AnyRec"
-| "PastRec * _ = PastRec"
-| "_ * PastRec = PastRec"
-| "NonFutuRec * NonFutuRec = NonFutuRec"
-
-instance proof
-  fix x y z :: rec_safety
-  have "x \<in> {Unused, PastRec, NonFutuRec, AnyRec}" for x
-    by (cases x) simp_all
-  then have UNIV_alt: "UNIV = \<dots>" by blast
-  show "finite (UNIV :: rec_safety set)"
-    unfolding UNIV_alt by blast
-  show "(x < y) = (x \<le> y \<and> \<not> y \<le> x)"
-    unfolding less_rec_safety_def
-    by (cases x; cases y) simp_all
-  show "x \<le> x"
-    by (cases x) simp_all
-  show "x \<le> y \<Longrightarrow> y \<le> z \<Longrightarrow> x \<le> z"
-    by (cases x; cases y; cases z) simp_all
-  show "x \<le> y \<Longrightarrow> y \<le> x \<Longrightarrow> x = y"
-    by (cases x; cases y) simp_all
-  show "x \<le> x \<squnion> y"
-    by (cases x; cases y) simp_all
-  show "y \<le> x \<squnion> y"
-    by (cases x; cases y) simp_all
-  show "y \<le> x \<Longrightarrow> z \<le> x \<Longrightarrow> y \<squnion> z \<le> x"
-    by (cases x; cases y; cases z) simp_all
-  show "\<bottom> \<le> x"
-    unfolding bot_rec_safety_def
-    by (cases x) simp_all
-  show "(x * y) * z = x * (y * z)"
-    by (cases x; cases y; cases z) simp_all
-  show "1 * x = x"
-    unfolding one_rec_safety_def
-    by (cases x) simp_all
-  show "x * 1 = x"
-    unfolding one_rec_safety_def
-    by (cases x) simp_all
-  show "0 * x = 0"
-    unfolding zero_rec_safety_def by simp
-  show "x * 0 = 0"
-    unfolding zero_rec_safety_def
-    by (cases x) simp_all
-qed
-
-end
-
-instantiation rec_safety :: Sup
-begin
-
-definition "\<Squnion> A = Finite_Set.fold (\<squnion>) Unused A"
-
-instance ..
-
-end
-
-lemma mult_commute: "(x::rec_safety) * y = y * x"
-  by (cases x; cases y; clarsimp)
-
-lemma mult_assoc: "(x::rec_safety) * y * z = x * (y * z)"
-  by (simp add: mult.assoc)
-
-lemma mult_sup_distrib: "(x::rec_safety) * (a \<squnion> b) = x * a \<squnion> x * b"
-  by (cases x; cases a; cases b; clarsimp)
-
-lemma (in semilattice_sup) comp_fun_idem_on_sup: "comp_fun_idem_on UNIV sup"
-  using comp_fun_idem_sup by (simp add: comp_fun_idem_def')
-
-lemma Sup_rec_safety_empty[simp]: "\<Squnion> {} = Unused"
-  by (simp add: Sup_rec_safety_def)
-
-lemma Sup_rec_safety_insert[simp]: "\<Squnion>(insert (x::rec_safety) A) = x \<squnion> \<Squnion>A"
-  by (simp add: Sup_rec_safety_def comp_fun_idem_on.fold_insert_idem[OF comp_fun_idem_on_sup])
-
-lemma Sup_rec_safety_union: "\<Squnion>((A::rec_safety set) \<union> B) = \<Squnion>A \<squnion> \<Squnion>B"
-  unfolding Sup_rec_safety_def
-  using finite[of A]
-  by (induction A rule: finite_induct) (simp_all flip: bot_rec_safety_def
-      add: comp_fun_idem_on.fold_insert_idem[OF comp_fun_idem_on_sup] sup_assoc)
-
-
-context begin
 
 subsection \<open>Syntax and semantics\<close>
+
+context begin
 
 qualified type_synonym name = string8
 qualified type_synonym event = "(name \<times> event_data list)"
@@ -295,6 +182,10 @@ qualified datatype (discs_sels) 't formula = Pred name "trm list"
   | MatchF \<I> "'t formula Regex.regex" | MatchP \<I> "'t formula Regex.regex"
   | TP trm | TS trm
 
+
+qualified abbreviation "frwd_diam r I \<equiv> MatchF I r"
+qualified abbreviation "bwrd_diam r I \<equiv> MatchP I r"
+
 lemma Neg_splits:
   "P (case \<phi> of Formula.formula.Neg \<psi> \<Rightarrow> f \<psi> | \<phi> \<Rightarrow> g \<phi>) =
    ((\<forall>\<psi>. \<phi> = Formula.formula.Neg \<psi> \<longrightarrow> P (f \<psi>)) \<and> ((\<not> Formula.is_Neg \<phi>) \<longrightarrow> P (g \<phi>)))"
@@ -308,8 +199,12 @@ lemma case_Neg_iff: "(case \<gamma> of Neg x \<Rightarrow> P x | _ \<Rightarrow>
 
 lemma case_NegE: "(case \<phi> of Neg \<phi>' \<Rightarrow> P \<phi>' | _ \<Rightarrow> False) 
   \<Longrightarrow> (\<And>\<phi>'. \<phi> = Neg \<phi>' \<Longrightarrow> P \<phi>' \<Longrightarrow> Q) \<Longrightarrow> Q"
-  using case_Neg_iff
-  by auto
+  by (simp add: case_Neg_iff)
+    blast
+
+lemma not_Neg_cases:
+  "(\<forall>\<psi>. \<phi> \<noteq> Formula.Neg \<psi>) \<Longrightarrow> (case \<phi> of formula.Neg \<psi> \<Rightarrow> f \<psi> | _ \<Rightarrow> x) = x"
+  by (cases \<phi>) auto
 
 lemma case_release_iff: 
   "(case \<phi> of Release \<phi>' I \<psi>' \<Rightarrow> True | _ \<Rightarrow> False) \<longleftrightarrow> (\<exists>\<phi>' I \<psi>'. \<phi> = Release \<phi>' I \<psi>')"
@@ -1100,6 +995,10 @@ next
   then show "sat \<sigma> V v i (Until \<phi> I TT)" by auto
 qed
 
+
+subsection \<open> Conatains-pred \<close> 
+(* TODO: Move contains-pred definition here and turn proof of not_contains_pred_sat to Isar *)
+
 lemma contains_pred_always_safe_bounded [simp]:
   "contains_pred p (always_safe_bounded I \<psi>') \<longleftrightarrow> contains_pred p \<psi>'"
   unfolding always_safe_bounded_def
@@ -1109,6 +1008,29 @@ lemma contains_pred_release_safe_bounded [simp]: "contains_pred p (release_safe_
   \<longleftrightarrow> contains_pred p \<phi>' \<or> contains_pred p \<psi>'"
   unfolding release_safe_bounded_def
   by auto
+
+lemma not_contains_pred_sat[simp]: 
+  "\<not> contains_pred p \<phi> \<Longrightarrow> Formula.sat \<sigma> (V(p \<mapsto> x)) v i \<phi> = Formula.sat \<sigma> V v i \<phi>"
+  apply(induct p \<phi> arbitrary: V v x i rule: contains_pred.induct)
+                   apply(simp_all add:  split: nat.splits cong: match_cong)
+   apply (erule conjE)
+   apply (erule disjE_Not2)
+    apply auto []
+   apply (auto) []
+      apply (metis (no_types, lifting) fun_upd_twist)
+     apply (metis (no_types, lifting) fun_upd_twist)
+    apply (metis (no_types, lifting) fun_upd_twist)
+   apply (metis (no_types, lifting) fun_upd_twist)
+  apply (erule disjE_Not2)
+   apply auto []
+  apply(clarsimp simp add: Let_def)
+  apply(erule impCE)
+  subgoal for p n e \<phi> \<psi> V v x i
+    apply(rule ccontr)
+    apply(simp add: fun_upd_twist[of "(p, n)" "(e, Formula.nfv \<phi>)"])
+    done
+  apply simp
+  done
 
 
 subsection \<open>Past-only formulas\<close>
@@ -1305,6 +1227,14 @@ no_notation formula.Pred ("_ \<dagger> _" [85, 85] 85)
      and formula.Trigger ("_ \<^bold>T _ _" [60,55,60] 60)
      and formula.Release ("_ \<^bold>R _ _" [60,55,60] 60)
 
+no_notation Regex.Skip ("skip _" [56] 56)
+    and Regex.Test ("\<questiondown>_?")
+    and Regex.Times (infixl ";\<^sub>r" 55)
+    and Regex.Plus (infixl "+\<^sub>r" 54)
+    and Regex.Star ("_\<^sup>\<star>" [57] 57)
+    and Formula.frwd_diam ("\<bar>_\<rangle>_" [51, 81] 81)
+    and Formula.bwrd_diam ("\<langle>_\<bar>_" [51, 81] 81)
+
 no_notation Formula.fv_trm ("FV\<^sub>t")
      and Formula.fv ("FV")
      and eval_trm_option ("_\<lbrakk>_\<rbrakk>\<^sub>M" [51,89] 89)
@@ -1336,6 +1266,14 @@ notation formula.Pred ("_ \<dagger> _" [85, 85] 85)
      and formula.Trigger ("_ \<^bold>T _ _" [60,55,60] 60)
      and formula.Release ("_ \<^bold>R _ _" [60,55,60] 60)
 
+notation Regex.Skip ("skip _" [56] 56)
+    and Regex.Test ("\<questiondown>_?")
+    and Regex.Times (infixl ";\<^sub>r" 55)
+    and Regex.Plus (infixl "+\<^sub>r" 54)
+    and Regex.Star ("_\<^sup>\<star>" [57] 57)
+    and Formula.frwd_diam ("\<bar>_\<rangle>_" [51, 81] 81)
+    and Formula.bwrd_diam ("\<langle>_\<bar>_" [51, 81] 81)
+
 notation Formula.fv_trm ("FV\<^sub>t")
      and Formula.fv ("FV")
      and eval_trm_option ("_\<lbrakk>_\<rbrakk>\<^sub>M" [51,89] 89)
@@ -1347,12 +1285,16 @@ end
 
 unbundle MFODL_notation \<comment> \<open> enable notation \<close>
 
-term "\<^bold>c (EInt 0) =\<^sub>F \<^bold>c (EInt 0)"
 term "v\<lbrakk>\<^bold>c t\<rbrakk>\<^sub>M"
-term "\<And>\<^sub>F [\<exists>\<^sub>F:t. (trm =\<^sub>F \<^bold>v x) \<and>\<^sub>F (a \<le>\<^sub>F \<^bold>c z), \<phi> \<^bold>U I \<psi>]"
-
+term "\<And>\<^sub>F [
+      \<^bold>c (EInt 0) =\<^sub>F \<^bold>c (EInt 0),
+      \<exists>\<^sub>F:t. (trm =\<^sub>F \<^bold>v x) \<and>\<^sub>F (a \<le>\<^sub>F \<^bold>c z), 
+      \<phi> \<^bold>U I \<psi>, 
+      \<exists>\<^sub>F:t. \<bar>(skip 2)\<^sup>\<star> ;\<^sub>r \<questiondown>trm =\<^sub>F \<^bold>v x? +\<^sub>r skip 3\<rangle>\<^bold>[2,3\<^bold>] 
+        \<and>\<^sub>F (a \<le>\<^sub>F \<^bold>c z)
+    ]"
 term "\<langle>\<sigma>, V, v, i + length v\<rangle> \<Turnstile>\<^sub>M \<^bold>Y I (\<not>\<^sub>F (P \<dagger> [\<^bold>c a, \<^bold>v 0]) 
-  \<and>\<^sub>F (Q \<dagger> [\<^bold>v y])) \<^bold>S (point n) ((\<^bold>X \<^bold>[2,3\<^bold>] (P \<dagger> [\<^bold>c b, \<^bold>v 0])) \<or>\<^sub>F Q \<dagger> [\<^bold>v y])"
+        \<and>\<^sub>F (Q \<dagger> [\<^bold>v y])) \<^bold>S (point n) ((\<^bold>X \<^bold>[2,3\<^bold>] (P \<dagger> [\<^bold>c b, \<^bold>v 0])) \<or>\<^sub>F Q \<dagger> [\<^bold>v y])"
 
 definition "down_cl_ivl \<sigma> I i \<equiv> {j |j. j \<le> i \<and> mem I ((\<tau> \<sigma> i - \<tau> \<sigma> j))}"
 
@@ -1367,6 +1309,33 @@ lemma up_cl_ivl_nmem0I: "up_cl_ivl \<sigma> I i = {} \<Longrightarrow> \<not> me
   unfolding up_cl_ivl_def
   by (transfer, clarsimp simp: downclosed_def upclosed_def)
     (metis bot_nat_0.extremum diff_self_eq_0 le_refl)
+
+abbreviation point_Since :: "'a Formula.formula \<Rightarrow> nat \<Rightarrow> 'a Formula.formula 
+  \<Rightarrow> 'a Formula.formula" ("_ \<^bold>S{_} _" [60,55,60] 60)
+  where "\<alpha> \<^bold>S{r} \<beta> \<equiv> \<alpha> \<^bold>S (point r) \<beta>"
+
+lemma mem_point_diff_iff: "j \<le> i \<Longrightarrow> mem (point r) (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longleftrightarrow> (\<tau> \<sigma> i - \<tau> \<sigma> j = r)"
+  using le_\<tau>_less le_neq_implies_less by force
+
+lemma down_cl_ivl_point: "down_cl_ivl \<sigma> (point r) i = {j. j \<le> i \<and> \<tau> \<sigma> i - \<tau> \<sigma> j = r}"
+  by (auto simp: down_cl_ivl_def)
+
+lemma down_cl_ivl_point_diff: "k \<le>i 
+  \<Longrightarrow> down_cl_ivl \<sigma> (point (\<tau> \<sigma> i - \<tau> \<sigma> k)) i = {j. j \<le> i \<and> \<tau> \<sigma> j = \<tau> \<sigma> k}"
+  by (clarsimp simp: down_cl_ivl_def)
+    (metis (no_types, lifting) \<tau>_mono diff_diff_cancel diff_is_0_eq le_refl)
+
+lemma sat_the_since_point: "\<langle>\<sigma>, V, v, i\<rangle> \<Turnstile>\<^sub>M (\<alpha> \<^bold>S{r} \<beta>) 
+  \<longleftrightarrow> (\<exists>j\<le>i. \<tau> \<sigma> i - \<tau> \<sigma> j = r \<and> \<langle>\<sigma>, V, v, j\<rangle> \<Turnstile>\<^sub>M \<beta> \<and> (\<forall>k\<in>{j<..i}. \<langle>\<sigma>, V, v, k\<rangle> \<Turnstile>\<^sub>M \<alpha>))"
+  using mem_point_diff_iff by auto
+
+abbreviation point_Until :: "'a Formula.formula \<Rightarrow> nat \<Rightarrow> 'a Formula.formula 
+  \<Rightarrow> 'a Formula.formula" ("_ \<^bold>U{_} _" [60,55,60] 60)
+  where "\<alpha> \<^bold>U{r} \<beta> \<equiv> \<alpha> \<^bold>U (point r) \<beta>"
+
+lemma sat_the_until_point: "\<langle>\<sigma>, V, v, i\<rangle> \<Turnstile>\<^sub>M \<alpha> \<^bold>U{r} \<beta>
+  \<longleftrightarrow> (\<exists>j\<ge>i. \<tau> \<sigma> j - \<tau> \<sigma> i = r \<and> \<langle>\<sigma>, V, v, j\<rangle> \<Turnstile>\<^sub>M \<beta> \<and> (\<forall>k\<in>{i..<j}. \<langle>\<sigma>, V, v, k\<rangle> \<Turnstile>\<^sub>M \<alpha>))"
+  using mem_point_diff_iff by auto
 
 lemma release_fvi:
   "Formula.fvi b (\<phi> \<^bold>R I \<psi>) = Formula.fvi b (release_safe_0 \<phi> I \<psi>)"

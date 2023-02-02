@@ -292,8 +292,10 @@ lemma imgage_in_foldl_pairw_union: "\<forall>x\<in>set xs. f x \<in> g x \<Longr
   by (induct xs, simp_all)
     (subst pairw_semiring1.foldl_times_one_expand, simp add: union_in_pairw_union)
 
+lemma image_eqD: "f ` A = B \<Longrightarrow> \<forall>x\<in>A. f x \<in> B"
+  by blast
 
-subsection \<open> Sets of safe free variables \<close>
+subsection \<open> Safety definition \<close>
 
 unbundle MFODL_notation \<comment> \<open> enable notation \<close>
 
@@ -313,6 +315,10 @@ lemma is_constraint_Neg_iff: "is_constraint (\<not>\<^sub>F \<alpha>) \<longleft
 lemma is_constraint_iff: "is_constraint \<alpha> \<longleftrightarrow> (\<exists>t1 t2. \<alpha> = t1 =\<^sub>F t2 \<or> \<alpha> = t1 <\<^sub>F t2 
   \<or> \<alpha> = t1 \<le>\<^sub>F t2 \<or> \<alpha> = \<not>\<^sub>F (t1 =\<^sub>F t2) \<or> \<alpha> = \<not>\<^sub>F (t1 <\<^sub>F t2) \<or> \<alpha> = \<not>\<^sub>F (t1 \<le>\<^sub>F t2))"
   by (cases \<alpha>, simp_all add: is_constraint_Neg_iff)
+
+lemma no_constr_neventually: "\<not> is_constraint (formula.Neg (Formula.eventually I \<phi>))"
+  unfolding eventually_def
+  by auto
 
 lemma no_constr_release_safe_bounded [simp]: 
   "\<not> is_constraint (release_safe_bounded \<phi>'' I \<psi>')"
@@ -354,6 +360,10 @@ lemmas safe_assignmentD = iffD1[OF safe_assignment_iff]
 lemma safe_assignment_Neg_iff[simp]: "safe_assignment X (\<not>\<^sub>F \<beta>) \<longleftrightarrow> False"
   unfolding safe_assignment_iff by auto
 
+lemma no_safe_assign_next: "\<not> safe_assignment X (formula.Next I \<phi>)"
+  unfolding safe_assignment_def
+  by auto
+
 lemma no_safe_assign_release_safe_bounded [simp]: 
   "\<not> safe_assignment X (release_safe_bounded \<phi>'' I \<psi>')"
   unfolding safe_assignment_iff release_safe_bounded_def 
@@ -364,7 +374,175 @@ lemma no_safe_assign_trigger: "\<not> safe_assignment (fv \<phi>) (formula.Trigg
   by auto
 
 
-subsection \<open> Safe formula predicate \<close>
+subsubsection \<open> Safety for let-past \<close>
+
+datatype rec_safety = Unused | PastRec | NonFutuRec | AnyRec
+
+instantiation rec_safety :: "{finite, bounded_semilattice_sup_bot, monoid_mult, mult_zero}"
+begin
+
+fun less_eq_rec_safety where
+  "Unused \<le> _ = True"
+| "PastRec \<le> PastRec = True"
+| "PastRec \<le> NonFutuRec = True"
+| "PastRec \<le> AnyRec = True"
+| "NonFutuRec \<le> NonFutuRec = True"
+| "NonFutuRec \<le> AnyRec = True"
+| "AnyRec \<le> AnyRec = True"
+| "(_::rec_safety) \<le> _ = False"
+
+definition "(x::rec_safety) < y \<longleftrightarrow> x \<le> y \<and> x \<noteq> y"
+
+definition [code_unfold]: "\<bottom> = Unused"
+
+fun sup_rec_safety where
+  "AnyRec \<squnion> _ = AnyRec"
+| "_ \<squnion> AnyRec = AnyRec"
+| "NonFutuRec \<squnion> _ = NonFutuRec"
+| "_ \<squnion> NonFutuRec = NonFutuRec"
+| "PastRec \<squnion> _ = PastRec"
+| "_ \<squnion> PastRec = PastRec"
+| "Unused \<squnion> Unused = Unused"
+
+definition [code_unfold]: "0 = Unused"
+definition [code_unfold]: "1 = NonFutuRec"
+
+fun times_rec_safety where
+  "Unused * _ = Unused"
+| "_ * Unused = Unused"
+| "AnyRec * _ = AnyRec"
+| "_ * AnyRec = AnyRec"
+| "PastRec * _ = PastRec"
+| "_ * PastRec = PastRec"
+| "NonFutuRec * NonFutuRec = NonFutuRec"
+
+instance proof
+  fix x y z :: rec_safety
+  have "x \<in> {Unused, PastRec, NonFutuRec, AnyRec}" for x
+    by (cases x) simp_all
+  then have UNIV_alt: "UNIV = \<dots>" by blast
+  show "finite (UNIV :: rec_safety set)"
+    unfolding UNIV_alt by blast
+  show "(x < y) = (x \<le> y \<and> \<not> y \<le> x)"
+    unfolding less_rec_safety_def
+    by (cases x; cases y) simp_all
+  show "x \<le> x"
+    by (cases x) simp_all
+  show "x \<le> y \<Longrightarrow> y \<le> z \<Longrightarrow> x \<le> z"
+    by (cases x; cases y; cases z) simp_all
+  show "x \<le> y \<Longrightarrow> y \<le> x \<Longrightarrow> x = y"
+    by (cases x; cases y) simp_all
+  show "x \<le> x \<squnion> y"
+    by (cases x; cases y) simp_all
+  show "y \<le> x \<squnion> y"
+    by (cases x; cases y) simp_all
+  show "y \<le> x \<Longrightarrow> z \<le> x \<Longrightarrow> y \<squnion> z \<le> x"
+    by (cases x; cases y; cases z) simp_all
+  show "\<bottom> \<le> x"
+    unfolding bot_rec_safety_def
+    by (cases x) simp_all
+  show "(x * y) * z = x * (y * z)"
+    by (cases x; cases y; cases z) simp_all
+  show "1 * x = x"
+    unfolding one_rec_safety_def
+    by (cases x) simp_all
+  show "x * 1 = x"
+    unfolding one_rec_safety_def
+    by (cases x) simp_all
+  show "0 * x = 0"
+    unfolding zero_rec_safety_def by simp
+  show "x * 0 = 0"
+    unfolding zero_rec_safety_def
+    by (cases x) simp_all
+qed
+
+end
+
+instantiation rec_safety :: Sup
+begin
+
+definition "\<Squnion> A = Finite_Set.fold (\<squnion>) Unused A"
+
+instance ..
+
+end
+
+lemma mult_commute: "(x::rec_safety) * y = y * x"
+  by (cases x; cases y; clarsimp)
+
+lemma mult_assoc: "(x::rec_safety) * y * z = x * (y * z)"
+  by (simp add: mult.assoc)
+
+lemma mult_sup_distrib: "(x::rec_safety) * (a \<squnion> b) = x * a \<squnion> x * b"
+  by (cases x; cases a; cases b; clarsimp)
+
+lemma (in semilattice_sup) comp_fun_idem_on_sup: "comp_fun_idem_on UNIV sup"
+  using comp_fun_idem_sup by (simp add: comp_fun_idem_def')
+
+lemma Sup_rec_safety_empty[simp]: "\<Squnion> {} = Unused"
+  by (simp add: Sup_rec_safety_def)
+
+lemma Sup_rec_safety_insert[simp]: "\<Squnion>(insert (x::rec_safety) A) = x \<squnion> \<Squnion>A"
+  by (simp add: Sup_rec_safety_def comp_fun_idem_on.fold_insert_idem[OF comp_fun_idem_on_sup])
+
+lemma Sup_rec_safety_union: "\<Squnion>((A::rec_safety set) \<union> B) = \<Squnion>A \<squnion> \<Squnion>B"
+  unfolding Sup_rec_safety_def
+  using finite[of A]
+  by (induction A rule: finite_induct) (simp_all flip: bot_rec_safety_def
+      add: comp_fun_idem_on.fold_insert_idem[OF comp_fun_idem_on_sup] sup_assoc)
+
+lemma sup_Unused[simp]: "x \<squnion> Unused = x" "Unused \<squnion> x = x"
+  by (simp_all flip: bot_rec_safety_def)
+
+lemma sup_eq_Unused_iff: "(x::rec_safety) \<squnion> y = Unused \<longleftrightarrow> x = Unused \<and> y = Unused"
+  by (cases x; cases y) simp_all
+
+lemma sup_eq_NonFutuRec_iff: "x \<squnion> y = NonFutuRec \<longleftrightarrow>
+    (x = NonFutuRec \<and> y \<le> NonFutuRec) \<or> (x \<le> NonFutuRec \<and> y = NonFutuRec)"
+  by (cases x; cases y) simp_all
+
+lemma Sup_rec_safety_le_iff: "\<Squnion> A \<le> (x::rec_safety) \<longleftrightarrow> (\<forall>y\<in>A. y \<le> x)"
+  unfolding Sup_rec_safety_def using finite[of A]
+  by (induction A rule: finite_induct)
+    (simp_all add: comp_fun_idem_on.fold_insert_idem[OF comp_fun_idem_on_sup])
+
+lemma le_Sup_rec_safety_iff: "(x::rec_safety) \<le> \<Squnion> A \<longleftrightarrow> (\<exists>y\<in>insert Unused A. x \<le> y)"
+  unfolding Sup_rec_safety_def using finite[of A]
+  apply (induction A rule: finite_induct)
+   apply (auto simp add: comp_fun_idem_on.fold_insert_idem[OF comp_fun_idem_on_sup]
+        bot.extremum_unique
+      simp flip: bot_rec_safety_def
+      intro: sup.coboundedI1 sup.coboundedI2)
+  by (smt (z3) sup_rec_safety.elims)
+
+lemma Sup_eq_Unused_iff: "\<Squnion> A = Unused \<longleftrightarrow> A \<subseteq> {Unused}"
+proof -
+  have "\<Squnion> A = Unused \<longleftrightarrow> \<Squnion> A \<le> Unused"
+    by (simp flip: bot_rec_safety_def add: bot_unique)
+  also have "\<dots> \<longleftrightarrow> (\<forall>y\<in>A. y \<le> Unused)"
+    unfolding Sup_rec_safety_le_iff ..
+  finally show ?thesis
+    by (auto simp flip: bot_rec_safety_def simp add: bot_unique)
+qed
+
+lemma mult_Unused[simp]: "x * Unused = Unused"
+  by (simp flip: zero_rec_safety_def)
+
+lemma mult_eq_Unused_iff: "(x::rec_safety) * y = Unused \<longleftrightarrow> x = Unused \<or> y = Unused"
+  by (cases x; cases y) simp_all
+
+lemma mult_le_NonFutuRec_iff:
+  "x * y \<le> NonFutuRec \<longleftrightarrow> x = Unused \<or> y = Unused \<or> x \<le> NonFutuRec \<and> y \<le> NonFutuRec"
+  by (cases x; cases y) simp_all
+
+lemma mult_le_NonFutuRec_cases:
+  assumes "x * y \<le> NonFutuRec"
+  obtains (unused1) "x = Unused" | (unused2) "y = Unused"
+  | (NonFutuRec) "x \<le> NonFutuRec" and "y \<le> NonFutuRec"
+  using assms by (auto simp add: mult_le_NonFutuRec_iff)
+
+lemma mult_eq_NonFutuRec_iff: "x * y = NonFutuRec \<longleftrightarrow> x = NonFutuRec \<and> y = NonFutuRec"
+  by (cases x; cases y) simp_all
 
 context begin
 
@@ -403,12 +581,21 @@ lemma safe_letpast_simps2[simp]:
   "safe_letpast p (once I \<phi>) = (if mem I 0 then NonFutuRec * safe_letpast p \<phi> else PastRec * safe_letpast p \<phi>)"
   by (simp_all add: Formula.TT_def eventually_def once_def bot_rec_safety_def[symmetric])
 
+lemma safe_letpast_Unused: "safe_letpast p \<phi> = Unused \<Longrightarrow> \<not> contains_pred p \<phi>"
+  by (induction \<phi> arbitrary: p) (auto simp add: sup_eq_Unused_iff Sup_eq_Unused_iff
+      mult_eq_Unused_iff split: if_splits)
+
+subsubsection \<open> Safety for dual operators \<close>
+
 fun remove_neg :: "'t Formula.formula \<Rightarrow> 't Formula.formula" 
   where "remove_neg (\<not>\<^sub>F \<phi>) = \<phi>"
   | "remove_neg \<phi> = \<phi>"
 
 lemma fvi_remove_neg[simp]: "Formula.fvi b (remove_neg \<phi>) = Formula.fvi b \<phi>"
   by (cases \<phi>) simp_all
+
+lemma fv_remove_neg: "fv \<phi> = fv (remove_neg \<phi>)"
+  by simp
 
 definition safe_dual where "
   safe_dual conjoined safety_pred \<phi> I \<psi> = (if mem I 0 then
@@ -425,7 +612,7 @@ lemma safe_dual_impl:
   using assms unfolding safe_dual_def 
   by (auto split: if_splits formula.splits)
 
-text \<open> Termination lemmas \<close>
+subsubsection \<open> Termination lemmas \<close>
 
 lemma size_remove_neg[termination_simp]: "size (remove_neg \<phi>) \<le> size \<phi>"
   by (cases \<phi>) simp_all
@@ -520,6 +707,9 @@ lemma size'_release_aux:
     always_safe_bounded_def always_safe_0_def eventually_def once_def 
     Formula.TT_def Formula.FF_def 
   by (auto split: formula.split)
+
+
+subsubsection \<open> Safe formula predicate \<close>
 
 function (sequential) safe_formula :: "'t Formula.formula \<Rightarrow> bool" 
   where "safe_formula (t1 =\<^sub>F t2) = (Formula.is_Const t1 
@@ -747,6 +937,9 @@ next
   qed
 qed (auto)
 
+
+subsubsection \<open> Safety for regexes \<close>
+
 definition safe_neg :: "'t Formula.formula \<Rightarrow> bool" where
   "safe_neg \<phi> \<longleftrightarrow> safe_formula (remove_neg \<phi>)"
 
@@ -804,8 +997,8 @@ qed
 lemma finite_safe_atms[simp]: "finite (safe_atms r)"
   by (induct r) (auto split: Formula.formula.splits)
 
-lemma disjE_Not2: "P \<or> Q \<Longrightarrow> (P \<Longrightarrow> R) \<Longrightarrow> (\<not>P \<Longrightarrow> Q \<Longrightarrow> R) \<Longrightarrow> R"
-  by blast
+
+subsubsection \<open> Induction principle for safety \<close>
 
 lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 Pred Let LetPast
     And_assign And_safe And_constraint And_Not And_Trigger And_Release
@@ -1518,7 +1711,6 @@ lemma sf_letpast_cmultiway_subst4:
   "safe_letpast p (convert_multiway (\<psi> \<and>\<^sub>F (\<^bold>X I Formula.TT))) 
   = safe_letpast p (convert_multiway \<psi>)"
   by (clarsimp simp: safe_assignment_iff Sup_rec_safety_union image_Un safe_letpast_get_and)
-    (metis bot_rec_safety_def sup_bot_left)
 
 lemma sf_letpast_cmultiway_subst5:
   "safe_letpast p (convert_multiway (always_safe_bounded I \<psi>))
