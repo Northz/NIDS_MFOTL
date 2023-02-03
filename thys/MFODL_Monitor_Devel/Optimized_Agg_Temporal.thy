@@ -1,6 +1,7 @@
 theory Optimized_Agg_Temporal
-  imports Optimized_Agg
-  Optimized_MTL
+  imports 
+    Optimized_Agg
+    Optimized_MTL
 begin
 
 type_synonym mmasaux = "event_data mmsaux \<times> aggaux option"

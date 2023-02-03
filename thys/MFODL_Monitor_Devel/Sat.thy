@@ -1,5 +1,5 @@
 theory Sat
-  imports Monitor
+  imports Correctness
 begin
 
 lemma ex_prefix_of': "\<exists>\<sigma>. prefix_of (\<pi> :: ('a \<Rightarrow> 'b set) prefix) \<sigma> \<and> (\<forall>x. \<forall>i \<ge> plen \<pi>. \<Gamma> \<sigma> i x = {})"
@@ -90,6 +90,8 @@ fun preds :: "'t Formula.formula \<Rightarrow> (Formula.name \<times> nat) set" 
 |  "preds (Formula.Next I \<phi>) = preds \<phi>"
 |  "preds (Formula.Since \<phi> I \<psi>) = (preds \<phi> \<union> preds \<psi>)"
 |  "preds (Formula.Until \<phi> I \<psi>) = (preds \<phi> \<union> preds \<psi>)"
+|  "preds (Formula.Trigger \<phi> I \<psi>) = (preds \<phi> \<union> preds \<psi>)"
+|  "preds (Formula.Release \<phi> I \<psi>) = (preds \<phi> \<union> preds \<psi>)"
 |  "preds (Formula.MatchP I r) = (\<Union>\<phi>\<in>Regex.atms r. preds \<phi>)"
 |  "preds (Formula.MatchF I r) =  (\<Union>\<phi>\<in>Regex.atms r. preds \<phi>)"
 |  "preds (Formula.TP t) = {}"
@@ -132,6 +134,8 @@ fun sat :: "trace \<Rightarrow> Formula.env \<Rightarrow> nat \<Rightarrow> ty F
 | "sat \<sigma> v i (Formula.Next I \<phi>) = (mem I ((\<tau> \<sigma> (Suc i) - \<tau> \<sigma> i)) \<and> sat \<sigma> v (Suc i) \<phi>)"
 | "sat \<sigma> v i (Formula.Since \<phi> I \<psi>) = (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> v j \<psi> \<and> (\<forall>k \<in> {j <.. i}. sat \<sigma> v k \<phi>))"
 | "sat \<sigma> v i (Formula.Until \<phi> I \<psi>) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> v j \<psi> \<and> (\<forall>k \<in> {i ..< j}. sat \<sigma> v k \<phi>))"
+| "sat \<sigma> v i (Formula.Trigger \<phi> I \<psi>) = (\<forall>j\<le>i. (mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)) \<longrightarrow> (sat \<sigma> v j \<psi> \<or> (\<exists>k \<in> {j <.. i}. sat \<sigma> v k \<phi>)))"
+| "sat \<sigma> v i (Formula.Release \<phi> I \<psi>) = (\<forall>j\<ge>i. (mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)) \<longrightarrow> (sat \<sigma> v j \<psi> \<or> (\<exists>k \<in> {i ..< j}. sat \<sigma> v k \<phi>)))"
 | "sat \<sigma> v i (Formula.MatchP I r) = (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> Regex.match (sat \<sigma> v) r j i)"
 | "sat \<sigma> v i (Formula.MatchF I r) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> Regex.match (sat \<sigma> v) r i j)"
 | "sat \<sigma> v i (Formula.TP t) = (Formula.eval_trm v t = EInt (integer_of_nat i))"
@@ -312,7 +316,7 @@ next
   moreover have "prefix_of \<pi> \<sigma>"
     using prefix_of_antimono[OF \<open>\<pi> \<le> \<pi>'\<close> \<open>prefix_of \<pi>' \<sigma>\<close>] .
   ultimately show ?case
-    by (simp add: pprogress_eq plen_mono Monitor.progress_mono)
+    by (simp add: pprogress_eq plen_mono Progress.progress_mono)
 next
   case (4 \<sigma> x)
   obtain j where "x \<le> progress (unconvert (preds \<phi>) \<sigma>) Map.empty \<phi> j"
@@ -337,14 +341,14 @@ next
     using 6(3) calculation
     by transfer (simp add: list_eq_iff_nth_eq)
   ultimately show ?case
-    by (simp add: pprogress_eq Monitor.progress_time_conv[where j="plen (punconvert (preds \<phi>) _)", simplified])
+    by (simp add: pprogress_eq Progress.progress_time_conv[where j="plen (punconvert (preds \<phi>) _)", simplified])
 qed
 
 context verimon
 begin
 
-lemma pprogress_punconvert: "Sat.pprogress \<phi> \<pi> = Monitor.pprogress \<phi> (punconvert (preds \<phi>) \<pi>)"
-  by (metis Monitor.pprogress_eq Sat.pprogress_eq ex_prefix_of plen_punconvert prefix_of_unconvert)
+lemma pprogress_punconvert: "Sat.pprogress \<phi> \<pi> = Correctness.pprogress \<phi> (punconvert (preds \<phi>) \<pi>)"
+  by (metis Correctness.pprogress_eq Sat.pprogress_eq ex_prefix_of plen_punconvert prefix_of_unconvert)
 
 lemma unconvert_in_traces: "(\<And>i pn. pn \<in> A \<Longrightarrow> \<forall>v \<in> \<Gamma> \<sigma> i pn. length v = snd pn \<longrightarrow> wty_event SIG (fst pn) v) \<Longrightarrow> unconvert A \<sigma> \<in> traces"
   unfolding convert_def unconvert_def traces_def wty_envs_def by auto
@@ -475,8 +479,8 @@ proof -
   from assms(1) have "wf_mformula (unconvert UNIV \<sigma>) j P (unconvertV (dom P) \<sigma>) n R \<phi> \<phi>'"
     unfolding invar_mformula_def by simp
   moreover
-  from assms(2) have "Monitor.wf_envs S (unconvert UNIV \<sigma>) j \<delta> P P' (unconvertV (dom P) \<sigma>) db"
-    unfolding wf_envs_def Monitor.wf_envs_def
+  from assms(2) have "Correct_Bin_Ops.wf_envs S (unconvert UNIV \<sigma>) j \<delta> P P' (unconvertV (dom P) \<sigma>) db"
+    unfolding wf_envs_def Correct_Bin_Ops.wf_envs_def
     apply clarsimp
     apply safe
     apply blast
@@ -493,7 +497,7 @@ proof -
     unfolding invar_mformula_def *
       sat_unconvert[where A = "dom P" and X = UNIV, simplified]
     by (subst (1 2) progress_unconvert[symmetric, where A = UNIV])
-      (rule meval[of "(unconvert UNIV \<sigma>)", unfolded \<tau>_unconvert])
+      (rule meval_correct[of "(unconvert UNIV \<sigma>)", unfolded \<tau>_unconvert])
 qed
 
 corollary meval_Map_empty:
@@ -512,7 +516,7 @@ lemma progress_convert_cong:
 
 lemma progress_regex_convert_cong:
   "convert \<sigma> V = convert \<sigma>' V' \<Longrightarrow> progress_regex \<sigma> P r j = progress_regex \<sigma>' P r j"
-  by (metis progress_convert_cong progress_simps(17))
+  by (metis progress_convert_cong progress_simps(19))
 
 lemma sat_convert_cong:
   "convert \<sigma> V = convert \<sigma>' V' \<Longrightarrow> Formula.sat \<sigma> V v i \<phi> = Formula.sat \<sigma>' V' v i \<phi>"
@@ -569,6 +573,12 @@ next
     using Ands.hyps(1) apply (simp add: wf_mbufn_def 1)
     by fact+
 next
+  case (And_Trigger P V n R \<alpha> \<alpha>' \<phi>'' I \<psi>' buf1 \<psi> args \<phi>' \<phi> buf2 nts aux)
+  then show ?case sorry
+next
+  case (And_Release I \<phi>' \<psi>' \<alpha>' P V n R buf L\<^sub>M R\<^sub>M)
+  then show ?case sorry
+next
   case (Or P V n R \<phi> \<phi>' \<psi> \<psi>' buf)
   then show ?case
     by (auto simp add: wf_mbuf2'_def progress_convert_cong[of \<sigma> V \<sigma>' V'] cong: sat_convert_cong
@@ -612,6 +622,12 @@ next
         progress_convert_cong[of \<sigma> V \<sigma>' V'] split del: if_split cong: if_cong) (* SLOW 30s *)
     by presburger
 next
+  case (Trigger_0 P V n R \<psi> \<psi>' args \<phi>'' \<phi>' \<phi> I buf nts aux)
+  then show ?case sorry
+next
+  case (Release_0 I \<phi>' \<psi>' P V n R buf L\<^sub>M R\<^sub>M)
+  then show ?case sorry
+next
   case (MatchP r P V n R \<phi>s mr mrs buf nts I aux)
   moreover have "Formula.sat \<sigma> V v i \<phi> = Formula.sat \<sigma>' V' v i \<phi>" for v i \<phi>
     by (simp_all add: MatchP.prems sat_convert_cong[of \<sigma> _ \<sigma>'])
@@ -650,7 +666,7 @@ lemma sat_unconvert_shadow: "Formula.sat (unconvert UNIV \<sigma>) ((unconvertV 
 
 lemma invar_mformula_Let:
   "invar_mformula \<sigma> j P m UNIV \<phi> \<phi>' \<Longrightarrow>
-   invar_mformula (\<sigma>((p, m) \<Rrightarrow> \<lambda>j. {w. Sat.sat \<sigma> w j \<phi>' \<and> length w = m})) j (P((p, m) \<mapsto> Monitor.progress \<sigma> P \<phi>' j)) n
+   invar_mformula (\<sigma>((p, m) \<Rrightarrow> \<lambda>j. {w. Sat.sat \<sigma> w j \<phi>' \<and> length w = m})) j (P((p, m) \<mapsto> Progress.progress \<sigma> P \<phi>' j)) n
    R \<psi> \<psi>' \<Longrightarrow> {0..<m} \<subseteq> fv \<phi>' \<Longrightarrow> m = Formula.nfv \<phi>' \<Longrightarrow>
    safe_formula \<phi>' \<Longrightarrow> safe_formula \<psi>' \<Longrightarrow>
    invar_mformula \<sigma> j P n R (MLet p m \<phi> \<psi>) (formula.Let p \<phi>' \<psi>')"

@@ -1,51 +1,13 @@
 (*<*)
 theory Correct_Agg
   imports
+    Monitor 
     Progress
-    Monitor
-    "MFOTL_Monitor_Devel.Abstract_Monitor"
-    "Generic_Join_Devel.Generic_Join_Correctness"
 begin
 (*>*)
 
-subsubsection \<open> Move \<close>
 
-(* TODO: move this to table *)
-
-lemma wf_tuple_map_Some: "length xs = n \<Longrightarrow> {0..<n} \<subseteq> A \<Longrightarrow> wf_tuple n A (map Some xs)"
-  unfolding wf_tuple_def by auto
-
-lemma wf_tuple_drop: "wf_tuple (b + n) A xs \<Longrightarrow> {x - b | x. x \<in> A \<and> x \<ge> b} = B \<Longrightarrow>
-  wf_tuple n B (drop b xs)"
-  unfolding wf_tuple_def by force
-
-lemma qtable_wf_tupleD: "qtable n A P Q X \<Longrightarrow> \<forall>x\<in>X. wf_tuple n A x"
-  unfolding qtable_def table_def by blast
-
-lemma wf_tuple_append: "wf_tuple a {x \<in> A. x < a} xs \<Longrightarrow>
-  wf_tuple b {x - a | x. x \<in> A \<and> x \<ge> a} ys \<Longrightarrow>
-  wf_tuple (a + b) A (xs @ ys)"
-  unfolding wf_tuple_def by (auto simp: nth_append eq_diff_iff)
-
-lemma list_all2_replicate[simp]: "list_all2 R (replicate m x) xs \<longleftrightarrow> length xs = m \<and> (\<forall>i < m. R x (xs ! i))"
-  by (auto simp: list_all2_conv_all_nth)
-
-lemma list_all2_replicate2[simp]: "list_all2 R xs (replicate m x) \<longleftrightarrow> length xs = m \<and> (\<forall>i < m. R (xs ! i) x)"
-  by (auto simp: list_all2_conv_all_nth)
-
-lemma wf_tuple_tabulate_Some: "wf_tuple n A (Table.tabulate f 0 n) \<Longrightarrow> x \<in> A \<Longrightarrow> x < n \<Longrightarrow> \<exists>y. f x = Some y"
-  unfolding wf_tuple_def by auto
-
-lemma wf_tuple_upd_None: "wf_tuple n A xs \<Longrightarrow> A - {i} = B \<Longrightarrow> wf_tuple n B (xs[i:=None])"
-  unfolding wf_tuple_def
-  by (auto simp: nth_list_update_alt)
-
-lemma mem_restr_upd_None: "mem_restr R xs \<Longrightarrow> mem_restr R (xs[i:=None])"
-  unfolding mem_restr_def
-  by (auto simp: list_all2_conv_all_nth nth_list_update_alt)
-
-
-subsubsection \<open> Aggregators \<close>
+subsection \<open> Lift envs \<close>
 
 definition lift_envs' :: "nat \<Rightarrow> event_data list set \<Rightarrow> event_data list set" where
   "lift_envs' b R = (\<lambda>(xs,ys). xs @ ys) ` ({xs. length xs = b} \<times> R)"
@@ -82,9 +44,15 @@ proof -
   qed
 qed
 
+
+subsection \<open> Aggregators' qtable \<close>
+
 definition "agg_n args = (case args_agg args of None \<Rightarrow> args_n args | Some aggargs \<Rightarrow> aggargs_n aggargs)"
 
 definition "agg_tys args = (case args_agg args of None \<Rightarrow> []           | Some aggargs \<Rightarrow> aggargs_tys aggargs)"
+
+lemma progress_packagg[simp]: "Progress.progress \<sigma> P (packagg args \<phi>) j = Progress.progress \<sigma> P \<phi> j"
+  by (auto simp: packagg_def split: option.splits)
 
 lemma qtable_eval_agg:
   assumes inner: "qtable (length tys + n) (Formula.fv \<phi>) (mem_restr (lift_envs' (length tys) R))
@@ -437,6 +405,7 @@ next
         fvi_iff_fv[where ?b="length (aggargs_tys aggargs)"] fvi_trm_iff_fv_trm[where ?b="length (aggargs_tys aggargs)"]
         dest!: x_in_colsD)
 qed
+
 
 (*<*)
 end

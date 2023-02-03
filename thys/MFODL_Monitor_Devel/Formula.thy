@@ -655,6 +655,9 @@ qed (auto 10 0 simp: Let_def split: nat.splits intro!: iff_exI)
 lemma sat_the_restrict: "fv \<phi> \<subseteq> A \<Longrightarrow> Formula.sat \<sigma> V (map the (restrict A v)) i \<phi> = Formula.sat \<sigma> V (map the v) i \<phi>"
   by (rule sat_fv_cong) (auto intro!: map_the_restrict)
 
+lemma sat_the_update: "y \<notin> fv \<phi> \<Longrightarrow> Formula.sat \<sigma> V (map the (x[y:=z])) i \<phi> = Formula.sat \<sigma> V (map the x) i \<phi>"
+  by (rule sat_fv_cong) (metis map_update nth_list_update_neq)
+
 lemma match_fv_cong:
   "\<forall>x\<in>fv_regex r. v!x = v'!x \<Longrightarrow> Regex.match (sat \<sigma> V v) r = Regex.match (sat \<sigma> V v') r"
   by (rule match_fv_cong, rule sat_fv_cong) (auto simp: fv_regex_alt)
@@ -662,6 +665,7 @@ lemma match_fv_cong:
 lemma eps_fv_cong:
   "\<forall>x\<in>fv_regex r. v!x = v'!x \<Longrightarrow> Regex.eps (sat \<sigma> V v) i r = Regex.eps (sat \<sigma> V v') i r"
   unfolding eps_match by (erule match_fv_cong[THEN fun_cong, THEN fun_cong])
+
 
 subsubsection \<open>Trigger / Release\<close>
 
@@ -824,11 +828,23 @@ definition and_trigger_safe_unbounded :: "'t formula \<Rightarrow> 't formula \<
 definition release_safe_0 :: "'t formula \<Rightarrow> \<I> \<Rightarrow> 't formula \<Rightarrow> 't formula" where
   "release_safe_0 \<phi> I \<psi> = Or (Until \<psi> I (And \<psi> \<phi>)) (always_safe_0 I \<psi>)"
 
+lemma fvi_release_safe_0[simp]:
+  "Formula.fvi b (release_safe_0 \<phi> I \<psi>) = Formula.fvi b \<phi> \<union> Formula.fvi b \<psi>"
+  by (auto simp add: release_safe_0_def always_safe_0_def)
+
 definition release_safe_bounded :: "'t formula \<Rightarrow> \<I> \<Rightarrow> 't formula \<Rightarrow> 't formula" where
   "release_safe_bounded \<phi> I \<psi> = And (eventually I TT) (Or (Or (always_safe_bounded I \<psi>) (eventually (flip_int_less_lower I) \<phi>)) (eventually (flip_int_less_lower I) (Next all (Until \<psi> (int_remove_lower_bound I) (And \<psi> \<phi>)))))"
 
+lemma fvi_release_safe_bounded[simp]: 
+  "Formula.fvi b (release_safe_bounded \<phi> I \<psi>) = Formula.fvi b \<phi> \<union> Formula.fvi b \<psi>"
+  by (auto simp add: release_safe_bounded_def always_safe_bounded_def)
+
 definition and_release_safe_bounded :: "'t formula \<Rightarrow> 't formula \<Rightarrow> \<I> \<Rightarrow> 't formula \<Rightarrow> 't formula" where
   "and_release_safe_bounded \<phi> \<phi>' I \<psi>' = (Or (And \<phi> (Neg (eventually I TT))) (And \<phi> (release_safe_bounded \<phi>' I \<psi>')))"
+
+lemma fvi_and_release_safe_bounded[simp]: 
+  "Formula.fvi b (and_release_safe_bounded \<phi> \<phi>'' I \<psi>') = Formula.fvi b \<phi> \<union> (Formula.fvi b \<phi>'' \<union> Formula.fvi b \<psi>')"
+  by (auto simp: and_release_safe_bounded_def release_safe_bounded_def always_safe_bounded_def)
 
 lemma since_true:
   assumes "\<not>mem I 0"

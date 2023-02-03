@@ -13,6 +13,9 @@ session MFODL_Monitor_Devel (AFP) = MFOTL_Monitor_Devel +
     Typing
     Optimized_Join
     Monitor
+    Correct_Un_Ops
+    Correct_Bin_Ops
+    Correctness
     Optimized_MTL
     Order_Statistic_Tree
     Tree_List

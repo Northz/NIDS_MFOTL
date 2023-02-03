@@ -153,17 +153,23 @@ next
   obtain t where t_def: "E \<turnstile> t1 :: t \<and> E \<turnstile> t2 :: t" using  And_assign(4) by (auto simp add: eq  elim: wty_formula.cases)
   have " Formula.sat \<sigma> V v i \<psi> = sat' \<sigma> V v i \<psi>" using  t_def And_assign(4,5) by (auto simp add: eq dest: poly_value_of )
   then show ?case using And_assign by (auto elim: wty_formula.cases)
-
 next
   case (And_constraint \<phi> \<psi>)
   have phi_eq: "Formula.sat \<sigma> V v i \<phi> = sat' \<sigma> V v i \<phi>" using And_constraint by (auto elim: wty_formula.cases)
   have psi_wty: "S, E \<turnstile> \<psi>" using And_constraint(7) by (auto elim: wty_formula.cases)
   show ?case using phi_eq And_constraint(5,8) psi_wty
-    by (cases \<psi> rule: is_constraint.cases) (auto simp add: undef_less_eq_sound undef_less_def less_event_data_def dest: poly_value_of  elim!: wty_formula.cases)
+    by (cases \<psi> rule: is_constraint.cases) 
+      (auto simp add: undef_less_eq_sound undef_less_def less_event_data_def dest: poly_value_of  elim!: wty_formula.cases)
 next
   case (And_Not \<phi> \<psi>)
   have "S, E \<turnstile> \<psi>" using And_Not.prems(1) by (auto elim: wty_formula.cases)
   then show ?case using And_Not by (auto elim: wty_formula.cases)
+next
+  case (And_Trigger \<phi> \<phi>' I \<psi>')
+  then show ?case sorry
+next
+  case (And_Release \<phi> \<phi>' I \<psi>')
+  then show ?case sorry
 next
   case (Ands l pos neg)
   have pos_IH: "\<phi> \<in> set pos \<Longrightarrow> S, E \<turnstile> \<phi> \<Longrightarrow> (\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y)  \<Longrightarrow>  wty_envs S \<sigma> V
@@ -261,30 +267,45 @@ next
   have psi_eq: "Formula.sat \<sigma> V v i \<psi> = sat' \<sigma> V v i \<psi>" for i  using Not_Until by (auto elim: wty_formula.cases)
   show ?case by (auto simp add: phi_eq psi_eq) 
 next
+  case (Trigger_0 \<phi> I \<psi>)
+  then show ?case sorry
+next
+  case (Trigger \<phi> I \<psi>)
+  then show ?case sorry
+next
+  case (Release_0 \<phi> I \<psi>)
+  then show ?case sorry
+next
+  case (Release \<phi> I \<psi>)
+  then show ?case sorry
+next
   case (MatchP I r)
-  from  MatchP(1) have "safe_regex Past Strict r \<or>safe_regex Past Lax r " by auto
+  from  MatchP(1) have "Regex.safe_regex fv rgx_safe_pred Past Strict r \<or> Regex.safe_regex fv rgx_safe_pred Past Lax r " by auto
   from this have atms_safe: " \<phi> \<in> regex.atms r \<Longrightarrow> safe_formula \<phi> \<or> (\<exists> \<psi>. \<phi> = Formula.Neg \<psi> \<and> safe_formula \<psi>)" for \<phi>
     using case_NegE  by (induction r) auto
-  have atms_regex_atms: " \<phi> \<in> atms r \<or> ( \<exists> \<psi>. \<phi> = Formula.Neg \<psi> \<and>  \<psi>\<in> atms r)" if assm: " \<phi> \<in> regex.atms r" for \<phi> 
+  have atms_regex_atms: " \<phi> \<in> safe_atms r \<or> ( \<exists> \<psi>. \<phi> = Formula.Neg \<psi> \<and>  \<psi>\<in> safe_atms r)" if assm: " \<phi> \<in> regex.atms r" for \<phi> 
     using assm atms_safe apply (induction r) by auto
-  from MatchP(4) have  " (\<phi> \<in> atms r \<Longrightarrow>\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y)" for \<phi> 
+  from MatchP(4) have  " (\<phi> \<in> safe_atms r \<Longrightarrow>\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y)" for \<phi> 
     apply auto apply (induction r) 
         apply (auto) subgoal for x y apply (cases "safe_formula x") by (auto split: formula.splits  ) done
-  from this  MatchP have IH: "\<phi>\<in>atms r \<Longrightarrow>Formula.sat \<sigma> V v i5 \<phi> = sat' \<sigma> V v i5 \<phi>" for \<phi> i5
+  from this  MatchP have IH: "\<phi> \<in> safe_atms r \<Longrightarrow>Formula.sat \<sigma> V v i5 \<phi> = sat' \<sigma> V v i5 \<phi>" for \<phi> i5
     using match_safe_wty_nfv[of \<phi> r I S E] by auto
   have other_IH: "\<phi> \<in> regex.atms r \<Longrightarrow> Formula.sat \<sigma> V v i5 \<phi> = sat' \<sigma> V v i5 \<phi>" for \<phi> i5 
     using atms_regex_atms[of \<phi>] IH by auto 
   then show ?case  using match_cong[OF refl other_IH, where ?r=r] by auto 
 next
   case (MatchF I r)
-  from  MatchF(1) have "safe_regex Futu Strict r \<or>safe_regex Futu Lax r " by auto
+  from  MatchF(1) have "Regex.safe_regex fv rgx_safe_pred Futu Strict r 
+  \<or> Regex.safe_regex fv rgx_safe_pred Futu Lax r " by auto
   from this have atms_safe: " \<phi> \<in> regex.atms r \<Longrightarrow> safe_formula \<phi> \<or> (\<exists> \<psi>. \<phi> = Formula.Neg \<psi> \<and> safe_formula \<psi>)" for \<phi>
     using case_NegE  by (induction r) auto
-  have atms_regex_atms: " \<phi> \<in> atms r \<or> ( \<exists> \<psi>. \<phi> = Formula.Neg \<psi> \<and>  \<psi>\<in> atms r)" if assm: " \<phi> \<in> regex.atms r" for \<phi> 
+  have atms_regex_atms: " \<phi> \<in> safe_atms r \<or> ( \<exists> \<psi>. \<phi> = Formula.Neg \<psi> \<and>  \<psi>\<in> safe_atms r)" 
+    if assm: " \<phi> \<in> regex.atms r" for \<phi> 
     using assm atms_safe apply (induction r) by auto
-  from MatchF(4) have  " (\<phi> \<in> atms r \<Longrightarrow>\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y)" for \<phi> apply auto apply (induction r ) 
+  from MatchF(4) have  " (\<phi> \<in> safe_atms r \<Longrightarrow>\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y)" for \<phi> 
+    apply auto apply (induction r ) 
         apply (auto) subgoal for x y apply (cases "safe_formula x") by (auto split: formula.splits  ) done
-  from this  MatchF have IH: "\<phi>\<in>atms r \<Longrightarrow>Formula.sat \<sigma> V v i5 \<phi> = sat' \<sigma> V v i5 \<phi>" for \<phi> i5
+  from this  MatchF have IH: "\<phi> \<in> safe_atms r \<Longrightarrow> Formula.sat \<sigma> V v i5 \<phi> = sat' \<sigma> V v i5 \<phi>" for \<phi> i5
     using match_safe_wty_nfv[of \<phi> r I S E] by auto
   have other_IH: "\<phi> \<in> regex.atms r \<Longrightarrow> Formula.sat \<sigma> V v i5 \<phi> = sat' \<sigma> V v i5 \<phi>" for \<phi> i5 
     using atms_regex_atms[of \<phi>] IH by auto 
@@ -346,13 +367,13 @@ next
     } ultimately show ?thesis by auto
   qed
   then have "Formula.sat \<sigma> ?V'' v i \<psi> = sat' \<sigma> ?V' v i \<psi>" unfolding V_eq[symmetric] by auto
-  then show ?case by(auto simp:Let_def) 
+  then show ?case by(auto simp:Let_def)
 next
   case (TP t)
   then show ?case by(auto simp:trm.is_Var_def trm.is_Const_def) 
 next
   case (TS t)
-  then show ?case by(auto simp:trm.is_Var_def trm.is_Const_def) 
+  then show ?case by(auto simp:trm.is_Var_def trm.is_Const_def)
 qed (auto elim: wty_formula.cases split: nat.splits)
 
 lemma soundness2: (*Theorem 3.12*)
@@ -365,5 +386,6 @@ lemma soundness2: (*Theorem 3.12*)
     ty_of_sat_safe[OF assms(1-3), of v i]
     ty_of_sat'_safe[OF assms(1-3), of v i] 
   by auto
+
 end
 end

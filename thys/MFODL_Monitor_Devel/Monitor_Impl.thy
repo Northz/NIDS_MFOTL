@@ -1,9 +1,7 @@
 (*<*)
 theory Monitor_Impl
-  imports Monitor
+  imports
     Optimized_Agg_Temporal
-    Optimized_Agg
-    Optimized_MTL
     "HOL-Library.Code_Target_Nat"
     Containers.Containers
     "Generic_Join_Devel.Proj_Code"

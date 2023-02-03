@@ -36,9 +36,6 @@ lemma hd_app: "hd (xs @ ys) = (case xs of [] \<Rightarrow> hd ys | x # _ \<Right
 lemma list_update_id2: "xs ! i = z \<Longrightarrow> xs[i:=z] = xs"
   by (induction xs arbitrary: i) (auto split: nat.split)
 
-lemma nth_list_update_alt: "xs[i := x] ! j = (if i < length xs \<and> i = j then x else xs ! j)"
-  by auto
-
 lemma nth_filter: "i < length (filter P xs) \<Longrightarrow>
   (\<And>i'. i' < length xs \<Longrightarrow> P (xs ! i') \<Longrightarrow> Q (xs ! i')) \<Longrightarrow> Q (filter P xs ! i)"
   by (metis (lifting) in_set_conv_nth set_filter mem_Collect_eq)
@@ -67,6 +64,12 @@ lemma list_all2_lastD:
   shows "P (j - 1) (last xs)"
   using assms list_all2_hdD(2)[OF assms, THEN less_imp_add_positive] unfolding list_all2_conv_all_nth
   by (auto dest!: spec[of _ "length xs - 1"] simp: last_conv_nth Suc_le_eq)
+
+lemma list_all2_replicate[simp]: "list_all2 R (replicate m x) xs \<longleftrightarrow> length xs = m \<and> (\<forall>i < m. R x (xs ! i))"
+  by (auto simp: list_all2_conv_all_nth)
+
+lemma list_all2_replicate2[simp]: "list_all2 R xs (replicate m x) \<longleftrightarrow> length xs = m \<and> (\<forall>i < m. R (xs ! i) x)"
+  by (auto simp: list_all2_conv_all_nth)
 
 lemma rel_mono_zip:
   assumes before: "list_all2 P1 x y"

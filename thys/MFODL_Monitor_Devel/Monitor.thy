@@ -1680,6 +1680,13 @@ fun eval_mtrm :: "nat \<Rightarrow> mtrm \<Rightarrow> event_data \<Rightarrow> 
   "eval_mtrm n (MVar v) x = singleton_table n v x"
 | "eval_mtrm n (MConst c) x = (if c = x then unit_table n else empty_table)"
 
+lemma qtable_eval_mtrm:
+  assumes "\<forall>x\<in>fv_trm t. x < n" 
+    and "trm.is_Var t \<or> trm.is_Const t"
+  shows "qtable n (fv_trm t) R (\<lambda>v. Formula.eval_trm (map the v) t = x) (eval_mtrm n (mtrm_of_trm t) x)"
+  using assms unfolding table_def Formula.is_Var_def Formula.is_Const_def
+  by (auto split: if_splits intro!: qtable_singleton_table qtable_unit_table qtable_empty)
+
 type_synonym database = "(Formula.name \<times> nat, event_data table list) mapping"
 
 context maux
@@ -1813,7 +1820,7 @@ lemmas size_snd_meval = psize_snd_meval[OF total_meval[THEN spec]]
 termination meval
   by (rule total_meval)
 
-end
+end (* fixes j *)
 
 lemma mformula_induct[case_names MRel MPred MLet MLetPast 
     MAnd MAndAssign MAndRel MAndTrigger MAnds MOr MNeg
@@ -1880,7 +1887,15 @@ lemma letpast_meval_induct[case_names step]:
   apply (metis size_snd_meval snd_conv)
   done
 
-end
+
+lemma letpast_meval_ys: 
+  "(ys', i', buf', \<phi>f) = letpast_meval m j i ys xs p ts db \<phi> \<Longrightarrow> \<exists> zs. ys' = ys@zs"
+  apply (induction i ys xs p ts db \<phi> arbitrary: i' buf' ys' \<phi>f taking: m j rule: letpast_meval_induct)
+  apply(subst(asm)(2) letpast_meval_code)
+  apply(fastforce simp add: Let_def split:prod.splits list.splits if_splits)
+  done
+
+end (* maux *)
 
 definition (in maux) mstep :: "database \<times> ts \<Rightarrow> ('msaux, 'muaux, 'mtaux) mstate \<Rightarrow>
     (nat \<times> ts \<times> event_data table) list \<times> ('msaux, 'muaux, 'mtaux) mstate" where
@@ -1913,11 +1928,12 @@ primrec msteps0_stateless where
 lemma msteps0_msteps0_stateless: "fst (msteps0 w st) = msteps0_stateless w st"
   by (induct w arbitrary: st) (auto simp: split_beta)
 
-lift_definition msteps :: "Formula.prefix \<Rightarrow> ('msaux, 'muaux, 'mtaux) mstate \<Rightarrow> (nat \<times> ts \<times> event_data table) list \<times> ('msaux, 'muaux, 'mtaux) mstate"
+lift_definition msteps :: "Formula.prefix \<Rightarrow> ('msaux, 'muaux, 'mtaux) mstate 
+  \<Rightarrow> (nat \<times> ts \<times> event_data table) list \<times> ('msaux, 'muaux, 'mtaux) mstate"
   is msteps0 .
 
-
-lift_definition msteps_stateless :: "Formula.prefix \<Rightarrow> ('msaux, 'muaux, 'mtaux) mstate \<Rightarrow> (nat \<times> ts \<times> event_data table) list"
+lift_definition msteps_stateless :: "Formula.prefix \<Rightarrow> ('msaux, 'muaux, 'mtaux) mstate 
+  \<Rightarrow> (nat \<times> ts \<times> event_data table) list"
   is msteps0_stateless .
 
 lemma msteps_msteps_stateless: "fst (msteps w st) = msteps_stateless w st"
@@ -1934,7 +1950,7 @@ lemma msteps_psnoc: "last_ts \<pi> \<le> snd tdb \<Longrightarrow> msteps (psnoc
 definition monitor where
   "monitor \<phi> \<pi> = msteps_stateless \<pi> (minit_safe \<phi>)"
 
-end
+end (* maux *)
 
 
 (*<*)

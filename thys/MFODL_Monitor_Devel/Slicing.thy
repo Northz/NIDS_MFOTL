@@ -235,6 +235,8 @@ fun inputs :: "'a Formula.formula \<Rightarrow> (Formula.name \<times> nat optio
 | "inputs (Formula.Next I \<phi>) = inputs \<phi>"
 | "inputs (Formula.Since \<phi> I \<psi>) = inputs \<phi> \<union> inputs \<psi>"
 | "inputs (Formula.Until \<phi> I \<psi>) = inputs \<phi> \<union> inputs \<psi>"
+| "inputs (Formula.Trigger \<phi> I \<psi>) = inputs \<phi> \<union> inputs \<psi>"
+| "inputs (Formula.Release \<phi> I \<psi>) = inputs \<phi> \<union> inputs \<psi>"
 | "inputs (Formula.MatchP I r) = (\<Union>\<phi>\<in>Regex.atms r. inputs \<phi>)"
 | "inputs (Formula.MatchF I r) = (\<Union>\<phi>\<in>Regex.atms r. inputs \<phi>)"
 | "inputs (Formula.TP t) = {}"
@@ -313,6 +315,12 @@ next
   then show ?case by auto
 next
   case (Until \<phi> I \<psi>)
+  then show ?case by auto
+next
+  case (Trigger \<phi> I \<psi>)
+  then show ?case by auto
+next
+  case (Release \<phi> I \<psi>)
   then show ?case by auto
 next
   case (MatchF I r)
@@ -417,6 +425,12 @@ next
   then show ?case by fastforce
 next
   case (Until \<phi> I \<psi>)
+  then show ?case by fastforce
+next
+  case (Trigger \<phi> I \<psi>)
+  then show ?case by fastforce
+next
+  case (Release \<phi> I \<psi>)
   then show ?case by fastforce
 next
   case (MatchF I r)
@@ -844,6 +858,14 @@ next
     qed
   qed
 next
+  case (Trigger \<phi> I \<psi>)
+  show ?case
+    sorry
+next
+  case (Release \<phi> I \<psi>)
+  show ?case
+    sorry
+next
   case (MatchF I r)
   then obtain \<phi> where "\<phi> \<in> Regex.atms r" "Safety.matches v \<phi> (q, as)"
     by auto
@@ -905,6 +927,8 @@ fun genvar :: "'a Formula.formula \<Rightarrow> bool \<Rightarrow> nat \<Rightar
 (* The following cases could be made more precise. *)
 | "genvar (Formula.Since \<phi> I \<psi>) pos x q n c k = ((pos \<or> mem I 0) \<and> genvar \<psi> pos x q n c k)"
 | "genvar (Formula.Until \<phi> I \<psi>) pos x q n c k = ((pos \<or> mem I 0) \<and> genvar \<psi> pos x q n c k)"
+| "genvar (Formula.Trigger \<phi> I \<psi>) pos x q n c k = ((pos \<or> mem I 0) \<and> genvar \<psi> pos x q n c k)"
+| "genvar (Formula.Release \<phi> I \<psi>) pos x q n c k = ((pos \<or> mem I 0) \<and> genvar \<psi> pos x q n c k)"
 | "genvar (Formula.MatchP I r) pos x q n c k = False"
 | "genvar (Formula.MatchF I r) pos x q n c k = False"
 | "genvar (Formula.TP t) pos x q n c k = False"
@@ -1202,6 +1226,14 @@ next
       apply simp
      apply (rule Until.prems(1))
     by auto
+next
+  case (Trigger \<phi> I \<psi>)
+  show ?case
+    sorry
+next
+  case (Release \<phi> I \<psi>)
+  show ?case
+    sorry
 next
   case (MatchF I r)
   then show ?case by simp

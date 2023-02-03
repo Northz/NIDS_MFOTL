@@ -30,6 +30,12 @@ lemma wf_tuple_Cons[simp]:
   unfolding wf_tuple_def
   by (auto 0 3 simp: nth_Cons image_iff Ball_def gr0_conv_Suc Suc_pred' split: nat.splits)
 
+lemma wf_tuple_append: "wf_tuple a {x \<in> A. x < a} xs \<Longrightarrow>
+  wf_tuple b {x - a | x. x \<in> A \<and> x \<ge> a} ys \<Longrightarrow>
+  wf_tuple (a + b) A (xs @ ys)"
+  unfolding wf_tuple_def 
+  by (auto simp: nth_append eq_diff_iff)
+
 lemma wf_tuple_Suc: "wf_tuple (Suc m) A a \<longleftrightarrow> a \<noteq> [] \<and>
    wf_tuple m ((\<lambda>x. x - 1) ` (A - {0})) (tl a) \<and> (0 \<in> A \<longleftrightarrow> hd a \<noteq> None)"
   by (cases a) (auto simp: nth_Cons image_iff split: nat.splits)
@@ -51,6 +57,24 @@ proof -
   qed simp
 qed
 
+lemma nth_list_update_alt: 
+  "xs[i := x] ! j = (if i < length xs \<and> i = j then x else xs ! j)"
+  by auto
+
+lemma wf_tuple_upd_None: "wf_tuple n A xs \<Longrightarrow> A - {i} = B \<Longrightarrow> wf_tuple n B (xs[i:=None])"
+  unfolding wf_tuple_def
+  by (auto simp: nth_list_update_alt)
+
+lemma wf_tuple_map_Some: "length xs = n \<Longrightarrow> {0..<n} \<subseteq> A 
+  \<Longrightarrow> wf_tuple n A (map Some xs)"
+  unfolding wf_tuple_def 
+  by auto
+
+lemma wf_tuple_drop: "wf_tuple (b + n) A xs \<Longrightarrow> {x - b | x. x \<in> A \<and> x \<ge> b} = B 
+  \<Longrightarrow> wf_tuple n B (drop b xs)"
+  unfolding wf_tuple_def 
+  by force
+
 lemma eq_replicate_None_iff:
   "v = replicate n None \<longleftrightarrow> length v = n \<and> (\<forall>i<n. v ! i = None)"
   by (metis length_replicate nth_equalityI nth_replicate)
@@ -71,6 +95,12 @@ lemma wf_tuple_nemptyD:
 
 definition table :: "nat \<Rightarrow> nat set \<Rightarrow> 'a table \<Rightarrow> bool" where
   "table n V X \<longleftrightarrow> (\<forall>x\<in>X. wf_tuple n V x)"
+
+lemma tableI: "(\<And>rs. rs \<in> R \<Longrightarrow> wf_tuple n X rs) \<Longrightarrow> table n X R"
+  unfolding table_def by auto
+
+lemma tableD: "table n X R \<Longrightarrow> rs \<in> R \<Longrightarrow> wf_tuple n X rs"
+  unfolding table_def by auto
 
 lemma table_Un[simp]: "table n V X \<Longrightarrow> table n V Y \<Longrightarrow> table n V (X \<union> Y)"
   unfolding table_def by auto
@@ -205,6 +235,10 @@ proof (induction n arbitrary: x k)
   case (Suc n)
   then show ?case by (cases k) simp_all
 qed simp
+
+lemma wf_tuple_tabulate_Some: "wf_tuple n A (Table.tabulate f 0 n) 
+  \<Longrightarrow> x \<in> A \<Longrightarrow> x < n \<Longrightarrow> \<exists>y. f x = Some y"
+  unfolding wf_tuple_def by auto
 
 definition "singleton_table n i x = {tabulate (\<lambda>j. if i = j then Some x else None) 0 n}"
 
@@ -973,6 +1007,10 @@ definition qtable :: "nat \<Rightarrow> nat set \<Rightarrow> ('a tuple \<Righta
   'a table \<Rightarrow> bool" where
   "qtable n A P Q X \<longleftrightarrow> table n A X \<and> (\<forall>x. (x \<in> X \<and> P x \<longrightarrow> Q x) \<and> (wf_tuple n A x \<and> P x \<and> Q x \<longrightarrow> x \<in> X))"
 
+lemma qtable_wf_tupleD: "qtable n A P Q X \<Longrightarrow> \<forall>x\<in>X. wf_tuple n A x"
+  unfolding qtable_def 
+  using tableD by blast
+
 lemma qtable_iff: "qtable n X P Q R \<longleftrightarrow> 
   (table n X R \<and> (\<forall>v. P v \<longrightarrow> v \<in> R \<longleftrightarrow> (Q v \<and> wf_tuple n X v)))"
   by (auto simp: qtable_def table_def)
@@ -986,6 +1024,10 @@ lemma qtable_cong_strong: "A = B \<Longrightarrow> (\<And>v. wf_tuple n A v \<Lo
   apply (auto simp: qtable_def fun_eq_iff)
   using table_def by blast+
 
+lemma qtable_wf_tuple_cong: "qtable n A P Q X \<Longrightarrow> A = B 
+  \<Longrightarrow> (\<And>v. wf_tuple n A v \<Longrightarrow> P v \<Longrightarrow> Q v = Q' v) \<Longrightarrow> qtable n B P Q' X"
+  using qtable_cong_strong[of A B n P Q] by simp
+
 lemma qtable_unique_vars:
   "R \<noteq> {} \<Longrightarrow> X \<subseteq> {m. m < n} \<Longrightarrow> Y \<subseteq> {m. m < n} \<Longrightarrow> table n X R \<Longrightarrow> table n Y R \<Longrightarrow> X = Y"
   by (auto simp: table_def wf_tuple_def subset_eq)
@@ -993,6 +1035,11 @@ lemma qtable_unique_vars:
 lemma qtable_unique_pred:
   "qtable n X P Q1 R \<Longrightarrow> qtable n X P Q2 R \<Longrightarrow> (\<forall>v. P v \<longrightarrow> wf_tuple n X v \<longrightarrow> Q1 v = Q2 v)"
   by (auto simp: qtable_iff fun_eq_iff)
+
+lemma qtable_singleton_table: 
+  "i < n \<Longrightarrow> qtable n {i} R (\<lambda>v. map the v ! i = x) (singleton_table n i x)"
+  unfolding qtable_def singleton_table_def table_def wf_tuple_def
+  by (auto simp add: list_eq_iff_nth_eq)
 
 abbreviation wf_table where
   "wf_table n A Q X \<equiv> qtable n A (\<lambda>_. True) Q X"
@@ -1021,7 +1068,8 @@ lemma qtableD:
     and "P v \<Longrightarrow> v \<in> R \<Longrightarrow> Q v"
     and "P v \<Longrightarrow> v \<in> R \<Longrightarrow> wf_tuple n X v"
     and "P v \<Longrightarrow> Q v \<Longrightarrow> wf_tuple n X v \<Longrightarrow> v \<in> R"
-  using assms unfolding qtable_iff by auto
+  using assms 
+  unfolding qtable_iff by auto
 
 lemma qtable_empty_vars_iff: 
   "qtable n {} P Q R \<longleftrightarrow> (R = empty_table \<or> R = unit_table n) 
@@ -1266,6 +1314,10 @@ lemma mem_restr_Un_iff: "mem_restr (A \<union> B) x \<longleftrightarrow> mem_re
 lemma mem_restr_UNIV [simp]: "mem_restr UNIV x"
   unfolding mem_restr_def
   by (auto simp add: list.rel_map intro!: exI[of _ "map the x"] list.rel_refl)
+
+lemma mem_restr_upd_None: "mem_restr R xs \<Longrightarrow> mem_restr R (xs[i:=None])"
+  unfolding mem_restr_def
+  by (auto simp: list_all2_conv_all_nth nth_list_update_alt)
 
 lemma restrict_mem_restr[simp]: "mem_restr A x \<Longrightarrow> mem_restr A (restrict V x)"
   unfolding mem_restr_def restrict_def

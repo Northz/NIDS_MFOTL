@@ -1,12 +1,14 @@
 (*<*)
 theory Correct_Since
-  imports
-    Correct_Agg
+  imports Correct_Agg
 begin
 (*>*)
 
 
-subsubsection \<open> Since \<close>
+subsection \<open> Since \<close>
+
+
+subsubsection \<open> Buffers \<close>
 
 definition "Sincep pos \<phi> I \<psi> \<equiv> Formula.Since (if pos then \<phi> else Formula.Neg \<phi>) I \<psi>"
 
@@ -25,34 +27,6 @@ fun wf_mbuf2S :: "Formula.trace \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> na
       [pIn ..< progress \<sigma> P \<psi> j] buf\<psi> \<and>
     list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [pOut ..< j] ts \<and>
     pOut = (if skew then Suc pIn else pIn)"
-
-definition "sat_since_point pos \<sigma> V \<phi> \<psi> pIn i t x \<longleftrightarrow>
-  (\<exists>j<pIn. \<tau> \<sigma> j = t \<and> Formula.sat \<sigma> V x j \<psi> \<and>
-    (\<forall>k\<in>{j<..i}. if pos then Formula.sat \<sigma> V x k \<phi> else \<not> Formula.sat \<sigma> V x k \<phi>))"
-
-definition (in msaux) wf_since_aux :: "Formula.trace \<Rightarrow> _ \<Rightarrow> event_data list set \<Rightarrow> args \<Rightarrow>
-  ty Formula.formula \<Rightarrow> ty Formula.formula \<Rightarrow> 'msaux \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool" where
-  "wf_since_aux \<sigma> V R args \<phi> \<psi> aux pIn pOut \<longleftrightarrow> pIn \<le> pOut \<and>
-    valid_aggargs (args_n args) (Formula.fv \<psi>) (args_agg args) \<and> 
-    (\<exists>auxlist. valid_msaux args (if pOut = 0 then 0 else \<tau> \<sigma> (pOut-1)) aux auxlist \<and>
-      sorted_wrt (\<lambda>x y. fst x > fst y) auxlist \<and>
-      (\<forall>t X. (t, X) \<in> set auxlist \<longrightarrow>
-        (\<exists>i<pIn. \<tau> \<sigma> i = t) \<and> memR (args_ivl args) (\<tau> \<sigma> (pOut-1) - t) \<and>
-        qtable (args_n args) (fv \<psi>) (mem_restr R)
-          (\<lambda>x. sat_since_point (args_pos args) \<sigma> V \<phi> \<psi> pIn (pOut-1) t (map the x)) X) \<and>
-      (\<forall>i<pIn. memR (args_ivl args) (\<tau> \<sigma> (pOut-1) - \<tau> \<sigma> i) \<longrightarrow> (\<exists>X. (\<tau> \<sigma> i, X) \<in> set auxlist)))"
-
-lemma (in msaux) wf_since_aux_UNIV_alt:
-  "wf_since_aux \<sigma> V UNIV args \<phi> \<psi> aux pIn pOut \<longleftrightarrow> pIn \<le> pOut \<and>
-    valid_aggargs (args_n args) (Formula.fv \<psi>) (args_agg args) \<and>
-    (\<exists>auxlist. valid_msaux args (if pOut = 0 then 0 else \<tau> \<sigma> (pOut-1)) aux auxlist \<and>
-      sorted_wrt (\<lambda>x y. fst x > fst y) auxlist \<and>
-      (\<forall>t X. (t, X) \<in> set auxlist \<longrightarrow>
-        (\<exists>i<pIn. \<tau> \<sigma> i = t) \<and> memR (args_ivl args) (\<tau> \<sigma> (pOut-1) - t) \<and>
-        wf_table (args_n args) (fv \<psi>)
-          (\<lambda>x. sat_since_point (args_pos args) \<sigma> V \<phi> \<psi> pIn (pOut-1) t (map the x)) X) \<and>
-      (\<forall>i<pIn. memR (args_ivl args) (\<tau> \<sigma> (pOut-1) - \<tau> \<sigma> i) \<longrightarrow> (\<exists>X. (\<tau> \<sigma> i, X) \<in> set auxlist)))"
-  unfolding wf_since_aux_def qtable_mem_restr_UNIV ..
 
 lemma wf_mbuf2S_add:
   assumes wf: "wf_mbuf2S \<sigma> P V j n R \<phi> I \<psi> buf (min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j)) (progress \<sigma> P (Sincep pos \<phi> I \<psi>) j)"
@@ -113,6 +87,68 @@ proof -
   qed
 qed
 
+
+subsubsection \<open> Invariants \<close>
+
+definition "sat_since_point pos \<sigma> V \<phi> \<psi> pIn i t x \<longleftrightarrow>
+  (\<exists>j<pIn. \<tau> \<sigma> j = t \<and> Formula.sat \<sigma> V x j \<psi> \<and>
+    (\<forall>k\<in>{j<..i}. if pos then Formula.sat \<sigma> V x k \<phi> else \<not> Formula.sat \<sigma> V x k \<phi>))"
+
+lemma sat_since_point_Suc: "sat_since_point pos \<sigma> V \<phi> \<psi> (Suc i) i (\<tau> \<sigma> i) x =
+    (sat_since_point pos \<sigma> V \<phi> \<psi> i i (\<tau> \<sigma> i) x \<or> Formula.sat \<sigma> V x i \<psi>)"
+  unfolding sat_since_point_def
+  apply auto
+  using less_antisym apply blast
+  by (meson less_Suc_eq)
+
+lemma sat_since_point_Suc': "t < \<tau> \<sigma> i \<Longrightarrow>
+    sat_since_point pos \<sigma> V \<phi> \<psi> (Suc i) i t x = sat_since_point pos \<sigma> V \<phi> \<psi> i i t x"
+  unfolding sat_since_point_def
+  apply auto
+  using less_\<tau>D apply blast
+  by (metis less_Suc_eq)
+
+lemma sat_Sincep_alt: "pIn = Suc i \<or> \<not> memL I (\<tau> \<sigma> i - \<tau> \<sigma> pIn) \<Longrightarrow>
+  Formula.sat \<sigma> V x i (Sincep pos \<phi> I \<psi>) \<longleftrightarrow>
+  (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat_since_point pos \<sigma> V \<phi> \<psi> pIn i (\<tau> \<sigma> j) x)"
+  unfolding Sincep_def sat_since_point_def
+  apply (auto simp add: less_Suc_eq_le)
+  apply blast
+      apply blast
+     apply (metis (no_types, lifting) diff_le_mono2 less_\<tau>D memL_mono not_le)
+    apply (metis (no_types, lifting) \<tau>_mono diff_is_0_eq dual_order.strict_trans le_eq_less_or_eq not_le_imp_less)
+   apply (metis (no_types, lifting) diff_le_mono2 less_\<tau>D memL_mono not_le)
+  by (metis (no_types, lifting) \<tau>_mono diff_is_0_eq dual_order.strict_trans le_eq_less_or_eq linear)
+
+definition (in msaux) wf_since_aux :: "Formula.trace \<Rightarrow> _ \<Rightarrow> event_data list set \<Rightarrow> args \<Rightarrow>
+  ty Formula.formula \<Rightarrow> ty Formula.formula \<Rightarrow> 'msaux \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool" where
+  "wf_since_aux \<sigma> V R args \<phi> \<psi> aux pIn pOut \<longleftrightarrow> pIn \<le> pOut \<and>
+    valid_aggargs (args_n args) (Formula.fv \<psi>) (args_agg args) \<and> 
+    (\<exists>auxlist. valid_msaux args (if pOut = 0 then 0 else \<tau> \<sigma> (pOut-1)) aux auxlist \<and>
+      sorted_wrt (\<lambda>x y. fst x > fst y) auxlist \<and>
+      (\<forall>t X. (t, X) \<in> set auxlist \<longrightarrow>
+        (\<exists>i<pIn. \<tau> \<sigma> i = t) \<and> memR (args_ivl args) (\<tau> \<sigma> (pOut-1) - t) \<and>
+        qtable (args_n args) (fv \<psi>) (mem_restr R)
+          (\<lambda>x. sat_since_point (args_pos args) \<sigma> V \<phi> \<psi> pIn (pOut-1) t (map the x)) X) \<and>
+      (\<forall>i<pIn. memR (args_ivl args) (\<tau> \<sigma> (pOut-1) - \<tau> \<sigma> i) \<longrightarrow> (\<exists>X. (\<tau> \<sigma> i, X) \<in> set auxlist)))"
+
+lemma (in msaux) wf_since_aux_Nil: "Formula.fv \<phi>' \<subseteq> Formula.fv \<psi>' \<Longrightarrow>
+  valid_aggargs n (Formula.fv \<psi>') agg \<Longrightarrow> 
+  wf_since_aux \<sigma> V R (init_args I n (Formula.fv \<phi>') (Formula.fv \<psi>') b agg) \<phi>' \<psi>' (init_msaux (init_args I n (Formula.fv \<phi>') (Formula.fv \<psi>') b agg)) 0 0"
+  unfolding wf_since_aux_def by (auto intro!: valid_init_msaux) (simp add:init_args_def)
+
+lemma (in msaux) wf_since_aux_UNIV_alt:
+  "wf_since_aux \<sigma> V UNIV args \<phi> \<psi> aux pIn pOut \<longleftrightarrow> pIn \<le> pOut \<and>
+    valid_aggargs (args_n args) (Formula.fv \<psi>) (args_agg args) \<and>
+    (\<exists>auxlist. valid_msaux args (if pOut = 0 then 0 else \<tau> \<sigma> (pOut-1)) aux auxlist \<and>
+      sorted_wrt (\<lambda>x y. fst x > fst y) auxlist \<and>
+      (\<forall>t X. (t, X) \<in> set auxlist \<longrightarrow>
+        (\<exists>i<pIn. \<tau> \<sigma> i = t) \<and> memR (args_ivl args) (\<tau> \<sigma> (pOut-1) - t) \<and>
+        wf_table (args_n args) (fv \<psi>)
+          (\<lambda>x. sat_since_point (args_pos args) \<sigma> V \<phi> \<psi> pIn (pOut-1) t (map the x)) X) \<and>
+      (\<forall>i<pIn. memR (args_ivl args) (\<tau> \<sigma> (pOut-1) - \<tau> \<sigma> i) \<longrightarrow> (\<exists>X. (\<tau> \<sigma> i, X) \<in> set auxlist)))"
+  unfolding wf_since_aux_def qtable_mem_restr_UNIV ..
+
 lemma (in msaux) wf_since_aux_update1:
   assumes wf: "wf_since_aux \<sigma> V R args \<phi> \<psi> aux pIn pOut"
     and t_eq: "t = \<tau> \<sigma> pOut"
@@ -155,20 +191,6 @@ lemma (in msaux) wf_since_aux_update1:
         (meson memR_antimono \<tau>_mono diff_le_mono diff_le_self)
     done
   done
-
-lemma sat_since_point_Suc: "sat_since_point pos \<sigma> V \<phi> \<psi> (Suc i) i (\<tau> \<sigma> i) x =
-    (sat_since_point pos \<sigma> V \<phi> \<psi> i i (\<tau> \<sigma> i) x \<or> Formula.sat \<sigma> V x i \<psi>)"
-  unfolding sat_since_point_def
-  apply auto
-  using less_antisym apply blast
-  by (meson less_Suc_eq)
-
-lemma sat_since_point_Suc': "t < \<tau> \<sigma> i \<Longrightarrow>
-    sat_since_point pos \<sigma> V \<phi> \<psi> (Suc i) i t x = sat_since_point pos \<sigma> V \<phi> \<psi> i i t x"
-  unfolding sat_since_point_def
-  apply auto
-  using less_\<tau>D apply blast
-  by (metis less_Suc_eq)
 
 lemma (in msaux) wf_since_aux_update2:
   assumes wf: "wf_since_aux \<sigma> V R args \<phi> \<psi> aux pIn pOut"
@@ -264,18 +286,6 @@ lemma (in msaux) wf_since_aux_update2:
       done
     done
   done
-
-lemma sat_Sincep_alt: "pIn = Suc i \<or> \<not> memL I (\<tau> \<sigma> i - \<tau> \<sigma> pIn) \<Longrightarrow>
-  Formula.sat \<sigma> V x i (Sincep pos \<phi> I \<psi>) \<longleftrightarrow>
-  (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat_since_point pos \<sigma> V \<phi> \<psi> pIn i (\<tau> \<sigma> j) x)"
-  unfolding Sincep_def sat_since_point_def
-  apply (auto simp add: less_Suc_eq_le)
-  apply blast
-      apply blast
-     apply (metis (no_types, lifting) diff_le_mono2 less_\<tau>D memL_mono not_le)
-    apply (metis (no_types, lifting) \<tau>_mono diff_is_0_eq dual_order.strict_trans le_eq_less_or_eq not_le_imp_less)
-   apply (metis (no_types, lifting) diff_le_mono2 less_\<tau>D memL_mono not_le)
-  by (metis (no_types, lifting) \<tau>_mono diff_is_0_eq dual_order.strict_trans le_eq_less_or_eq linear)
 
 lemma (in msaux) wf_since_aux_result':
   assumes valid_msaux: 

@@ -1,7 +1,8 @@
 (*<*)
 theory Typing
-  imports Safety
-  Error_Monad
+  imports 
+    Safety
+    Error_Monad
 begin
 (*>*)
 
