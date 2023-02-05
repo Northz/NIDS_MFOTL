@@ -25,7 +25,6 @@ session MFODL_Monitor_Devel (AFP) = MFOTL_Monitor_Devel +
     Mapping_Code
     Wf_Table
     Monitor_Impl
-    Sat
   theories [document=false]
     Monitor_Code
   document_files

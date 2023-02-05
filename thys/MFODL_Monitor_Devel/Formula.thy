@@ -5,7 +5,6 @@ theory Formula
     Preliminaries
     Regex
     "MFOTL_Monitor_Devel.Abstract_Monitor"
-    "HOL-Library.Mapping"
     Containers.Set_Impl
 begin
 (*>*)

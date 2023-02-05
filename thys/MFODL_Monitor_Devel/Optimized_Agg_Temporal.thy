@@ -1,7 +1,8 @@
 theory Optimized_Agg_Temporal
   imports 
     Optimized_Agg
-    Optimized_MTL
+    Optimized_Since
+    Optimized_Until
 begin
 
 type_synonym mmasaux = "event_data mmsaux \<times> aggaux option"
@@ -620,10 +621,10 @@ proof -
   have tp_minus_keys': "tp - len + 1 \<in> Mapping.keys a2_map"
     using a2_map_keys len_pos len_tp by auto
   obtain m where m_def: "Mapping.lookup a2_map (tp - len) = Some m"
-    using tp_minus_keys by (auto dest: Mapping_keys_dest)
+    using tp_minus_keys by (auto dest: Mapping.in_keysD)
   have res_eq: "result = Mapping.keys m" using assms(1) m_def by auto
   obtain m' where m'_def: "Mapping.lookup a2_map (tp - len + 1) = Some m'"
-    using tp_minus_keys' by (auto dest: Mapping_keys_dest)
+    using tp_minus_keys' by (auto dest: Mapping.in_keysD)
   obtain muaux' auxs' where updated_def: "(muaux', auxs') = eval_step_mmauaux args (?muaux, aggaux)" 
     by (smt (z3) lin_ts_mmauaux.cases)
   then obtain tp' tss''' tables' len' maskL' maskR' result' a1_map' a2_map' tstp_map' done' where split:

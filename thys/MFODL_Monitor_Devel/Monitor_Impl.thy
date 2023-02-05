@@ -1,6 +1,7 @@
 (*<*)
 theory Monitor_Impl
   imports
+    Optimized_Trigger
     Optimized_Agg_Temporal
     "HOL-Library.Code_Target_Nat"
     Containers.Containers
@@ -62,7 +63,7 @@ declare MBuf2_t.rep_eq[code]
 lemma mbuf_t_empty_code[code]: "mbuf_t_empty = MBuf2_t empty_queue"
   by transfer' (auto simp: empty_queue_rep)
 
-lemma mbuf_t_is_empty_code[code]: "mbuf_t_is_empty (MBuf2_t xs) = is_empty xs"
+lemma mbuf_t_is_empty_code[code]: "mbuf_t_is_empty (MBuf2_t xs) = Queue.is_empty xs"
   by transfer' (auto simp: is_empty_alt)
 
 lemma mbuf_t_Cons_code[code]: "mbuf_t_Cons x (MBuf2_t xs) = MBuf2_t (prepend_queue x xs)"
@@ -1386,7 +1387,7 @@ proof(rule mapping_eqI)
   fix x
   show "Mapping.lookup (mapping_delete_set m (Set.insert a X)) x =
         Mapping.lookup (Mapping.delete a (mapping_delete_set m X)) x"
-    unfolding Optimized_MTL.Mapping_lookup_delete mapping_delete_set_def
+    unfolding Mapping_lookup_delete mapping_delete_set_def
     by (auto simp add: Mapping_lookup_filter_None)
        (metis (mono_tags, lifting) Mapping_lookup_filter_None Mapping_lookup_filter_Some)
 qed
@@ -1715,7 +1716,7 @@ definition rbt_fold :: "_ \<Rightarrow> event_data tuple set_rbt \<Rightarrow> _
   "rbt_fold = RBT_Set2.fold"
 
 fun finite_multiset_insert_fun :: "event_data \<times> enat \<Rightarrow> bool \<Rightarrow> bool" where
-  "finite_multiset_insert_fun (_, k) v = ((if k = infinity then False else True) \<and> v)"
+  "finite_multiset_insert_fun (_, k) v = ((if k = Extended_Nat.infinity then False else True) \<and> v)"
 
 lemma finite_mset_insert_idem: 
   "comp_fun_idem finite_multiset_insert_fun"

@@ -1,9 +1,10 @@
 (*<*)
 theory Preliminaries
-  imports 
-    Main
+  imports
     "MFOTL_Monitor_Devel.Interval"
     "MFOTL_Monitor_Devel.Trace"
+    "HOL-Library.Simps_Case_Conv"
+    "HOL-Library.Mapping"
 begin
 (*>*)
 

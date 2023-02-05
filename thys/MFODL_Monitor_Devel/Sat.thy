@@ -479,8 +479,8 @@ proof -
   from assms(1) have "wf_mformula (unconvert UNIV \<sigma>) j P (unconvertV (dom P) \<sigma>) n R \<phi> \<phi>'"
     unfolding invar_mformula_def by simp
   moreover
-  from assms(2) have "Correct_Bin_Ops.wf_envs S (unconvert UNIV \<sigma>) j \<delta> P P' (unconvertV (dom P) \<sigma>) db"
-    unfolding wf_envs_def Correct_Bin_Ops.wf_envs_def
+  from assms(2) have "Correct_Until.wf_envs S (unconvert UNIV \<sigma>) j \<delta> P P' (unconvertV (dom P) \<sigma>) db"
+    unfolding wf_envs_def Correct_Until.wf_envs_def
     apply clarsimp
     apply safe
     apply blast
