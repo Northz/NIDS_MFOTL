@@ -8,29 +8,29 @@ session MFODL_Monitor_Devel (AFP) = MFOTL_Monitor_Devel +
   theories
     Cluster
     Mapping_Code
-	Optimized_Join
+    Optimized_Join
     Order_Statistic_Tree
     Tree_List
     Wf_Table
-	RBT_set_opt
+    RBT_set_opt
     Code_Double
     Event_Data
-	Preliminaries
-	Queue
+    Preliminaries
+    Queue
     Regex
     Formula
-	Safety
-	Progress
+    Safety
+    Progress
     Typing
     Optimized_Join
     Monitor
     Correct_Un_Ops
     Correct_Bin_Ops
-	Correct_Since
-	Correct_Until
-	Correct_Trigger
-	Correct_Regex
-	Correct_Agg
+    Correct_Since
+    Correct_Until
+    Correct_Trigger
+    Correct_Regex
+    Correct_Agg
     Correctness
 	(*Sat*)
     Optimized_Agg
