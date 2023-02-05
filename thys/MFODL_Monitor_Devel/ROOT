@@ -32,12 +32,12 @@ session MFODL_Monitor_Devel (AFP) = MFOTL_Monitor_Devel +
     Correct_Regex
     Correct_Agg
     Correctness
-	(*Sat*)
+    (*Sat*)
     Optimized_Agg
-	Optimized_Common
-	Optimized_Since
-	Optimized_Until
-	Optimized_Trigger
+    Optimized_Common
+    Optimized_Since
+    Optimized_Until
+    Optimized_Trigger
     Optimized_Agg_Temporal
     Monitor_Impl
   theories [document=false]
