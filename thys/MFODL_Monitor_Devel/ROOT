@@ -6,24 +6,39 @@ session MFODL_Monitor_Devel (AFP) = MFOTL_Monitor_Devel +
     Generic_Join_Devel
     "HOL-Data_Structures"
   theories
+    Cluster
+    Mapping_Code
+	Optimized_Join
+    Order_Statistic_Tree
+    Tree_List
+    Wf_Table
+	RBT_set_opt
     Code_Double
     Event_Data
+	Preliminaries
+	Queue
     Regex
     Formula
+	Safety
+	Progress
     Typing
     Optimized_Join
     Monitor
     Correct_Un_Ops
     Correct_Bin_Ops
+	Correct_Since
+	Correct_Until
+	Correct_Trigger
+	Correct_Regex
+	Correct_Agg
     Correctness
-    Optimized_MTL
-    Order_Statistic_Tree
-    Tree_List
+	(*Sat*)
     Optimized_Agg
+	Optimized_Common
+	Optimized_Since
+	Optimized_Until
+	Optimized_Trigger
     Optimized_Agg_Temporal
-    Cluster
-    Mapping_Code
-    Wf_Table
     Monitor_Impl
   theories [document=false]
     Monitor_Code
