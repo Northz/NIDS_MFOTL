@@ -1,6 +1,6 @@
 (*<*)
 theory Optimized_MTL
-  imports Monitor Wf_Table
+  imports Monitor Wf_Table "HOL-Library.Simps_Case_Conv"
 begin
 (*>*)
 
@@ -3147,7 +3147,7 @@ lemma upd_nested_keys: "Mapping.keys (upd_nested m d f X) = Mapping.keys m \<uni
   by (auto simp add: upd_nested_lookup Domain.DomainI fst_eq_Domain intro!: Mapping_keys_intro
       dest!: Mapping_keys_dest split: option.splits)
 
-fun add_new_mmuaux :: "args \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> event_data mmuaux \<Rightarrow> event_data mmuaux" where
+definition add_new_mmuaux :: "args \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> event_data mmuaux \<Rightarrow> event_data mmuaux" where
   "add_new_mmuaux args rel1 rel2 nt aux =
     (let (tp, tss, tables, len, maskL, maskR, result, a1_map, a2_map, tstp_map, done) =
     shift_mmuaux args nt aux;
@@ -3239,7 +3239,7 @@ proof -
     maskL, maskR, result \<union> snd ` (Set.filter (\<lambda>(t, x). t = tp - len) tmp'), a1_map', a2_map', tstp_map', done)"
     using shift_aux_def new_tstp_def tmp_def a2_map'_def a1_map'_def tss'_def tmp'_def tables'_def
     unfolding I_def pos_def tstp_map'_def
-    by (auto simp only: add_new_mmuaux.simps Let_def)
+    by (auto simp only: add_new_mmuaux_def Let_def)
   have update_until_eq: "update_until args rel1 rel2 nt auxlist =
     (map (\<lambda>x. case x of (t, a1, a2) \<Rightarrow> (t, if pos then join a1 True rel1 else a1 \<union> rel1,
       if mem I ((nt - t)) then a2 \<union> join rel2 pos a1 else a2)) auxlist) @
@@ -4417,8 +4417,8 @@ definition tuple_since_lhs where
     )
   ))"
 
-fun valid_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow> 'a mtaux \<Rightarrow> bool" where
-  "valid_mmtaux args cur (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_in_once_keys, tuple_since_hist, hist_sat, since_sat) auxlist \<longleftrightarrow>
+definition valid_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow> 'a mtaux \<Rightarrow> bool" where
+  "valid_mmtaux args cur = (\<lambda>(mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_in_once_keys, tuple_since_hist, hist_sat, since_sat) auxlist.
     (if mem (args_ivl args) 0 then (args_L args) \<subseteq> (args_R args) else (args_L args) = (args_R args)) \<and>
     (\<not>mem (args_ivl args) 0 \<longrightarrow> args_pos args) \<and>
     maskL = join_mask (args_n args) (args_L args) \<and>
@@ -4461,7 +4461,7 @@ fun valid_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmtaux \<Rightarrow>
     (\<forall>tuple. tuple_since_lhs tuple (linearize data_in) args maskL (auxlist_data_in args mt auxlist) \<longrightarrow>
       tuple \<in> since_sat
     ) \<and>
-    tuple_in_once_keys = Mapping.keys tuple_in_once
+    tuple_in_once_keys = Mapping.keys tuple_in_once)
   "
 
 definition init_mmtaux :: "args \<Rightarrow> 'a mmtaux" where
@@ -4479,7 +4479,7 @@ lemma valid_init_mmtaux: "(
     let args = init_args I n L R pos agg in
     valid_mmtaux args 0 (init_mmtaux args) []"
   unfolding init_mmtaux_def
-  by (auto simp add: init_args_def empty_queue_rep
+  by (auto simp add: init_args_def empty_queue_rep valid_mmtaux_def
       safe_max_def table_def newest_tuple_in_mapping_def
       ts_tuple_rel_binary_def ts_tuple_rel_f_def
       auxlist_data_prev_def auxlist_data_in_def is_empty_alt tuple_since_tp_def tuple_since_lhs_def)
@@ -4695,7 +4695,7 @@ lemma data_in_mem:
 proof (cases db)
   case (Pair t r)
   from assms(1) have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
-    by auto
+    by (auto simp add: valid_mmtaux_def)
   then have "(t, r) \<in> set (map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist))"
     using Pair assms(2)
     by auto
@@ -4713,7 +4713,7 @@ lemma data_prev_mem:
   shows "\<not>memL (args_ivl args) (mt - (time db))"
 proof -
   from assms(1) have "auxlist_data_prev args mt auxlist = linearize data_prev"
-    by simp
+    by (simp add: valid_mmtaux_def)
   then have "db \<in> set (auxlist_data_prev args mt auxlist)" using assms(2) by auto
   then show ?thesis
     unfolding auxlist_data_prev_def time_def
@@ -4727,11 +4727,11 @@ lemma data_sorted:
   shows "sorted (map fst (linearize data_prev))" "sorted (map fst (linearize data_in))" "\<forall>t \<in> fst ` (set (linearize data_in)). \<forall>t' \<in> fst ` (set (linearize data_prev)). t < t'"
 proof -
   from assms have sorted: "sorted (map fst auxlist)"
-    by auto
+    by (simp add: valid_mmtaux_def)
   from assms have data_props: 
     "auxlist_data_prev args mt auxlist = (linearize data_prev)"
     "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
-    by auto
+    by (auto simp add: valid_mmtaux_def)
   
   show "sorted (map fst (linearize data_prev))"
     using data_props(1) sorted sorted_filter
@@ -4778,13 +4778,13 @@ lemma tuple_in_once_mem0:
 proof -
   from assms(2) have memL_all: "\<forall>t. memL (args_ivl args) t" by auto
   from assms(1) have "auxlist_data_prev args mt auxlist = linearize data_prev"
-    by simp
+    by (simp add: valid_mmtaux_def)
   then have "linearize data_prev = []"
     using memL_all
     unfolding auxlist_data_prev_def
     by auto
   moreover from assms(1) have "(\<forall>as \<in> Mapping.keys tuple_in_once. case Mapping.lookup tuple_in_once as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> join_cond (args_pos args) l (proj_tuple maskL as))"
-    by simp
+    by (simp add: valid_mmtaux_def)
   ultimately have "Mapping.keys tuple_in_once = {}"
     using Mapping_keys_dest
     by fastforce
@@ -4802,8 +4802,8 @@ proof (cases "memL (args_ivl args) (mt - (time db))")
   from assms(1) have data_props:
     "auxlist_data_prev args mt auxlist = linearize data_prev"
     "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = linearize data_in"
-    by auto
-  from assms have mem: "memR (args_ivl args) (mt - time db)" by auto
+    by (auto simp add: valid_mmtaux_def)
+  from assms have mem: "memR (args_ivl args) (mt - time db)" by (simp add: valid_mmtaux_def)
 
   {
     assume "db \<in> set (linearize data_prev)"
@@ -4839,8 +4839,8 @@ next
   from assms(1) have data_props:
     "auxlist_data_prev args mt auxlist = linearize data_prev"
     "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = linearize data_in"
-    by auto
-  from assms have mem: "memR (args_ivl args) (mt - time db)" by auto
+    by (auto simp add: valid_mmtaux_def)
+  from assms have mem: "memR (args_ivl args) (mt - time db)" by (simp add: valid_mmtaux_def)
   have time_eq: "fst db = fst db'" using db'_def by (simp add: case_prod_beta)
 
   {
@@ -4885,10 +4885,10 @@ lemma data_prev_ts_props:
 proof -
   from assms have data_props:
     "auxlist_data_prev args mt auxlist = (linearize data_prev)"
-    by auto
+    by (simp add: valid_mmtaux_def)
   from assms have "(\<forall>db \<in> set auxlist. time db \<le> mt \<and> memR (args_ivl args) (mt - time db))"
-    by auto
-  moreover from assms have time: "cur = mt" by auto
+    by (simp add: valid_mmtaux_def)
+  moreover from assms have time: "cur = mt" by (simp add: valid_mmtaux_def)
   ultimately have memR: "(\<forall>db \<in> set auxlist. time db \<le> mt \<and> memR (args_ivl args) (cur - time db))"
     by auto
 
@@ -4918,10 +4918,10 @@ proof -
   from assms have data_props:
     "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
     "auxlist_data_in args mt auxlist = take (length (linearize data_in)) auxlist"
-    by auto
+    by (auto simp add: valid_mmtaux_def)
   from assms have "(\<forall>db \<in> set auxlist. time db \<le> mt \<and>  memR (args_ivl args) (mt - time db))"
-    by auto
-  moreover from assms have time: "cur = mt" by auto
+    by (simp add: valid_mmtaux_def)
+  moreover from assms have time: "cur = mt" by (simp add: valid_mmtaux_def)
   ultimately have memR: "(\<forall>db \<in> set auxlist. time db \<le> mt \<and> memR (args_ivl args) (cur - time db))"
     by auto
 
@@ -4955,7 +4955,7 @@ lemma auxlist_index_time_mono:
   assumes "i \<le> j" "j \<in> {0..<(length auxlist)}"
   shows "fst (auxlist!i) \<le> fst (auxlist!j)"
 proof -
-  from assms have "sorted (map fst auxlist)" by auto
+  from assms have "sorted (map fst auxlist)" by (simp add: valid_mmtaux_def)
   then have sorted: "\<forall>i. \<forall>j \<in> {0..<(length auxlist)}.
     i \<le> j \<longrightarrow> fst (auxlist!i) \<le> fst (auxlist!j)"
     by (simp add: sorted_iff_nth_mono)
@@ -5011,7 +5011,7 @@ next
     from assms(1) have data_props:
     "auxlist_data_prev args mt auxlist = linearize data_prev"
     "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = linearize data_in"
-      by auto
+      by (auto simp add: valid_mmtaux_def)
 
     assume "\<not> is_empty (data_in)"
     then have "set (linearize data_in) \<noteq> {}" using is_empty_alt by auto
@@ -5034,7 +5034,7 @@ lemma valid_mmtaux_nonempty:
 proof -
   from assms(1) have data_in_equiv:
     "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = linearize data_in"
-      by auto
+      by (auto simp add: valid_mmtaux_def)
     show ?thesis
     proof (rule iffI)
       assume "length (filter (\<lambda> (t, _, _). mem (args_ivl args) (mt - t)) auxlist) > 0"
@@ -5073,13 +5073,13 @@ lemma valid_result_mmtaux_unfolded:
 proof -
   define aux where "aux = (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_in_once_keys, tuple_since_hist, hist_sat, since_sat)"
   define I where "I = args_ivl args"
-  from assms(1) have time: "mt = cur" by auto
+  from assms(1) have time: "mt = cur" by (simp add: valid_mmtaux_def)
   from assms(1) have data_props:
     "auxlist_data_prev args mt auxlist = linearize data_prev"
     "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = linearize data_in"
-    by auto
+    by (auto simp add: valid_mmtaux_def)
   from assms(1) have sorted: "sorted (map fst auxlist)"
-    by auto
+    by (simp add: valid_mmtaux_def)
   {
     assume non_empty_assm: "\<not>is_empty data_in"
     note non_empty_alt = non_empty_assm data_in_auxlist_nonempty[OF assms(1)] time
@@ -5099,7 +5099,7 @@ proof -
           "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
           "(\<forall>as \<in> \<Union>((snd) ` (set (linearize data_in))). wf_tuple (args_n args) (args_R args) as)"
           using assms(1)
-          by auto
+          by (auto simp add: valid_mmtaux_def)
         then obtain t l r where "(t, l, r) \<in> set (auxlist_data_in args mt auxlist)"
           using is_empty_alt[of data_in]
           by (metis length_greater_0_conv length_map nth_mem proj_thd.cases)
@@ -5129,7 +5129,7 @@ proof -
 
       have "tuple_in_once_keys = Mapping.keys tuple_in_once"
         using assms(1)
-        by auto
+        by (simp add: valid_mmtaux_def)
       then have "tuple \<in> (Mapping.keys tuple_in_once) \<or> tuple \<in> hist_sat \<or> tuple \<in> since_sat"
         using assm non_empty_assm
         by (simp add: aux_def split: if_splits)
@@ -5137,7 +5137,7 @@ proof -
         assume assm: "tuple \<in> (Mapping.keys tuple_in_once)"
         then have "newest_tuple_in_mapping fst data_prev tuple_in_once (\<lambda>x. True)"
           using assms(1)
-          by auto
+          by (simp add: valid_mmtaux_def)
         then have "Mapping.lookup tuple_in_once tuple =
           safe_max (
             fst ` {
@@ -5153,7 +5153,7 @@ proof -
         then obtain t where t_props: "Mapping.lookup tuple_in_once tuple = Some t"
           by auto
         from assms(1) have "\<forall>as \<in> Mapping.keys tuple_in_once. case Mapping.lookup tuple_in_once as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> join_cond (args_pos args) l (proj_tuple maskL as)"
-          by auto
+          by (simp add: valid_mmtaux_def)
         then have "\<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> join_cond (args_pos args) l (proj_tuple maskL tuple)"
           using assm t_props
           by fastforce
@@ -5200,7 +5200,7 @@ proof -
         }
         moreover have "maskL = join_mask (args_n args) (args_L args)"
           using assms(1)
-          by auto
+          by (simp add: valid_mmtaux_def)
         ultimately have "(\<forall>i \<in> {0..<(length auxlist)}.
           let (t, l, r) = auxlist!i in
           mem (args_ivl args) (mt - t) \<longrightarrow>
@@ -5213,7 +5213,7 @@ proof -
         proof -
           have "auxlist_data_prev args mt auxlist = (linearize data_prev)"
             using assms(1)
-            by auto
+            by (simp add: valid_mmtaux_def)
           then have "auxlist_data_prev args mt auxlist \<noteq> []"
             using db_props
             by auto
@@ -5223,10 +5223,10 @@ proof -
             by auto
           then have "(args_L args) = (args_R args)"
             using assms(1)
-            by auto
+            by (simp add: valid_mmtaux_def)
           then have "table (args_n args) (args_R args) (Mapping.keys tuple_in_once)"
             using assms(1)
-            by auto
+            by (simp add: valid_mmtaux_def)
           then show ?thesis
             using assm
             unfolding table_def
@@ -5243,7 +5243,7 @@ proof -
           ((tuple \<in> hist_sat) \<or> tuple_since_lhs tuple (linearize data_in) args maskL (auxlist_data_in args mt auxlist))
         )"
           using assms(1)
-          unfolding valid_mmtaux.simps
+          unfolding valid_mmtaux_def prod.case
           apply -
           apply (erule conjE)+
           apply assumption
@@ -5252,7 +5252,7 @@ proof -
         proof -
           have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
             using assms(1)
-            by auto
+            by (auto simp add: valid_mmtaux_def)
           then show ?thesis
             by (metis length_map)
         qed
@@ -5313,7 +5313,7 @@ proof -
             "(\<forall>as \<in> \<Union>((snd) ` (set (linearize data_in))). wf_tuple (args_n args) (args_R args) as)"
             "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
             using assms(1)
-            by auto
+            by (auto simp add: valid_mmtaux_def)
           ultimately have "(t, r) \<in> set (linearize data_in)"
             by (metis (no_types, lifting) case_prod_conv list.set_map pair_imageI)
           then have wf: "wf_tuple (args_n args) (args_R args) tuple"
@@ -5329,7 +5329,7 @@ proof -
           
           moreover have data_in_equiv: "auxlist_data_in args mt auxlist = take (length (linearize data_in)) auxlist"
             using assms(1)
-            by auto
+            by (simp add: valid_mmtaux_def)
           moreover have "(auxlist_data_in args mt auxlist)!n = auxlist!n"
             using n_def(1)
             by (simp add: calculation(2))
@@ -5389,7 +5389,7 @@ proof -
                 "auxlist_data_prev args mt auxlist = drop (length (linearize data_in)) auxlist"
                 "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
                 using assms(1)
-                by auto
+                by (auto simp add: valid_mmtaux_def)
               then have data_prev_equiv: "auxlist_data_prev args mt auxlist = drop (length (auxlist_data_in args mt auxlist)) auxlist"
                 by (metis length_map)
               then have "auxlist!i = (auxlist_data_prev args mt auxlist)!(i - length (auxlist_data_in args mt auxlist))"
@@ -5400,7 +5400,7 @@ proof -
                 by (metis (no_types, lifting) add.commute atLeastLessThan_iff in_set_conv_nth le_add_diff_inverse length_drop less_diff_conv)
               moreover have "auxlist_data_prev args mt auxlist = (linearize data_prev)"
                 using assms(1)
-                by auto
+                by (simp add: valid_mmtaux_def)
               ultimately have "auxlist!i \<in> set (linearize data_prev)" by auto
               then have "\<not> memL (args_ivl args) (mt - time (auxlist!i))"
                 using data_prev_mem[OF assms(1), of "auxlist!i"]
@@ -5460,7 +5460,7 @@ proof -
             by (meson atLeastLessThan_iff not_le_imp_less)
           moreover have "maskL = join_mask (args_n args) (args_L args)"
             using assms(1)
-            by auto
+            by (simp add: valid_mmtaux_def)
           ultimately have "tuple \<in> snd (trigger_results args mt auxlist)"
             using non_empty wf
             unfolding relL_def
@@ -5486,7 +5486,7 @@ proof -
         by auto
       have maskL: "maskL = join_mask (args_n args) (args_L args)"
         using assms(1)
-        by auto
+        by (simp add: valid_mmtaux_def)
       then have "(\<forall>i \<in> {0..<(length auxlist)}.
           let (t, l, r) = auxlist!i in
           mem (args_ivl args) (cur - t) \<longrightarrow> 
@@ -5538,7 +5538,7 @@ proof -
         moreover have "(\<forall>tuple. tuple \<in> hist_sat \<longleftrightarrow>
           (\<not>is_empty data_in) \<and> (
             \<forall>(t, l, r) \<in> set (auxlist_data_in args mt auxlist). tuple \<in> r
-        ))" using assms(1) by auto
+        ))" using assms(1) by (simp add: valid_mmtaux_def)
         ultimately have "tuple \<in> hist_sat"
           using non_empty_alt
           by auto
@@ -5579,7 +5579,7 @@ proof -
           (* length (auxlist_data_in args mt auxlist)-1 *)
           moreover have data_in_props: "auxlist_data_in args mt auxlist = take (length (linearize data_in)) auxlist"
             using assms(1)
-            by auto
+            by (simp add: valid_mmtaux_def)
           ultimately have "hd suffix = auxlist!j"
             using data_props(2)
             unfolding suffix_def
@@ -5692,7 +5692,7 @@ proof -
           proof -
             have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
               using assms(1)
-              by auto
+              by (auto simp add: valid_mmtaux_def)
             then show ?thesis
               by (metis length_map)
           qed
@@ -5700,7 +5700,7 @@ proof -
             using non_empty_alt is_empty_alt
             unfolding tuple_since_lhs_def 
             by auto
-          then have "tuple \<in> since_sat" using assms(1) by auto
+          then have "tuple \<in> since_sat" using assms(1) by (simp add: valid_mmtaux_def)
           then have "tuple \<in> snd (result_mmtaux args aux)"
             using non_empty_alt
             unfolding aux_def
@@ -5711,7 +5711,7 @@ proof -
           assume j_geq: "j \<ge> length (linearize data_in)"
           moreover have data_prev_props: "auxlist_data_prev args mt auxlist = drop (length (linearize data_in)) auxlist"
             using assms(1)
-            by auto
+            by (auto simp add: valid_mmtaux_def)
           ultimately have prev: "auxlist!j = (auxlist_data_prev args mt auxlist)!j'"
             using j_props(1)
             unfolding j'_def
@@ -5729,11 +5729,11 @@ proof -
             by auto
           then have mask_eq: "(args_L args) = (args_R args)"
             using assms(1)
-            by auto
+            by (simp add: valid_mmtaux_def)
   
           have data_in_props: "auxlist_data_in args mt auxlist = take (length (linearize data_in)) auxlist"
             using assms(1)
-            by auto
+            by (simp add: valid_mmtaux_def)
           have "length (linearize data_prev) + length (linearize data_in) = length auxlist"
             using data_in_props data_prev_props data_props
             by (smt add.commute append_take_drop_id length_append length_map)
@@ -5747,7 +5747,7 @@ proof -
             tuple = snd tas
           }"
           from assms(1) have "newest_tuple_in_mapping fst data_prev tuple_in_once (\<lambda>x. True)"
-            by auto
+            by (simp add: valid_mmtaux_def)
           then have mapping_val: "Mapping.lookup tuple_in_once tuple = safe_max B"
             unfolding newest_tuple_in_mapping_def B_def
             by auto
@@ -5759,7 +5759,7 @@ proof -
             by auto
           have "args_pos args"
             using not_mem_0 assms(1)
-            by auto
+            by (simp add: valid_mmtaux_def)
           then have "proj_tuple maskL tuple \<in> fst X"
             using j_props idx_shift
             unfolding relL_def X_def
@@ -5789,7 +5789,7 @@ proof -
             by (simp add: Mapping_keys_intro)
           moreover have "tuple_in_once_keys = Mapping.keys tuple_in_once"
             using assms(1)
-            by auto
+            by (simp add: valid_mmtaux_def)
           ultimately have "tuple \<in> snd (result_mmtaux args aux)"
             using non_empty_alt
             unfolding aux_def
@@ -6026,7 +6026,7 @@ fun shift_end' where "shift_end' I nt to_table (data_prev, data_in, tuple_in, tu
       (data_prev, data_in, in_discard, tuple_in, tuple_in_keys')
     )"
 
-fun update_mmtaux' :: "args \<Rightarrow> ts \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> (ts \<times> 'a table \<times> 'a table) queue \<Rightarrow> (ts \<times> 'a table) queue \<Rightarrow> (('a tuple, ts) mapping) \<Rightarrow> 'a table \<Rightarrow> (('a tuple, nat) mapping) \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> (nat \<times> nat \<times> (ts \<times> 'a table \<times> 'a table) queue \<times> (ts \<times> 'a table) queue \<times> (('a tuple, ts) mapping) \<times> 'a table \<times> (('a tuple, nat) mapping) \<times> 'a table \<times> 'a table)" where
+definition update_mmtaux' :: "args \<Rightarrow> ts \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> (ts \<times> 'a table \<times> 'a table) queue \<Rightarrow> (ts \<times> 'a table) queue \<Rightarrow> (('a tuple, ts) mapping) \<Rightarrow> 'a table \<Rightarrow> (('a tuple, nat) mapping) \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> (nat \<times> nat \<times> (ts \<times> 'a table \<times> 'a table) queue \<times> (ts \<times> 'a table) queue \<times> (('a tuple, ts) mapping) \<times> 'a table \<times> (('a tuple, nat) mapping) \<times> 'a table \<times> 'a table)" where
   "update_mmtaux' args nt idx_mid idx_oldest maskL maskR data_prev data_in tuple_in_once tuple_in_once_keys tuple_since_hist hist_sat since_sat = (
     \<comment> \<open>in a first step, we update tuple_in_once by removing all tuples where currently a ts
        is stored, that points to a db that with the new ts (nt) no longer is part of
@@ -6958,7 +6958,7 @@ proof -
   have data_prev'_def: "data_prev' = (fst o snd) shift_res"
     using assms(3)
     unfolding shift_res_def
-    by (auto simp add: Let_def split: prod.splits) 
+    by (auto simp add: Let_def update_mmtaux'_def split: prod.splits) 
   
   define move where "move = (fst o snd o snd) shift_res"
   define move' where "move' = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) move"
@@ -6966,19 +6966,19 @@ proof -
   have tuple_in_once'_def: "tuple_in_once' = (fst o snd o snd o snd) shift_res"
     using assms(3)
     unfolding shift_res_def
-    by (auto simp add: Let_def split: prod.splits)
+    by (auto simp add: Let_def update_mmtaux'_def split: prod.splits)
 
   have tuple_in_once_keys'_def: "tuple_in_once_keys' = (snd o snd o snd o snd) shift_res"
     using assms(3)
     unfolding shift_res_def
-    by (auto simp add: Let_def split: prod.splits)
+    by (auto simp add: Let_def update_mmtaux'_def split: prod.splits)
 
   define data_in' where "data_in' = fst (takedropWhile_queue (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) data_in)"
   define in_drop where "in_drop = snd (takedropWhile_queue (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) data_in)"
   have data_in''_def: "data_in'' = fold (\<lambda>(t, l, r) data_in. append_queue (t, r) data_in) move' data_in'"
     using assms(3)
     unfolding shift_res_def data_in'_def data_in'_def move'_def move_def
-    by (auto simp add: Let_def split: prod.splits)
+    by (auto simp add: Let_def update_mmtaux'_def split: prod.splits)
 
   then have "data_in'' = fold (\<lambda>(t, l, r) data_in. append_queue (t, r) data_in) move' (dropWhile_queue (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) data_in)"
     unfolding data_in'_def move'_def
@@ -6990,12 +6990,12 @@ proof -
   have idx_mid'_def: "idx_mid' = idx_mid + length move"
     using assms(3)
     unfolding shift_res_def move_def drop_prev_len_def
-    by (auto simp add: Let_def split: prod.splits)
+    by (auto simp add: Let_def update_mmtaux'_def split: prod.splits)
 
   have idx_oldest'_def: "idx_oldest' = idx_oldest + length in_drop + drop_prev_len"
     unfolding shift_res_def in_drop_def drop_prev_len_def move'_def move_def
     using assms(3) takedropWhile_queue_snd[of "(\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t))" data_in]
-    by (auto simp add: Let_def split: prod.splits)
+    by (auto simp add: Let_def update_mmtaux'_def split: prod.splits)
 
   have shift_end_res: "(empty_queue', data_prev', move, tuple_in_once', tuple_in_once_keys') = shift_end'
       (flip_int_less_lower (args_ivl args))
@@ -7021,16 +7021,16 @@ proof -
   obtain tuple_since_hist' x hist_sat' since_sat' where fold_tuple_res: "(tuple_since_hist', hist_sat', x, since_sat') = fold fold_op_f move (tuple_since_hist, hist_sat, idx_mid, since_sat)"
     using assms(3)
     unfolding fold_op_f_def move_def shift_res_def
-    by (auto simp only: update_mmtaux'.simps Let_def fst_def snd_def o_def split: prod.splits)
+    by (auto simp only: update_mmtaux'_def Let_def fst_def snd_def o_def split: prod.splits)
   then have tuple_since_hist''_def: "tuple_since_hist'' = (if (idx_mid' = idx_oldest') then Mapping.empty else tuple_since_hist')"
     using assms(3) 
     unfolding fold_op_f_def move_def shift_res_def
-    by (auto simp only: update_mmtaux'.simps Let_def fst_def snd_def o_def split: prod.splits)
+    by (auto simp only: update_mmtaux'_def Let_def fst_def snd_def o_def split: prod.splits)
 
   have since_sat''_def: "since_sat'' = (if (idx_mid' = idx_oldest') then {} else since_sat')"
     using assms(3) fold_tuple_res
     unfolding fold_op_f_def move_def shift_res_def
-    by (auto simp only: update_mmtaux'.simps Let_def fst_def snd_def o_def split: prod.splits)
+    by (auto simp only: update_mmtaux'_def Let_def fst_def snd_def o_def split: prod.splits)
 
   have hist_sat''_def: "hist_sat'' = (case fst (safe_hd data_in'')
     of None \<Rightarrow>
@@ -7043,12 +7043,12 @@ proof -
       })"
     using assms(3) fold_tuple_res
     unfolding fold_op_f_def move_def shift_res_def
-    by (auto simp only: update_mmtaux'.simps Let_def fst_def snd_def o_def split: prod.splits)
+    by (auto simp only: update_mmtaux'_def Let_def fst_def snd_def o_def split: prod.splits)
 
   from assms(1) have table_tuple_in: "table (args_n args) (args_L args) (Mapping.keys tuple_in_once)"
-    by auto
+    by (simp add: valid_mmtaux_def)
 
-  from assms(1) have time: "cur = mt" by auto
+  from assms(1) have time: "cur = mt" by (simp add: valid_mmtaux_def)
 
   have auxlist_tuples_lhs: "ts_tuple_rel_f (\<lambda>_. {}) (set ((auxlist_data_prev args mt) auxlist)) =
     {tas \<in> (ts_tuple_rel_f (\<lambda>_. {}) (set (linearize empty_queue))) \<union> (ts_tuple_rel_binary_lhs (set (linearize data_prev))).
@@ -7062,7 +7062,7 @@ proof -
   from assms(1) have
     "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_L args) as)"
     "(\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_R args) as)"
-    by (auto simp only: valid_mmtaux.simps)
+    by (auto simp only: valid_mmtaux_def)
 
   moreover have "sorted (map fst (linearize data_prev))"
     using data_sorted[OF assms(1)]
@@ -7098,7 +7098,7 @@ proof -
 
   from assms(1) have max_ts_tuple_in:
     "newest_tuple_in_mapping fst data_prev tuple_in_once (\<lambda>x. True)"
-    by auto
+    by (simp add: valid_mmtaux_def)
 
   have nt_mono: "nt \<ge> cur" "nt \<le> nt" using nt_mono by auto
   have shift_end_props:
@@ -7129,13 +7129,13 @@ proof -
 
   have "tuple_in_once_keys = Mapping.keys tuple_in_once"
     using assms(1)
-    by auto
+    by (simp add: valid_mmtaux_def)
   then show "tuple_in_once_keys' = Mapping.keys tuple_in_once'"
     using shift_end_props(8)
     by auto
 
   from assms(1) have auxlist_prev: "auxlist_data_prev args mt auxlist = (linearize data_prev)"
-    by auto
+    by (simp add: valid_mmtaux_def)
 
   {
     assume "mem (args_ivl args) 0"
@@ -7297,7 +7297,7 @@ proof -
       fix t tuple
       assume t_props: "Mapping.lookup tuple_in_once tuple = Some t" "memL (args_ivl args) (nt - t)"
       from assms(1) have "(\<forall>as \<in> Mapping.keys tuple_in_once. case Mapping.lookup tuple_in_once as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> join_cond (args_pos args) l (proj_tuple maskL as))"
-        by auto
+        by (simp add: valid_mmtaux_def)
       then obtain X where X_props: "(t, X) \<in> set (linearize data_prev)" "join_cond (args_pos args) (fst X) (proj_tuple maskL tuple)"
         using t_props
         by (smt Mapping_keys_intro fst_conv option.simps(3) option.simps(5))
@@ -7305,7 +7305,7 @@ proof -
         "(\<not>mem (args_ivl args) 0 \<longrightarrow> args_pos args)"
         "auxlist_data_prev args mt auxlist = (linearize data_prev)"
         using assms(1)
-        by auto
+        by (simp_all add: valid_mmtaux_def)
       ultimately have pos: "args_pos args"
         using memL_mono[of "args_ivl args" "0"]
         unfolding auxlist_data_prev_def
@@ -7350,7 +7350,7 @@ proof -
         have maskL:
           "maskL = join_mask (args_n args) (args_L args)"
           using assms(1)
-          by auto
+          by (simp add: valid_mmtaux_def)
         have "wf_tuple (args_n args) (args_L args) tuple"
           by (metis Mapping_keys_intro option.simps(3) t_props(1) table_def table_tuple_in)
         then show ?thesis 
@@ -7435,7 +7435,7 @@ proof -
   from assms(1) have data_prev_wf:
     "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_L args) as)"
     "(\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_R args) as)"
-    by auto
+    by (auto simp add: valid_mmtaux_def)
 
   then show
     "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_L args) as)"
@@ -7445,7 +7445,7 @@ proof -
 
   from assms(1) have tuple_in_once_props:
     "(\<forall>as \<in> Mapping.keys tuple_in_once. case Mapping.lookup tuple_in_once as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev) \<and> join_cond (args_pos args) l (proj_tuple maskL as))"
-    by auto
+    by (simp add: valid_mmtaux_def)
   {
     fix as t
     assume assm: "Mapping.lookup tuple_in_once' as = Some t"
@@ -7525,7 +7525,7 @@ proof -
   ultimately have drop_prev_len_eq: "drop_prev_len = length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_prev))"
     by auto
 
-  from assms(1) have data_prev_len: "length (linearize data_prev) + idx_mid = idx_next" by auto
+  from assms(1) have data_prev_len: "length (linearize data_prev) + idx_mid = idx_next" by (simp add: valid_mmtaux_def)
 
   have "length (linearize data_prev') = length (filter (\<lambda>(t, _). \<not> memL (args_ivl args) (nt - t)) (linearize data_prev))"
     using data_prev'_eq
@@ -7548,7 +7548,7 @@ proof -
     using data_prev_len
     by (auto simp add: idx_mid'_def)
 
-  from assms(1) have data_in_len: "length (linearize data_in) + idx_oldest = idx_mid" by auto
+  from assms(1) have data_in_len: "length (linearize data_in) + idx_oldest = idx_mid" by (simp add: valid_mmtaux_def)
   then have mid_geq_old: "idx_mid \<ge> idx_oldest" by auto
 
   have idx_oldest'_eq: "idx_oldest' = idx_oldest + length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in)) + drop_prev_len"
@@ -7635,7 +7635,7 @@ proof -
     by auto
 
   from assms(1) have "(\<forall>as \<in> \<Union>((snd) ` (set (linearize data_in))). wf_tuple (args_n args) (args_R args) as)"
-    by auto
+    by (simp add: valid_mmtaux_def)
   moreover have "(\<forall>as \<in> \<Union>((snd) ` (set (map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev))))). wf_tuple (args_n args) (args_R args) as)"
     using data_prev_wf(2)
     unfolding relR_def
@@ -7714,7 +7714,7 @@ proof -
       then have "memL (args_ivl args) (nt - t)" using memL_mono nt_mono time by auto
       then have mem: "mem (args_ivl args) (nt - t)" using memR by auto
       have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
-        using assms(1) by auto
+        using assms(1) by (auto simp add: valid_mmtaux_def)
       then have "(t, r) \<in> set (map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist))"
         using memR(2)
         by auto
@@ -7738,7 +7738,7 @@ proof -
       then obtain l where "(t, l, r) \<in> set (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev))"
         by auto
       then have mem: "mem (args_ivl args) (nt - t)" "(t, l, r) \<in> set (linearize data_prev)" by auto
-      moreover have "auxlist_data_prev args mt auxlist = (linearize data_prev)" using assms(1) by auto
+      moreover have "auxlist_data_prev args mt auxlist = (linearize data_prev)" using assms(1) by (simp add: valid_mmtaux_def)
       ultimately have "(t, l, r) \<in> set (filter (\<lambda>(t, _). \<not> memL (args_ivl args) (mt - t)) auxlist)"
         unfolding auxlist_data_prev_def
         by auto
@@ -7771,7 +7771,7 @@ proof -
   from assms(1) have auxlist_eqs:
     "auxlist_data_prev args mt auxlist = drop (length (linearize data_in)) auxlist"
     "auxlist_data_in args mt auxlist = take (length (linearize data_in)) auxlist"
-    by auto
+    by (auto simp add: valid_mmtaux_def)
   then have auxlist_concat: "filter (\<lambda>(t, _). mem (args_ivl args) (mt - t)) auxlist @ filter (\<lambda>(t, _). \<not> memL (args_ivl args) (mt - t)) auxlist = auxlist"
     unfolding auxlist_data_prev_def auxlist_data_in_def
     by auto
@@ -7783,7 +7783,7 @@ proof -
       "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
       "auxlist_data_prev args mt auxlist = (linearize data_prev)"
     using assms(1)
-    by auto
+    by (auto simp add: valid_mmtaux_def)
   ultimately have "linearize data_in'' = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _, _). mem (args_ivl args) (mt - t)) auxlist)) @ map (\<lambda>(t, l, r). (t, r)) (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). \<not> memL (args_ivl args) (mt - t)) auxlist))"
     unfolding auxlist_data_in_def auxlist_data_prev_def
     by auto
@@ -7832,7 +7832,7 @@ proof -
 
   from assms(1) have "auxlist_data_prev args mt auxlist = (linearize data_prev)"
                      "auxlist_data_prev args mt auxlist = drop (length (linearize data_in)) auxlist"
-    by auto
+    by (auto simp add: valid_mmtaux_def)
   then have prev_drop_eq: "(linearize data_prev) = drop (length (linearize data_in)) auxlist" by auto
 
   have "length (linearize data_in'') + length (filter (\<lambda>(t, _). \<not> memR (args_ivl args) (nt - t)) (linearize data_in)) = length (linearize data_in) + length (filter (\<lambda>(t, _). mem (args_ivl args) (nt - t)) (linearize data_prev))"
@@ -7845,7 +7845,7 @@ proof -
   have memR: "\<forall>db \<in> set (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist). memR (args_ivl args) (nt - time db)"
     unfolding time_def
     by auto
-  have "sorted (map fst auxlist)" using assms(1) by auto
+  have "sorted (map fst auxlist)" using assms(1) by (simp add: valid_mmtaux_def)
   then have sorted: "sorted (map fst (filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) auxlist))"
     using sorted_filter
     by blast
@@ -7982,11 +7982,11 @@ proof -
       Some idx \<Rightarrow> tuple_since_tp args as (linearize data_in) idx_oldest idx_mid idx
       | None   \<Rightarrow> \<forall>idx. \<not>tuple_since_tp args as (linearize data_in) idx_oldest idx_mid idx)
     )"
-      by auto (* map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)*)
+      by (simp add: valid_mmtaux_def) (* map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)*)
 
 
     from assms(1) have in_eq: "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
-      by auto
+      by (auto simp add: valid_mmtaux_def)
     {
       fix P
       have "(\<forall>(t, l, r) \<in> set (auxlist_data_in args mt auxlist). P r) = (\<forall>(t, r) \<in> set (linearize data_in). P r)"
@@ -8009,7 +8009,7 @@ proof -
         (\<not>is_empty data_in) \<and> (
           \<forall>(t, l, r) \<in> set (auxlist_data_in args mt auxlist). tuple \<in> r
       ))"
-      by auto
+      by (simp add: valid_mmtaux_def)
     ultimately have tuple_init_props_hist_sat: "(\<forall>tuple. tuple \<in> hist_sat \<longleftrightarrow>
       (\<not>is_empty data_in) \<and> (
         \<forall>(t, r) \<in> set (linearize data_in). tuple \<in> r
@@ -8023,7 +8023,7 @@ proof -
         tuple \<in> since_sat
       )"
       using assms(1)
-      unfolding valid_mmtaux.simps
+      unfolding valid_mmtaux_def prod.case
       apply -
       apply (erule conjE)+
        apply assumption
@@ -8058,7 +8058,7 @@ proof -
         "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_L args) as)"
         "(\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev))). wf_tuple (args_n args) (args_R args) as)"
         using assms(1)
-        by auto
+        by (auto simp add: valid_mmtaux_def)
       then show ?thesis
         unfolding move_filter table_def relL_def relR_def
         by auto
@@ -8500,10 +8500,10 @@ proof -
             by (metis add_cancel_left_left list.size(3))
 
           from assms(1) have in_eq: "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args mt auxlist) = (linearize data_in)"
-            by auto
+            by (auto simp add: valid_mmtaux_def)
 
           from assms(1) have auxlist_props: "(\<forall>db \<in> set auxlist. time db \<le> mt \<and> memR (args_ivl args) (mt - time db))"
-            by auto
+            by (simp add: valid_mmtaux_def)
           then have in_memR: "\<forall>db\<in>set (auxlist_data_in args mt auxlist). memR (args_ivl args) (mt - time db)"
             unfolding auxlist_data_in_def
             by auto
@@ -8536,7 +8536,7 @@ proof -
               by (metis atLeastLessThan_iff in_eq length_map)
             define suffix where "suffix = drop n (auxlist_data_in args mt auxlist)"
             
-            have sorted_auxlist: "sorted (map fst auxlist)" using assms(1) by auto
+            have sorted_auxlist: "sorted (map fst auxlist)" using assms(1) by (simp add: valid_mmtaux_def)
             then have sorted_in: "sorted (map fst (auxlist_data_in args mt auxlist))"
               unfolding suffix_def auxlist_data_in_def
               by (metis (no_types, lifting) sorted_filter)
@@ -8685,7 +8685,7 @@ proof -
             unfolding tuple_since_lhs_def
             by auto
           
-          have sorted_auxlist: "sorted (map fst auxlist)" using assms(1) by auto
+          have sorted_auxlist: "sorted (map fst auxlist)" using assms(1) by (simp add: valid_mmtaux_def)
           then have sorted_in: "sorted (map fst (auxlist_data_in args mt auxlist))"
             unfolding auxlist_data_in_def
             by (metis (no_types, lifting) sorted_filter)
@@ -8822,7 +8822,7 @@ proof -
 
       have maskL_eq: "maskL = join_mask (args_n args) (args_L args)"
         using assms(1)
-        by auto
+        by (simp add: valid_mmtaux_def)
 
       define since_sat' where "since_sat' = (snd o snd o snd) tuple"
       have fold_IH_since_sat: "(snd o snd o snd) (fold_op_f x tuple) = (since_sat' \<inter> (relR x)) \<union> proj_tuple_in_join_optim (args_pos args) (relR x) (join_mask (args_n args) (args_R args)) (relL x) (join_mask (args_n args) (args_L args))"
@@ -8957,7 +8957,7 @@ proof -
             case True
             then have IH_none: "Mapping.lookup (tuple_since_hist_mv xs init_tuple) as = None"
               unfolding tuple_since_hist_mv_def
-              by (simp add: Mapping.lookup_empty)
+              by simp
             then have "\<forall>idx. \<not> tuple_since_tp args as (lin_data_in''_mv xs) (idx_oldest_mv xs) (idx_mid_mv xs) idx"
               using IH_none IH(1)
               by auto
@@ -9909,7 +9909,7 @@ proof -
         by (auto simp add: filter_simp)
       moreover have "auxlist_data_prev args mt auxlist = linearize data_prev"
         using assms(1)
-        by auto
+        by (simp add: valid_mmtaux_def)
       ultimately have "(lin_data_in''_aux_mv move) = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). memL (args_ivl args) (nt - t)) (auxlist_data_in args mt auxlist @ auxlist_data_prev args mt auxlist))"
         by auto
       then have "(lin_data_in''_aux_mv move) = filter (\<lambda>(t, _). memR (args_ivl args) (nt - t)) (filter (\<lambda>(t, _). memL (args_ivl args) (nt - t)) auxlist)"
@@ -9979,7 +9979,7 @@ proof -
         by auto
       moreover have "(\<forall>(t, relL, relR) \<in> set auxlist. table (args_n args) (args_L args) relL \<and> table (args_n args) (args_R args) relR)"
         using assms(1)
-        by auto
+        by (simp add: valid_mmtaux_def)
       ultimately have "table (args_n args) (args_R args) r" by auto
       then have "wf_tuple (args_n args) (args_R args) as"
         using as_in t_r_def
@@ -10064,20 +10064,20 @@ proof -
   define auxlist' where "auxlist' = filter (\<lambda> (t, _). memR (args_ivl args) (nt - t)) auxlist"
   have "(if mem (args_ivl args) 0 then (args_L args) \<subseteq> (args_R args) else (args_L args) = (args_R args))"
     using assms(1)
-    by auto
+    by (simp add: valid_mmtaux_def)
   moreover have "\<not>mem (args_ivl args) 0 \<longrightarrow> args_pos args"
     using assms(1)
-    by auto
+    by (simp add: valid_mmtaux_def)
   moreover have "maskL = join_mask (args_n args) (args_L args)"
     using assms(1)
-    by auto
+    by (simp add: valid_mmtaux_def)
   moreover have "maskR = join_mask (args_n args) (args_R args)"
     using assms(1)
-    by auto
+    by (simp add: valid_mmtaux_def)
   moreover have "(\<forall>(t, relL, relR) \<in> set auxlist'. table (args_n args) (args_L args) relL \<and> table (args_n args) (args_R args) relR)"
     using assms(1)
     unfolding auxlist'_def
-    by auto
+    by (simp add: valid_mmtaux_def)
   moreover have "table (args_n args) (args_L args) (Mapping.keys tuple_in_once')"
     using valid_update_mmtaux'_unfolded[OF assms]
     by auto
@@ -10101,7 +10101,7 @@ proof -
   moreover have "sorted (map fst auxlist')"
     using assms(1) sorted_filter
     unfolding auxlist'_def
-    by auto
+    by (auto simp add: valid_mmtaux_def)
   moreover have "auxlist_data_prev args nt auxlist' = (linearize data_prev')"
     using valid_update_mmtaux'_unfolded[OF assms]
     unfolding auxlist'_def
@@ -10132,7 +10132,7 @@ proof -
 
       have "(\<forall>db \<in> set auxlist. time db \<le> mt \<and> memR (args_ivl args) (mt - time db))"
         using assms(1)
-        by auto
+        by (simp add: valid_mmtaux_def)
       moreover have "db \<in> set auxlist"
         using assm
         unfolding auxlist'_def
@@ -10141,7 +10141,7 @@ proof -
         by auto
       then have "time db \<le> nt"
         using nt_mono assms(1)
-        by auto
+        by (simp add: valid_mmtaux_def)
 
       moreover have "memR (args_ivl args) (nt - time db)"
         using assm
@@ -10186,12 +10186,12 @@ proof -
     using valid_update_mmtaux'_unfolded[OF assms]
     by auto
   ultimately show ?thesis
-    unfolding auxlist'_def
+    unfolding auxlist'_def valid_mmtaux_def
     by force
 qed
 
-fun update_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> 'a mmtaux \<Rightarrow> 'a mmtaux" where
-  "update_mmtaux args nt l r (cur, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_in_once_keys, tuple_since_hist, hist_sat, since_sat) = (
+definition update_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> 'a mmtaux \<Rightarrow> 'a mmtaux" where
+  "update_mmtaux args nt l r = (\<lambda>(cur, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_in_once_keys, tuple_since_hist, hist_sat, since_sat). (
   let (idx_mid', idx_oldest', data_prev', data_in', tuple_in_once', tuple_in_once_keys', tuple_since_hist', hist_sat', since_sat') =
     update_mmtaux' args nt idx_mid idx_oldest maskL maskR data_prev data_in tuple_in_once tuple_in_once_keys tuple_since_hist hist_sat since_sat
   in (
@@ -10229,7 +10229,7 @@ fun update_mmtaux :: "args \<Rightarrow> ts \<Rightarrow> 'a table \<Rightarrow>
         hist_sat',
         since_sat'
       )
-  ))"
+  )))"
 
 lemma valid_update_mmtaux_unfolded:
   assumes "nt \<ge> cur"
@@ -10267,21 +10267,20 @@ proof -
   have valid: "valid_mmtaux args nt (nt, idx_next, idx_mid', idx_oldest', maskL, maskR, data_prev', data_in', tuple_in_once', tuple_in_once_keys', tuple_since_hist', hist_sat', since_sat')
      auxlist'"
     unfolding auxlist'_def
-    using valid_update_mmtaux'[OF assms(4) assms(1) update_eq]
-    by blast
+    using valid_update_mmtaux'[OF assms(4) assms(1) update_eq] .
 
   define update_mmtaux_res where "update_mmtaux_res = update_mmtaux args nt l r (cur, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_in_once_keys, tuple_since_hist, hist_sat, since_sat)"
   define auxlist'' where "auxlist'' = auxlist' @ [(nt, l, r)]"
 
   have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args nt auxlist') = (linearize data_in')"
     using valid
-    by auto
+    by (auto simp add: valid_mmtaux_def)
   then have data_in'_len_leq: "length (linearize data_in') \<le> length auxlist'"
     unfolding auxlist_data_in_def
     by (metis (no_types, lifting) length_filter_le length_map)
 
   from assms(4) have maskL: "maskL = join_mask (args_n args) (args_L args)"
-    by auto
+    by (simp add: valid_mmtaux_def)
 
   then have proj_l: "\<forall>as \<in> l. as = proj_tuple maskL as"
     using assms(2)
@@ -10319,7 +10318,7 @@ proof -
       ) = update_mmtaux args nt l r (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_in_once_keys, tuple_since_hist, hist_sat, since_sat)"
       unfolding update_mmtaux_res_def idx_mid''_def idx_next''_def data_in''_def tuple_since_hist'''_def tuple_since_hist''_def hist_sat''_def since_sat''_def
       using True
-      by (auto simp only: update_mmtaux.simps Let_def update_eq[symmetric] split: if_splits)
+      by (auto simp only: update_mmtaux_def Let_def update_eq[symmetric] split: if_splits)
 
     have auxlist_in_eq: "(auxlist_data_in args nt auxlist'') = (auxlist_data_in args nt auxlist') @ [(nt, l, r)]"
       using True
@@ -10333,7 +10332,7 @@ proof -
 
     have "auxlist_data_prev args nt auxlist' = (linearize data_prev')"
       using valid
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have memL: "\<forall>t. memL (args_ivl args) t"
       using True
       by auto
@@ -10344,13 +10343,13 @@ proof -
       by auto
     moreover have "auxlist_data_prev args nt auxlist' = drop (length (linearize data_in')) auxlist'"
       using valid
-      by auto
+      by (auto simp add: valid_mmtaux_def)
     ultimately have data_in'_len:"length (linearize data_in') = length auxlist'"
       using data_in'_len_leq
       by auto
     moreover have "auxlist_data_in args nt auxlist' = take (length (linearize data_in')) auxlist'"
       using valid
-      by auto
+      by (simp add: valid_mmtaux_def)
     ultimately have auxlist_in_eq:
       "auxlist_data_in args nt auxlist' = auxlist'"
       "auxlist_data_in args nt auxlist'' = auxlist' @ [(nt, l, r)]"
@@ -10359,31 +10358,31 @@ proof -
 
     have "(if mem (args_ivl args) 0 then (args_L args) \<subseteq> (args_R args) else (args_L args) = (args_R args))"
       using assms(4)
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "\<not>mem (args_ivl args) 0 \<longrightarrow> args_pos args"
       using assms(4)
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "maskL = join_mask (args_n args) (args_L args)"
       using assms(4)
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "maskR = join_mask (args_n args) (args_R args)"
       using assms(4)
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "(\<forall>(t, relL, relR) \<in> set auxlist''. table (args_n args) (args_L args) relL \<and> table (args_n args) (args_R args) relR)"
     proof -
       have "(\<forall>(t, relL, relR) \<in> set auxlist'. table (args_n args) (args_L args) relL \<and> table (args_n args) (args_R args) relR)"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       then show ?thesis using assms(2-3) unfolding auxlist''_def by auto
     qed
     moreover have "table (args_n args) (args_L args) (Mapping.keys tuple_in_once')"
       using valid
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "table (args_n args) (args_R args) (Mapping.keys tuple_since_hist''')"
     proof -
       have "table (args_n args) (args_R args) (Mapping.keys tuple_since_hist')"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       then have "table (args_n args) (args_R args) (Mapping.keys tuple_since_hist'')"
         unfolding tuple_since_hist''_def
         by (meson New_max.wf_atable_subset keys_filter)
@@ -10397,15 +10396,15 @@ proof -
     qed
     moreover have "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_L args) as)"
       using valid
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "(\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_R args) as)"
       using valid
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "(\<forall>as \<in> \<Union>((snd) ` (set (linearize data_in''))). wf_tuple (args_n args) (args_R args) as)"
     proof -
       have "(\<forall>as \<in> \<Union>((snd) ` (set (linearize data_in'))). wf_tuple (args_n args) (args_R args) as)"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       then show ?thesis
         using assms(3)
         unfolding data_in''_def append_queue_rep table_def
@@ -10417,7 +10416,7 @@ proof -
       have "ts_tuple_rel_binary_rhs (set (auxlist_data_in args nt auxlist')) =
       ts_tuple_rel (set (linearize data_in'))"
         using valid
-        by auto
+        by (auto simp add: valid_mmtaux_def)
       moreover have "ts_tuple_rel_binary_rhs (set (auxlist_data_in args nt auxlist'')) = ts_tuple_rel_binary_rhs (set (auxlist_data_in args nt auxlist')) \<union> ts_tuple_rel_binary_rhs (set ([(nt, l, r)]))"
         using auxlist_in_eq
         unfolding ts_tuple_rel_f_def
@@ -10435,7 +10434,7 @@ proof -
         "sorted (map fst auxlist')"
         "\<forall>db \<in> set auxlist'. time db \<le> nt"
         using valid
-        by auto
+        by (simp_all add: valid_mmtaux_def)
       then show ?thesis
         unfolding auxlist''_def time_def
         using sorted_append[of "map fst auxlist'" "map fst [(nt, l, r)]"]
@@ -10444,7 +10443,7 @@ proof -
     moreover have "auxlist_data_prev args nt auxlist'' = (linearize data_prev')"
       unfolding auxlist_prev_eq
       using valid
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "auxlist_data_prev args nt auxlist'' = drop (length (linearize data_in'')) auxlist''"
       using True data_in'_len memL
       unfolding auxlist''_def data_in''_def append_queue_rep auxlist_data_prev_def
@@ -10452,12 +10451,12 @@ proof -
     moreover have "length (linearize data_prev') + idx_mid'' = idx_next''"
       using valid
       unfolding idx_mid''_def idx_next''_def
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args nt auxlist'') = (linearize data_in'')"
     proof -
       have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args nt auxlist') = (linearize data_in')"
         using valid
-        by auto
+        by (auto simp add: valid_mmtaux_def)
      then show ?thesis
       unfolding auxlist_in_eq data_in''_def append_queue_rep
       by auto
@@ -10471,7 +10470,7 @@ proof -
     proof -
       have "length (linearize data_in') + idx_oldest' = idx_mid'"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       then show ?thesis
         unfolding idx_mid''_def data_in''_def append_queue_rep
         by auto
@@ -10480,17 +10479,17 @@ proof -
     proof -
       have "(\<forall>db \<in> set auxlist'. time db \<le> nt \<and> memR (args_ivl args) (nt - time db))"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       then show ?thesis
         unfolding auxlist''_def time_def
         by auto
     qed
     moreover have "newest_tuple_in_mapping fst data_prev' tuple_in_once' (\<lambda>x. True)"
       using valid
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> join_cond (args_pos args) l (proj_tuple maskL as))"
       using valid
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "(\<forall>as. (case Mapping.lookup tuple_since_hist''' as of
       Some idx \<Rightarrow> tuple_since_tp args as (linearize data_in'') idx_oldest' idx_mid'' idx
       | None   \<Rightarrow> \<forall>idx. \<not>tuple_since_tp args as (linearize data_in'') idx_oldest' idx_mid'' idx)
@@ -10501,7 +10500,7 @@ proof -
         | None   \<Rightarrow> \<forall>idx. \<not>tuple_since_tp args as (linearize data_in') idx_oldest' idx_mid' idx)
       )"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       have non_empty: "linearize data_in'' \<noteq> []"
         unfolding data_in''_def append_queue_rep
         by auto
@@ -10511,7 +10510,7 @@ proof -
       have before_len:
         "length (linearize data_in') + idx_oldest' = idx_mid'"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       {
         fix as
         have "(case Mapping.lookup tuple_since_hist''' as of
@@ -10652,7 +10651,7 @@ proof -
           \<forall>(t, l, r) \<in> set (auxlist_data_in args nt auxlist'). tuple \<in> r
       ))"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       {
         fix tuple
 
@@ -10660,7 +10659,7 @@ proof -
           assume assm: "is_empty data_in'"
           have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args nt auxlist') = (linearize data_in')"
             using valid
-            by auto
+            by (auto simp add: valid_mmtaux_def)
           then have "(auxlist_data_in args nt auxlist') = []"
             using assm is_empty_alt[of data_in']
             by auto
@@ -10765,7 +10764,7 @@ proof -
           ((tuple \<in> hist_sat') \<or> tuple_since_lhs tuple (linearize data_in') args maskL (auxlist_data_in args nt auxlist'))
         )"
         using valid
-        unfolding valid_mmtaux.simps
+        unfolding valid_mmtaux_def prod.case
         apply -
         apply (erule conjE)+
         apply assumption
@@ -10791,7 +10790,7 @@ proof -
                 \<forall>(t, l, r) \<in> set (auxlist_data_in args nt auxlist'). tuple \<in> r
             ))"
               using valid
-              by auto
+              by (simp add: valid_mmtaux_def)
             ultimately have "(\<not>is_empty data_in')"
               by auto
             then have "tuple \<in> hist_sat''"
@@ -10813,7 +10812,7 @@ proof -
             
             have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args nt auxlist') = (linearize data_in')"
               using valid
-              by auto
+              by (auto simp add: valid_mmtaux_def)
             then have len_eq: "length (auxlist_data_in args nt auxlist') = length (linearize data_in')"
               using length_map
               by metis
@@ -10862,7 +10861,7 @@ proof -
           proof -
             have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args nt auxlist') = (linearize data_in')"
               using valid
-              by auto
+              by (auto simp add: valid_mmtaux_def)
             then show ?thesis
               using auxlist_in_eq length_map[of "(\<lambda>(t, l, r). (t, r))" "(auxlist_data_in args nt auxlist')"]
               unfolding data_in''_def append_queue_rep n_def
@@ -10886,7 +10885,7 @@ proof -
         tuple \<in> since_sat'
       )"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       {
         fix tuple
         assume assm: "tuple_since_lhs tuple (linearize data_in'') args maskL (auxlist_data_in args nt auxlist'')"
@@ -10935,7 +10934,7 @@ proof -
             by auto
           moreover have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args nt auxlist') = (linearize data_in')"
             using valid
-            by auto
+            by (auto simp add: valid_mmtaux_def)
           ultimately have "drop n (auxlist_data_in args nt auxlist'') = [(nt, l, r)]"
             using auxlist_in_eq length_map[of "(\<lambda>(t, l, r). (t, r))" "(auxlist_data_in args nt auxlist')"]
             by auto
@@ -10955,13 +10954,13 @@ proof -
     qed
     moreover have "tuple_in_once_keys' = Mapping.keys tuple_in_once'"
       using valid
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "time (nt, l, r) \<le> nt"
       unfolding time_def
       by auto
     ultimately show ?thesis
       unfolding res_eq[symmetric] auxlist''_def auxlist'_def
-      by (auto simp only: valid_mmtaux.simps)
+      by (auto simp only: valid_mmtaux_def)
   next
     case False
     define data_prev'' where "data_prev'' = (append_queue (nt, l, r) data_prev')"
@@ -10996,32 +10995,32 @@ proof -
       ) = update_mmtaux args nt l r (mt, idx_next, idx_mid, idx_oldest, maskL, maskR, data_prev, data_in, tuple_in_once, tuple_in_once_keys, tuple_since_hist, hist_sat, since_sat)"
       unfolding update_mmtaux_res_def data_prev''_def idx_next''_def tuple_in_once''_def tuple_in_once_keys''_def
       using False
-      by (auto simp only: update_mmtaux.simps Let_def update_eq[symmetric] split: if_splits)
+      by (auto simp only: update_mmtaux_def Let_def update_eq[symmetric] split: if_splits)
   
     have "(if mem (args_ivl args) 0 then (args_L args) \<subseteq> (args_R args) else (args_L args) = (args_R args))"
       using assms(4)
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "\<not>mem (args_ivl args) 0 \<longrightarrow> args_pos args"
       using assms(4)
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "maskL = join_mask (args_n args) (args_L args)"
       using assms(4)
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "maskR = join_mask (args_n args) (args_R args)"
       using assms(4)
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "(\<forall>(t, relL, relR) \<in> set auxlist''. table (args_n args) (args_L args) relL \<and> table (args_n args) (args_R args) relR)"
     proof -
       have "(\<forall>(t, relL, relR) \<in> set auxlist'. table (args_n args) (args_L args) relL \<and> table (args_n args) (args_R args) relR)"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       then show ?thesis using assms(2-3) unfolding auxlist''_def by auto
     qed
     moreover have table_in_once'': "table (args_n args) (args_L args) (Mapping.keys tuple_in_once'')"
     proof -
       have "table (args_n args) (args_L args) (Mapping.keys tuple_in_once')"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       then show ?thesis
         unfolding tuple_in_once''_def
         using assms(2)
@@ -11029,12 +11028,12 @@ proof -
     qed
     moreover have "table (args_n args) (args_R args) (Mapping.keys tuple_since_hist')"
       using valid
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have data_prev''_relL: "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev''))). wf_tuple (args_n args) (args_L args) as)"
     proof -
       have "(\<forall>as \<in> \<Union>((relL) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_L args) as)"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       then show ?thesis
         using assms(2)
         unfolding data_prev''_def append_queue_rep relL_def table_def
@@ -11044,7 +11043,7 @@ proof -
     proof -
       have "(\<forall>as \<in> \<Union>((relR) ` (set (linearize data_prev'))). wf_tuple (args_n args) (args_R args) as)"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       then show ?thesis
         using assms(3)
         unfolding data_prev''_def append_queue_rep relR_def table_def
@@ -11052,19 +11051,19 @@ proof -
     qed
     moreover have "(\<forall>as \<in> \<Union>((snd) ` (set (linearize data_in'))). wf_tuple (args_n args) (args_R args) as)"
       using valid
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "ts_tuple_rel_binary_rhs (set (auxlist_data_in args nt auxlist'')) =
       ts_tuple_rel (set (linearize data_in'))"
       unfolding auxlist_in_eq
       using valid
-      by auto
+      by (auto simp add: valid_mmtaux_def)
     moreover have "sorted (map fst auxlist'')"
     proof -
       have
         "sorted (map fst auxlist')"
         "\<forall>db \<in> set auxlist'. time db \<le> nt"
         using valid
-        by auto
+        by (simp_all add: valid_mmtaux_def)
       then show ?thesis
         unfolding auxlist''_def time_def
         using sorted_append[of "map fst auxlist'" "map fst [(nt, l, r)]"]
@@ -11074,7 +11073,7 @@ proof -
     proof -
       have "auxlist_data_prev args nt auxlist' = (linearize data_prev')"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       then show ?thesis
         using False
         unfolding auxlist_data_prev_def auxlist''_def data_prev''_def append_queue_rep
@@ -11084,7 +11083,7 @@ proof -
     proof - 
       have "auxlist_data_prev args nt auxlist' = drop (length (linearize data_in')) auxlist'"
         using valid
-        by auto
+        by (auto simp add: valid_mmtaux_def)
       then show ?thesis
         using False data_in'_len_leq
         unfolding auxlist''_def auxlist_data_prev_def
@@ -11094,7 +11093,7 @@ proof -
     proof -
       have "length (linearize data_prev') + idx_mid' = idx_next"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       then show ?thesis
         unfolding data_prev''_def idx_next''_def append_queue_rep
         by auto
@@ -11102,12 +11101,12 @@ proof -
     moreover have "map (\<lambda> (t, l, r). (t, r)) (auxlist_data_in args nt auxlist'') = (linearize data_in')"
       unfolding auxlist_in_eq
       using valid
-      by auto
+      by (auto simp add: valid_mmtaux_def)
     moreover have "auxlist_data_in args nt auxlist'' = take (length (linearize data_in')) auxlist''"
     proof -
       have "auxlist_data_in args nt auxlist' = take (length (linearize data_in')) auxlist'"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       then show ?thesis
         using data_in'_len_leq False
         unfolding auxlist''_def auxlist_data_in_def
@@ -11115,12 +11114,12 @@ proof -
     qed
     moreover have "length (linearize data_in') + idx_oldest' = idx_mid'"
       using valid
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "(\<forall>db \<in> set auxlist''. time db \<le> nt \<and> memR (args_ivl args) (nt - time db))"
     proof -
       have "(\<forall>db \<in> set auxlist'. time db \<le> nt \<and> memR (args_ivl args) (nt - time db))"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       then show ?thesis
         unfolding auxlist''_def time_def
         by auto
@@ -11129,7 +11128,7 @@ proof -
     proof -
       have before: "newest_tuple_in_mapping fst data_prev' tuple_in_once' (\<lambda>x. True)"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       {
         fix tuple::"'a option list"
         assume wf: "wf_tuple (args_n args) (args_L args) tuple"
@@ -11219,7 +11218,7 @@ proof -
                 "(\<forall>db \<in> set auxlist'. time db \<le> nt \<and> memR (args_ivl args) (nt - time db))"
                 "auxlist_data_prev args nt auxlist' = (linearize data_prev')"
                 using valid
-                by auto
+                by (simp_all add: valid_mmtaux_def)
               then have "\<forall>db \<in> set (linearize data_prev'). time db \<le> nt"
                 unfolding auxlist_data_prev_def
                 by (metis Set.member_filter filter_set)
@@ -11293,7 +11292,7 @@ proof -
     proof -
       have before: "(\<forall>as \<in> Mapping.keys tuple_in_once'. case Mapping.lookup tuple_in_once' as of Some t \<Rightarrow> \<exists>l r. (t, l, r) \<in> set (linearize data_prev') \<and> join_cond (args_pos args) l (proj_tuple maskL as))"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       {
         fix as
         assume "as \<in> Mapping.keys tuple_in_once''"
@@ -11311,7 +11310,7 @@ proof -
             by auto
           have pos: "args_pos args"
             using valid False
-            by auto
+            by (simp add: valid_mmtaux_def)
           have "proj_tuple maskL as \<in> l"
             using True proj_l
             by auto
@@ -11343,14 +11342,14 @@ proof -
       | None   \<Rightarrow> \<forall>idx. \<not>tuple_since_tp args as (linearize data_in') idx_oldest' idx_mid' idx)
     )"
       using valid
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "(\<forall>tuple. tuple \<in> hist_sat' \<longleftrightarrow>
         (\<not>is_empty data_in') \<and> (
           \<forall>(t, l, r) \<in> set (auxlist_data_in args nt auxlist''). tuple \<in> r
       ))"
       unfolding auxlist_in_eq
       using valid
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "(\<forall>tuple. tuple \<in> since_sat' \<longrightarrow>
         ((tuple \<in> hist_sat') \<or> tuple_since_lhs tuple (linearize data_in') args maskL (auxlist_data_in args nt auxlist''))
       )"
@@ -11359,7 +11358,7 @@ proof -
         ((tuple \<in> hist_sat') \<or> tuple_since_lhs tuple (linearize data_in') args maskL (auxlist_data_in args nt auxlist'))
       )"
         using valid
-        unfolding valid_mmtaux.simps
+        unfolding valid_mmtaux_def prod.case
         apply -
         apply (erule conjE)+
         apply assumption
@@ -11373,12 +11372,12 @@ proof -
       )"
       unfolding auxlist_in_eq
       using valid
-      by auto
+      by (simp add: valid_mmtaux_def)
     moreover have "tuple_in_once_keys'' = Mapping.keys tuple_in_once''"
     proof -
       have "tuple_in_once_keys' = Mapping.keys tuple_in_once'"
         using valid
-        by auto
+        by (simp add: valid_mmtaux_def)
       then show ?thesis
         unfolding tuple_in_once_keys''_def tuple_in_once''_def
         by (simp add: Mapping_upd_set_keys)
@@ -11388,7 +11387,7 @@ proof -
       by auto
     ultimately show ?thesis
       unfolding res_eq[symmetric] auxlist''_def auxlist'_def
-      by (auto simp only: valid_mmtaux.simps)
+      by (auto simp only: valid_mmtaux_def)
   qed
 qed
 

@@ -899,7 +899,7 @@ proof -
   have muaux'_def: "add_new_mmuaux args rel1 rel2 nt ?muaux = ?muaux'"
     using updated_def inter_def[folded valid_shift(2)[symmetric]]
     by (cases "shift_mmuaux args nt (tp, tss, tables, len, maskL, maskR, result, a1_map, a2_map, tstp_map, done)")
-       (auto simp only: add_new_mmauaux.simps add_new_mmuaux.simps Let_def split: option.splits)
+       (auto simp only: add_new_mmauaux.simps add_new_mmuaux_def Let_def split: option.splits)
   have valid_old: "valid_mmuaux args cur ?muaux auxlist" using assms(1) unfolding valid_mmauaux_def valid_mmuaux_def by auto
   have valid_muaux: "valid_mmuaux args nt ?muaux' (update_until args rel1 rel2 nt auxlist)" 
     using valid_add_new_mmuaux[OF valid_old tabs nt_mono] muaux'_def by simp

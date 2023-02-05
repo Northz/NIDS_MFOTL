@@ -1016,9 +1016,9 @@ next
     by clarsimp
 next
   case (10 I L R pos n agg)
-  then show ?case 
-    by (clarsimp simp: Let_def split: if_splits)
-      (metis memR_zero valid_init_mmtaux)+
+  then show ?case
+    using valid_init_mmtaux[of I L R pos n agg]
+    by (auto simp: Let_def split: if_splits)
 next
   case (11 cur nt args l r aux auxlist)
   then show ?case 
@@ -1170,6 +1170,8 @@ lemma upd_set_code[code]:
   "upd_set m f A = (if finite A then set_fold_cfi (upd_cfi f) m A else Code.abort (STR ''upd_set: infinite'') (\<lambda>_. upd_set m f A))"
   by (transfer fixing: m) (auto simp: upd_set_fold)
 
+declare [[code drop: lexordp_eq]]
+
 lemma lexordp_eq_code[code]: "lexordp_eq xs ys \<longleftrightarrow> (case xs of [] \<Rightarrow> True
   | x # xs \<Rightarrow> (case ys of [] \<Rightarrow> False
     | y # ys \<Rightarrow> if x < y then True else if x > y then False else lexordp_eq xs ys))"
@@ -1228,7 +1230,7 @@ proof -
   interpret comp_fun_idem "\<lambda>a Z'.
     case Mapping.lookup m a of Some u \<Rightarrow> if t = u then Z' - {a} else Z' | _ \<Rightarrow> Z'"
     by unfold_locales
-      (transfer; auto simp: fun_eq_iff Map_To_Mapping.map_apply_def split: option.splits)+
+      (transfer; auto simp: fun_eq_iff split: option.splits)+
   from assms show ?thesis
     by (induct A arbitrary: Z rule: finite.induct) (auto simp: Let_def)
 qed
@@ -1236,10 +1238,7 @@ qed
 lift_definition filter_set_cfi :: "('a, 'b) mapping \<Rightarrow> 'b \<Rightarrow> ('a, 'a set) comp_fun_idem"
   is "\<lambda>m t a Z'.
     case Mapping.lookup m a of Some u \<Rightarrow> if t = u then Z' - {a} else Z' | _ \<Rightarrow> Z'"
-  apply unfold_locales
-   apply (transfer)
-   apply (fastforce simp: comp_def split: option.splits)+
-  done
+  by (unfold_locales, transfer) (fastforce simp: comp_def split: option.splits)+
 
 lemma filter_set'_code[code]:
   "filter_set' Z m A t = (if finite A then set_fold_cfi (filter_set_cfi m t) Z A else Code.abort (STR ''filter_set: infinite'') (\<lambda>_. filter_set' Z m A t))"
@@ -1309,7 +1308,7 @@ lemma upd_nested_max_tstp_fold:
 proof -
   interpret comp_fun_idem "upd_nested_step d (max_tstp d)"
     by (unfold_locales; rule ext)
-      (auto simp add: comp_def upd_nested_step_def Mapping.lookup_update' Mapping.lookup_empty
+      (auto simp add: comp_def upd_nested_step_def Mapping.lookup_update'
        update_update max_tstp_d_d max_tstp_idem' split: option.splits)
   note upd_nested_insert' = upd_nested_insert[of d "max_tstp d",
     OF max_tstp_d_d[symmetric] max_tstp_idem']
@@ -1545,40 +1544,40 @@ lemma Sup_rec_safety_atms[code_unfold]:
 lift_definition delete_cnt_cfc::"aggargs \<Rightarrow> (event_data tuple, (bool \<times> nat agg_map)) comp_fun_commute" is
   "\<lambda>args. delete_cnt args" using delete_cnt_comm by unfold_locales auto
 
-lemma [code_unfold]: "Finite_Set.fold (delete_cnt args) (v, m) data = set_fold_cfc (delete_cnt_cfc args) (v, m) data"
+lemma delete_cnt_code[code_unfold]: "Finite_Set.fold (delete_cnt args) (v, m) data = set_fold_cfc (delete_cnt_cfc args) (v, m) data"
   by(transfer) auto
 
 lift_definition delete_sum_cfc::"aggargs \<Rightarrow> (event_data tuple, (bool \<times> ((nat \<times> integer) agg_map))) comp_fun_commute" is
   "\<lambda>args. delete_sum args" using delete_sum_comm by unfold_locales auto
 
-lemma [code_unfold]: "Finite_Set.fold (delete_sum args) (v, m) data = set_fold_cfc (delete_sum_cfc args) (v, m) data"
+lemma delete_sum_code[code_unfold]: "Finite_Set.fold (delete_sum args) (v, m) data = set_fold_cfc (delete_sum_cfc args) (v, m) data"
   by(transfer) auto
 
 lift_definition delete_rank_cfc::"aggargs \<Rightarrow> type \<Rightarrow> (event_data tuple, bool \<times> list_aux agg_map) comp_fun_commute" is
   "\<lambda>args. delete_rank args" using delete_rank_comm by unfold_locales auto
 
-lemma [code_unfold]: "Finite_Set.fold (delete_rank args type) (v, m) data = set_fold_cfc (delete_rank_cfc args type) (v, m) data"
+lemma delete_rank_code[code_unfold]: "Finite_Set.fold (delete_rank args type) (v, m) data = set_fold_cfc (delete_rank_cfc args type) (v, m) data"
   by(transfer) auto
 
 lift_definition insert_cnt_cfc::"aggargs \<Rightarrow> (event_data tuple, (bool \<times> nat agg_map)) comp_fun_commute" is
   "\<lambda>args. insert_cnt args" using insert_cnt_comm by unfold_locales auto
 
-lemma [code_unfold]: "Finite_Set.fold (insert_cnt args) (v, m) data = set_fold_cfc (insert_cnt_cfc args) (v, m) data"
+lemma insert_cnt_code[code_unfold]: "Finite_Set.fold (insert_cnt args) (v, m) data = set_fold_cfc (insert_cnt_cfc args) (v, m) data"
   by(transfer) auto
 
 lift_definition insert_sum_cfc::"aggargs \<Rightarrow> (event_data tuple, (bool \<times> ((nat \<times> integer) agg_map))) comp_fun_commute" is
   "\<lambda>args. insert_sum args" using insert_sum_comm by unfold_locales auto
 
-lemma [code_unfold]: "Finite_Set.fold (insert_sum args) (v, m) data = set_fold_cfc (insert_sum_cfc args) (v, m) data"
+lemma insert_sum_code[code_unfold]: "Finite_Set.fold (insert_sum args) (v, m) data = set_fold_cfc (insert_sum_cfc args) (v, m) data"
   by(transfer) auto
 
 lift_definition insert_rank_cfc::"aggargs \<Rightarrow> type \<Rightarrow> (event_data tuple, bool \<times> list_aux agg_map) comp_fun_commute" is
   "\<lambda>args. insert_rank args" using insert_rank_comm by unfold_locales auto
 
-lemma [code_unfold]: "Finite_Set.fold (insert_rank args type) (v, m) data = set_fold_cfc (insert_rank_cfc args type) (v, m) data"
+lemma insert_rank_code[code_unfold]: "Finite_Set.fold (insert_rank args type) (v, m) data = set_fold_cfc (insert_rank_cfc args type) (v, m) data"
   by(transfer) auto
 
-lemma [code_unfold]: "X - Mapping.keys tuple_in = Set.filter (\<lambda>k. Mapping.lookup tuple_in k = None) X"
+lemma set_diff_code[code_unfold]: "X - Mapping.keys tuple_in = Set.filter (\<lambda>k. Mapping.lookup tuple_in k = None) X"
   by(transfer) auto
 
 instantiation treelist :: (equal) equal begin
@@ -1627,10 +1626,10 @@ proof -
 lift_definition to_add_set_cfi :: "'b \<Rightarrow> ('a, 'c) mapping \<Rightarrow> (('b \<times> 'a), 'a set) comp_fun_idem" is 
   "\<lambda>a m. to_add_set_fun a m" by(unfold_locales) (auto simp:to_add_set_fun_def comp_def split:if_splits)
 
-lemma [code]: "to_add_set a m tmp = (if finite tmp then set_fold_cfi (to_add_set_cfi a m) {} tmp else Code.abort (STR ''to_add_set: infinite set'') (\<lambda>_. to_add_set a m tmp))"
+lemma to_add_set_code[code]: "to_add_set a m tmp = (if finite tmp then set_fold_cfi (to_add_set_cfi a m) {} tmp else Code.abort (STR ''to_add_set: infinite set'') (\<lambda>_. to_add_set a m tmp))"
   using to_add_set_fold[of tmp a m] by transfer auto
 
-lemma [code]: 
+lemma add_new_mmuaux_code[code]: 
   "add_new_mmuaux args rel1 rel2 nt aux =
     (let (tp, tss, tables, len, maskL, maskR, result, a1_map, a2_map, tstp_map, done) =
     shift_mmuaux args nt aux;
@@ -1650,9 +1649,9 @@ lemma [code]:
       (upd_set a1_map (\<lambda>_. tp) (rel1 - Mapping.keys a1_map)) else upd_set a1_map (\<lambda>_. tp) rel1);
     tss = append_queue nt tss in
     (tp + 1, tss, tables, len + 1, maskL, maskR, result \<union> snd ` (Set.filter (\<lambda>(t, x). t = tp - len) tmp), a1_map, a2_map, tstp_map, done))" 
-  by(auto simp: upd_nested_max_tstp_def split:option.splits prod.splits)
+  by(auto simp: upd_nested_max_tstp_def add_new_mmuaux_def split:option.splits prod.splits)
 
-lemma [code]:
+lemma add_new_mmauaux_code[code]:
   "add_new_mmauaux args rel1 rel2 nt (mmuaux, aggaux) =
     (case args_agg args of 
      None \<Rightarrow> let (tp, tss, tables, len, maskL, maskR, result, a1_map, a2_map, tstp_map, done) = add_new_mmuaux args rel1 rel2 nt mmuaux in
@@ -1678,7 +1677,7 @@ lemma [code]:
     aggaux = insert_maggaux' aggargs to_add aggaux;
     tss = append_queue nt tss in
     ((tp + 1, tss, tables, len + 1, maskL, maskR, result \<union> snd ` (Set.filter (\<lambda>(t, x). t = tp - len) tmp), a1_map, a2_map', tstp_map, done), aggaux)))"
-  by(auto simp del: add_new_mmuaux.simps simp add: to_add_set_def  upd_nested_max_tstp_def split:option.splits prod.splits)
+  by(auto simp add: to_add_set_def  upd_nested_max_tstp_def split:option.splits prod.splits)
 
 
 lift_definition update_mapping_with :: "('a \<Rightarrow> 'b \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'a \<Rightarrow> 'b \<Rightarrow> ('a, 'b) mapping \<Rightarrow> ('a, 'b) mapping" is
