@@ -249,8 +249,8 @@ proof -
     using data_prev'_def data_in'_def fold_filter_set discard_def valid_before nt_mono
       sorted_lin_data_prev' sorted_lin_data_in' lin_data_prev' lin_data_in' lookup_tuple_in'
       table_in' keys_tuple_in' sig_in'' keys_tuple_in'' sig_since keys_since unfolding I_def
-    by (auto simp only: valid_mmsaux.simps shift_end.simps Let_def split: prod.splits) auto
-      (* takes long *)
+    unfolding valid_mmsaux.simps shift_end.simps Let_def split_beta
+    by auto
 qed
 
 lemma valid_shift_end_mmsaux: "valid_mmsaux args cur aux auxlist \<Longrightarrow> nt \<ge> cur \<Longrightarrow>
@@ -441,13 +441,10 @@ proof -
   moreover have "valid_mmsaux args nt (nt, gc, maskL, maskR, data_prev', data_in', table_in \<union> add,
     wf_table_union wf_table_in (wf_table_of_set_args args add), tuple_in', wf_table_since, tuple_since) auxlist"
     using lin_data_prev' sorted_lin_data_prev' lin_data_in' move_filter sorted_lin_data_in'
-      nt_mono valid_before ts_tuple_rel' lookup'
+      nt_mono valid_before ts_tuple_rel' lookup' memL_mono[of "args_ivl args" "ot - a" "nt - a" for a]
       table_in' keys_tuple_in' sig_in'' keys_tuple_in'' sig_since keys_since unfolding I_def
-    apply (auto simp only: valid_mmsaux.simps Let_def n_def R_def split: option.splits)
-          apply (auto)
-    apply (auto simp: memL_mono)
-    done
-      (* takes long *)
+    unfolding valid_mmsaux.simps Let_def n_def R_def
+    by (auto split: option.splits) (* takes long *)
   ultimately show ?thesis
     by (auto simp only: add_new_ts_mmsaux'.simps Let_def data_in'_def aux tuple_in'_def I_def
         split: prod.splits)
