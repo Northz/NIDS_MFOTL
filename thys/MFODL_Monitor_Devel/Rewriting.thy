@@ -14,7 +14,7 @@
     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
     *)
 theory Rewriting
-  imports Formula Regex
+  imports Formula
 begin
 
 datatype (discs_sels) 'a tformula =

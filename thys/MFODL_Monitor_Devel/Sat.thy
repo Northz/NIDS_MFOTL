@@ -574,10 +574,40 @@ next
     by fact+
 next
   case (And_Trigger P V n R \<alpha> \<alpha>' \<phi>'' I \<psi>' buf1 \<psi> args \<phi>' \<phi> buf2 nts aux)
-  then show ?case sorry
+  hence "\<tau> \<sigma> = \<tau> \<sigma>'"
+    by (metis \<tau>_convert)
+  have "wf_mbuf2' \<sigma>' P V' j n R \<phi>' \<psi>' buf2"
+    and "wf_mbuft2' \<sigma>' P V' j n R \<alpha>' \<phi>'' I \<psi>' buf1" 
+    and "wf_ts \<sigma>' P j \<phi>' \<psi>' nts"
+    using \<open>wf_mbuf2' \<sigma> P V j n R \<phi>' \<psi>' buf2\<close> \<open>\<tau> \<sigma> = \<tau> \<sigma>'\<close>
+      And_Trigger(2) \<open>wf_ts \<sigma> P j \<phi>' \<psi>' nts\<close>
+    by (auto simp: wf_mbuft2'_def wf_mbuf2'_def wf_mbuf2_def wf_dfvs_def 
+        progress_convert_cong[OF \<open>convert \<sigma> V = convert \<sigma>' V'\<close>] wf_ts_def
+        sat_convert_cong[OF \<open>convert \<sigma> V = convert \<sigma>' V'\<close>])
+  moreover have "wf_trigger_aux \<sigma>' V' R args \<phi>' \<psi>' aux (Progress.progress \<sigma>' P (formula.Trigger \<phi>'' I \<psi>') j)"
+    using \<open>wf_trigger_aux \<sigma> V R args \<phi>' \<psi>' aux (Progress.progress \<sigma> P (formula.Trigger \<phi>'' I \<psi>') j)\<close>
+    using  \<open>\<tau> \<sigma> = \<tau> \<sigma>'\<close>
+    by (auto simp: wf_trigger_aux_def sat_convert_cong[OF \<open>convert \<sigma> V = convert \<sigma>' V'\<close>]
+        progress_convert_cong[OF \<open>convert \<sigma> V = convert \<sigma>' V'\<close>] 
+        split: prod.splits if_splits) (* SLOW ~ 20s *)
+  ultimately show ?case
+    using And_Trigger
+    by (auto intro!: wf_mformula.And_Trigger)
 next
   case (And_Release I \<phi>' \<psi>' \<alpha>' P V n R buf L\<^sub>M R\<^sub>M)
-  then show ?case sorry
+  hence "\<tau> \<sigma> = \<tau> \<sigma>'"
+    by (metis \<tau>_convert)
+  have "wf_mbuf2' \<sigma>' P V' j n R (formula.And \<alpha>' (formula.Neg (Formula.eventually I Formula.TT)))
+     (formula.And \<alpha>' (release_safe_bounded \<phi>' I \<psi>')) buf"
+    apply (auto simp: release_safe_bounded_def
+        wf_mbuf2'_def wf_mbuf2_def wf_dfvs_def 
+        progress_convert_cong[OF \<open>convert \<sigma> V = convert \<sigma>' V'\<close>] wf_ts_def
+        sat_convert_cong[OF \<open>convert \<sigma> V = convert \<sigma>' V'\<close>])
+    sorry
+  show ?case
+    using And_Release
+    apply (auto intro!: wf_mformula.And_Release)
+    sorry
 next
   case (Or P V n R \<phi> \<phi>' \<psi> \<psi>' buf)
   then show ?case

@@ -1317,9 +1317,6 @@ lemma future_bounded_remove_neg: "future_bounded (remove_neg \<phi>) = future_bo
 
 subsection \<open>Translation to n-ary conjunction\<close>
 
-
-subsubsection \<open> get and list \<close>
-
 fun get_and_list :: "'t Formula.formula \<Rightarrow> 't Formula.formula list" where
   "get_and_list (\<And>\<^sub>F l) = (if l = [] then [\<And>\<^sub>F l] else l)"
 | "get_and_list \<phi> = [\<phi>]"
