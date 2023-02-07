@@ -859,12 +859,62 @@ next
   qed
 next
   case (Trigger \<phi> I \<psi>)
-  show ?case
-    sorry
+  then consider (left) "Safety.matches v \<phi> (q, as)" | (right) "Safety.matches v \<psi> (q, as)"
+    by auto
+  then show ?case proof cases
+    case left
+    then show ?thesis
+    proof (rule Trigger.IH(1)[OF _ _ Trigger.prems(3) _ Trigger.prems(5)])
+      show "\<forall>x\<in>{x \<in> X. x < Formula.nfv \<phi>}. x < Formula.nfv \<phi> \<and> v ! x = z"
+        using Trigger.prems(2) by simp
+      fix vs k'
+      assume "(q, vs) \<in> inputs \<phi>" "length vs = length as" "k' \<in> K"
+      then show "vs ! k' \<in> Some ` {x \<in> X. x < Formula.nfv \<phi>}"
+        using Trigger.prems(3,4) inputs_subset_fv fvi_less_nfv
+        by (fastforce simp add: set_conv_nth eq_commute)
+    qed
+  next
+    case right
+    then show ?thesis
+    proof (rule Trigger.IH(2)[OF _ _ Trigger.prems(3) _ Trigger.prems(5)])
+      show "\<forall>x\<in>{x \<in> X. x < Formula.nfv \<psi>}. x < Formula.nfv \<psi> \<and> v ! x = z"
+        using Trigger.prems(2) by simp
+      fix vs k'
+      assume "(q, vs) \<in> inputs \<psi>" "length vs = length as" "k' \<in> K"
+      then show "vs ! k' \<in> Some ` {x \<in> X. x < Formula.nfv \<psi>}"
+        using Trigger.prems(3,4) inputs_subset_fv fvi_less_nfv
+        by (fastforce simp add: set_conv_nth eq_commute)
+    qed
+  qed
 next
   case (Release \<phi> I \<psi>)
-  show ?case
-    sorry
+  then consider (left) "Safety.matches v \<phi> (q, as)" | (right) "Safety.matches v \<psi> (q, as)"
+    by auto
+  then show ?case proof cases
+    case left
+    then show ?thesis
+    proof (rule Release.IH(1)[OF _ _ Release.prems(3) _ Release.prems(5)])
+      show "\<forall>x\<in>{x \<in> X. x < Formula.nfv \<phi>}. x < Formula.nfv \<phi> \<and> v ! x = z"
+        using Release.prems(2) by simp
+      fix vs k'
+      assume "(q, vs) \<in> inputs \<phi>" "length vs = length as" "k' \<in> K"
+      then show "vs ! k' \<in> Some ` {x \<in> X. x < Formula.nfv \<phi>}"
+        using Release.prems(3,4) inputs_subset_fv fvi_less_nfv
+        by (fastforce simp add: set_conv_nth eq_commute)
+    qed
+  next
+    case right
+    then show ?thesis
+    proof (rule Release.IH(2)[OF _ _ Release.prems(3) _ Release.prems(5)])
+      show "\<forall>x\<in>{x \<in> X. x < Formula.nfv \<psi>}. x < Formula.nfv \<psi> \<and> v ! x = z"
+        using Release.prems(2) by simp
+      fix vs k'
+      assume "(q, vs) \<in> inputs \<psi>" "length vs = length as" "k' \<in> K"
+      then show "vs ! k' \<in> Some ` {x \<in> X. x < Formula.nfv \<psi>}"
+        using Release.prems(3,4) inputs_subset_fv fvi_less_nfv
+        by (fastforce simp add: set_conv_nth eq_commute)
+    qed
+  qed
 next
   case (MatchF I r)
   then obtain \<phi> where "\<phi> \<in> Regex.atms r" "Safety.matches v \<phi> (q, as)"
@@ -901,7 +951,6 @@ next
   then show ?case by simp
 qed
 
-
 fun genvar :: "'a Formula.formula \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> Formula.name \<Rightarrow> nat \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> bool" where
   "genvar (Formula.Pred r ts) pos x q n c k = (pos = c \<and> q = r \<and> n = length ts \<and> k < length ts \<and> ts ! k = Formula.Var x)"
 | "genvar (Formula.Let p \<phi> \<psi>) pos x q n c k = ((\<exists>pos' y. genvar \<phi> pos' y q n c k \<and> genvar \<psi> pos x p (Formula.nfv \<phi>) pos' y) \<or>
@@ -927,23 +976,31 @@ fun genvar :: "'a Formula.formula \<Rightarrow> bool \<Rightarrow> nat \<Rightar
 (* The following cases could be made more precise. *)
 | "genvar (Formula.Since \<phi> I \<psi>) pos x q n c k = ((pos \<or> mem I 0) \<and> genvar \<psi> pos x q n c k)"
 | "genvar (Formula.Until \<phi> I \<psi>) pos x q n c k = ((pos \<or> mem I 0) \<and> genvar \<psi> pos x q n c k)"
-| "genvar (Formula.Trigger \<phi> I \<psi>) pos x q n c k = ((pos \<or> mem I 0) \<and> genvar \<psi> pos x q n c k)"
-| "genvar (Formula.Release \<phi> I \<psi>) pos x q n c k = ((pos \<or> mem I 0) \<and> genvar \<psi> pos x q n c k)"
+| "genvar (Formula.Trigger \<phi> I \<psi>) pos x q n c k = (pos \<and> mem I 0 \<and> genvar \<psi> pos x q n c k)"
+| "genvar (Formula.Release \<phi> I \<psi>) pos x q n c k = (pos \<and> mem I 0 \<and> genvar \<psi> pos x q n c k)"
 | "genvar (Formula.MatchP I r) pos x q n c k = False"
 | "genvar (Formula.MatchF I r) pos x q n c k = False"
 | "genvar (Formula.TP t) pos x q n c k = False"
 | "genvar (Formula.TS t) pos x q n c k = False"
 
+(* TODO: move to interval *)
 lemma memL_all[simp]: "memL all x"
   by transfer simp
 
 lemma memR_all[simp]: "memR all x"
   by transfer simp
 
+(* TODO: move to formula *)
+lemma sat_trigger_mem0_iff: "mem I 0 \<Longrightarrow> Formula.sat \<sigma> V v i (formula.Trigger \<phi> I \<psi>) 
+  \<longleftrightarrow> (\<forall>j \<le> i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> Formula.sat \<sigma> V v j \<psi> \<or> (\<exists>k\<in>{j<..i}. mem I (\<tau> \<sigma> i - \<tau> \<sigma> k) \<and> Formula.sat \<sigma> V v k (formula.And \<phi> \<psi>)))"
+  using sat_trigger_rewrite_0_mem[of I _ _ _ i \<phi> \<psi>]
+  by auto
+
 lemma genvar_sat:
-  assumes "genvar \<phi> (Formula.sat \<sigma> V v i \<phi>) x q n c k" and "length v \<ge> Formula.nfv \<phi>"
-  obtains vs as j where
-    "(q, n) \<in> dom V \<longrightarrow> the (V (q, n)) as j = c"
+  assumes "genvar \<phi> (Formula.sat \<sigma> V v i \<phi>) x q n c k" 
+    and "length v \<ge> Formula.nfv \<phi>"
+  obtains vs as j 
+  where "(q, n) \<in> dom V \<longrightarrow> the (V (q, n)) as j = c"
     "(q, n) \<notin> dom V \<longrightarrow> (q, as) \<in> \<Gamma> \<sigma> j = c"
     "length as = n" "k < n" "as ! k = v ! x"
   using assms
@@ -1228,12 +1285,30 @@ next
     by auto
 next
   case (Trigger \<phi> I \<psi>)
+  hence "Formula.nfv \<psi> \<le> length v"
+    by (auto simp: Formula.nfv_def)
+  have obs: "genvar \<psi> (Formula.sat \<sigma> V v i \<psi>) x q n c k"
+    using Trigger.prems(2) 
+    by (clarsimp, erule_tac x=i in allE)
+      clarsimp
   show ?case
-    sorry
+    using Trigger.prems(2-)
+    apply clarsimp
+    by (rule Trigger.IH(2)[rotated, OF obs \<open>Formula.nfv \<psi> \<le> length v\<close>])
+      (auto intro!: Trigger.prems)
 next
   case (Release \<phi> I \<psi>)
+    hence "Formula.nfv \<psi> \<le> length v"
+    by (auto simp: Formula.nfv_def)
+  have obs: "genvar \<psi> (Formula.sat \<sigma> V v i \<psi>) x q n c k"
+    using Release.prems(2) 
+    by (clarsimp, erule_tac x=i in allE)
+      clarsimp
   show ?case
-    sorry
+    using Release.prems(2-)
+    apply clarsimp
+    by (rule Release.IH(2)[rotated, OF obs \<open>Formula.nfv \<psi> \<le> length v\<close>])
+      (auto intro!: Release.prems)
 next
   case (MatchF I r)
   then show ?case by simp
