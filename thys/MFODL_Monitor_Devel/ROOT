@@ -19,9 +19,13 @@ session MFODL_Monitor_Devel (AFP) = MFOTL_Monitor_Devel +
     Queue
     Regex
     Formula
+    (*Rewriting*)
     Safety
+    Slicing
     Progress
+    Safety_Proofs
     Typing
+    Type_Soundness
     Optimized_Join
     Monitor
     Correct_Un_Ops
@@ -32,7 +36,7 @@ session MFODL_Monitor_Devel (AFP) = MFOTL_Monitor_Devel +
     Correct_Regex
     Correct_Agg
     Correctness
-    (*Sat*)
+    Sat
     Optimized_Agg
     Optimized_Common
     Optimized_Since

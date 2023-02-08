@@ -1074,17 +1074,17 @@ let rec nat_of_integer k = Nat (max ord_integer Z.zero k);;
 
 let rec small_rbta t = less_nat (bheight t) (nat_of_integer (Z.of_int 6));;
 
-let rec is_emptya
+let rec is_emptyb
   t = (match t with Empty -> true | Branch (_, _, _, _, _) -> false);;
 
 let rec split_min
   = function Empty -> failwith "undefined"
     | Branch (uu, l, a, uv, r) ->
-        (if is_emptya l then (a, r)
+        (if is_emptyb l then (a, r)
           else (let (m, la) = split_min l in (m, rbt_joina la a r)));;
 
 let rec rbt_join2a
-  l r = (if is_emptya r then l
+  l r = (if is_emptyb r then l
           else (let (a, b) = split_min r in rbt_joina l a b));;
 
 let rec flip_rbt t1 t2 = less_nat (bheight t2) (bheight t1);;
@@ -2539,7 +2539,7 @@ let rec is_UNIV (_A1, _A2, _A3)
                       else failwith "is_UNIV called on infinite type and set"
                              (fun _ -> is_UNIV (_A1, _A2, _A3) a))));;
 
-let rec is_emptyb _A
+let rec is_emptyc _A
   xa = (match impl_ofa _A xa with Empty -> true
          | Branch (_, _, _, _, _) -> false);;
 
@@ -2552,7 +2552,7 @@ let rec is_empty (_A1, _A2, _A3)
           with None ->
             failwith "is_empty RBT_set: ccompare = None"
               (fun _ -> is_empty (_A1, _A2, _A3) (RBT_set rbt))
-          | Some _ -> is_emptyb _A3.ccompare_cproper_interval rbt)
+          | Some _ -> is_emptyc _A3.ccompare_cproper_interval rbt)
     | DList_set dxs ->
         (match ceq _A2
           with None ->
@@ -3314,19 +3314,6 @@ let rec cproper_interval_prod _A _B =
      cproper_interval = cproper_interval_proda _A _B}
     : ('a * 'b) cproper_interval);;
 
-let rec compare_string8 x = comparator_of (equal_string8, linorder_string8) x;;
-
-let ccompare_string8a : (string -> string -> ordera) option
-  = Some compare_string8;;
-
-let ccompare_string8 = ({ccompare = ccompare_string8a} : string ccompare);;
-
-let mapping_impl_string8a : (string, mapping_impla) phantom
-  = Phantom Mapping_RBT;;
-
-let mapping_impl_string8 =
-  ({mapping_impl = mapping_impl_string8a} : string mapping_impl);;
-
 type rec_safety = Unused | PastRec | NonFutuRec | AnyRec;;
 
 let rec equal_rec_safety x0 x1 = match x0, x1 with NonFutuRec, AnyRec -> false
@@ -3378,6 +3365,19 @@ let ccompare_rec_safetya : (rec_safety -> rec_safety -> ordera) option
 
 let ccompare_rec_safety =
   ({ccompare = ccompare_rec_safetya} : rec_safety ccompare);;
+
+let rec compare_string8 x = comparator_of (equal_string8, linorder_string8) x;;
+
+let ccompare_string8a : (string -> string -> ordera) option
+  = Some compare_string8;;
+
+let ccompare_string8 = ({ccompare = ccompare_string8a} : string ccompare);;
+
+let mapping_impl_string8a : (string, mapping_impla) phantom
+  = Phantom Mapping_RBT;;
+
+let mapping_impl_string8 =
+  ({mapping_impl = mapping_impl_string8a} : string mapping_impl);;
 
 let equal_event_data = ({equal = equal_event_dataa} : event_data equal);;
 
@@ -3741,6 +3741,41 @@ let rec take
     | n, x :: xs ->
         (if equal_nata n zero_nata then []
           else x :: take (minus_nata n one_nata) xs);;
+
+let rec rep_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
+  (Abs_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod x) =
+    x;;
+
+let rec sel12
+  xa = Abs_queue
+         (let (_, x2) =
+            rep_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
+              xa
+            in
+           x2);;
+
+let rec sel11
+  xa = (let (x1, _) =
+          rep_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
+            xa
+          in
+         x1);;
+
+let rec rep_isom x = (sel11 x, sel12 x);;
+
+let rec rep_queue (Abs_queue x) = x;;
+
+let rec pop_t
+  = function ([], []) -> (None, ([], []))
+    | ([], [y]) -> (Some y, ([], []))
+    | ([], y :: v :: va) -> (let z :: ys = rev (v :: va) in (Some z, (ys, [y])))
+    | (x :: xs, ys) -> (Some x, (xs, ys));;
+
+let rec pop_aux
+  xa = Abs_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
+         (pop_t (rep_queue xa));;
+
+let rec pop x = rep_isom (pop_aux x);;
 
 let rec fun_upda equal f aa b a = (if equal aa a then b else f a);;
 
@@ -4215,7 +4250,7 @@ let rec set_fold1 (_A1, _A2, _A3)
           failwith "set_fold1 RBT_set: ccompare = None"
             (fun _ -> set_fold1 (_A1, _A2, _A3) f (RBT_set rbt))
         | Some _ ->
-          (if is_emptyb _A2 rbt
+          (if is_emptyc _A2 rbt
             then failwith "set_fold1 RBT_set: empty set"
                    (fun _ -> set_fold1 (_A1, _A2, _A3) f (RBT_set rbt))
             else fold1 _A2 (semilattice_set_apply f) rbt))
@@ -4734,6 +4769,20 @@ let rec matcha
     | [], v :: va -> None
     | uu, None :: va -> None;;
 
+let rec safe_hd_t
+  = function ([], []) -> (None, ([], []))
+    | ([], [l]) -> (Some l, ([], [l]))
+    | ([], l :: v :: va) ->
+        (let fs = rev (v :: va) in (Some (hda fs), (fs, [l])))
+    | (f :: fs, l :: ls) -> (Some f, (f :: fs, l :: ls))
+    | (f :: fs, []) -> failwith "undefined";;
+
+let rec safe_hd_aux
+  xa = Abs_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
+         (safe_hd_t (rep_queue xa));;
+
+let rec safe_hd x = rep_isom (safe_hd_aux x);;
+
 let rec inorder = function Leaf -> []
                   | Node (l, (a, uu), r) -> inorder l @ a :: inorder r;;
 
@@ -4858,6 +4907,17 @@ let rec lookup_default (_B1, _B2)
 
 let rec lookupb (_A1, _A2) (_B1, _B2, _B3)
   = lookup_default (_A1, _A2) (empty_table (_B1, _B2, _B3));;
+
+let rec is_emptya
+  x = (match rep_queue x with ([], []) -> true | ([], _ :: _) -> false
+        | (_ :: _, _) -> false);;
+
+let rec tl_queue_t = function ([], []) -> ([], [])
+                     | ([], [l]) -> ([], [])
+                     | ([], l :: v :: va) -> (tla (rev (v :: va)), [l])
+                     | (a :: asa, fs) -> (asa, fs);;
+
+let rec tl_queue xa = Abs_queue (tl_queue_t (rep_queue xa));;
 
 let rec restrict
   a v = mapa (fun i ->
@@ -5053,12 +5113,9 @@ let rec combine _B
           (fun _ -> combine _B f (RBT_Mapping t) (RBT_Mapping u))
       | Some _ -> RBT_Mapping (joina _B (fun _ -> f) t u));;
 
-let rec bounded x = snd (snd (rep_I x));;
+let rec linearize x = (let (fs, ls) = rep_queue x in fs @ rev ls);;
 
-let rec flip_int
-  xa = Abs_I (if bounded xa
-               then ((fun i -> not (memR xa i)), ((fun _ -> true), false))
-               else ((fun _ -> true), ((fun _ -> true), false)));;
+let rec bounded x = snd (snd (rep_I x));;
 
 let rec list_update
   x0 i y = match x0, i, y with [], i, y -> []
@@ -5490,6 +5547,11 @@ let rec productb _A _B
     Abs_dlist
       (foldc _A (fun a -> foldc _B (fun c -> (fun b -> (a, c) :: b)) dxs2) dxs1
         []);;
+
+let rec flip_int
+  xa = Abs_I (if bounded xa
+               then ((fun i -> not (memR xa i)), ((fun _ -> true), false))
+               else ((fun _ -> true), ((fun _ -> true), false)));;
 
 let rec less_eq_enat q x1 = match q, x1 with Infinity_enat, Enat n -> false
                        | q, Infinity_enat -> true
@@ -6239,40 +6301,7 @@ let rec to_mregex_exec
 
 let rec to_mregex r = to_mregex_exec r [];;
 
-let rec rep_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
-  (Abs_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod x) =
-    x;;
-
-let rec sel12
-  xa = Abs_queue
-         (let (_, x2) =
-            rep_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
-              xa
-            in
-           x2);;
-
-let rec sel11
-  xa = (let (x1, _) =
-          rep_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
-            xa
-          in
-         x1);;
-
-let rec rep_isom x = (sel11 x, sel12 x);;
-
-let rec rep_queue (Abs_queue x) = x;;
-
-let rec pop_t
-  = function ([], []) -> (None, ([], []))
-    | ([], [y]) -> (Some y, ([], []))
-    | ([], y :: v :: va) -> (let z :: ys = rev (v :: va) in (Some z, (ys, [y])))
-    | (x :: xs, ys) -> (Some x, (xs, ys));;
-
-let rec pop_aux
-  xa = Abs_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
-         (pop_t (rep_queue xa));;
-
-let rec pop x = rep_isom (pop_aux x);;
+let empty_queue : 'a queue = Abs_queue ([], []);;
 
 let rec map_filter_comp_inter
   c f t1 t2 =
@@ -7377,35 +7406,6 @@ let rec init_maggauxa
     (match init_maggaux args with (true, aux) -> Some aux
       | (false, _) -> None);;
 
-let rec tl_queue_t = function ([], []) -> ([], [])
-                     | ([], [l]) -> ([], [])
-                     | ([], l :: v :: va) -> (tla (rev (v :: va)), [l])
-                     | (a :: asa, fs) -> (asa, fs);;
-
-let rec tl_queue xa = Abs_queue (tl_queue_t (rep_queue xa));;
-
-let rec safe_hd_t
-  = function ([], []) -> (None, ([], []))
-    | ([], [l]) -> (Some l, ([], [l]))
-    | ([], l :: v :: va) ->
-        (let fs = rev (v :: va) in (Some (hda fs), (fs, [l])))
-    | (f :: fs, l :: ls) -> (Some f, (f :: fs, l :: ls))
-    | (f :: fs, []) -> failwith "undefined";;
-
-let rec safe_hd_aux
-  xa = Abs_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
-         (safe_hd_t (rep_queue xa));;
-
-let rec safe_hd x = rep_isom (safe_hd_aux x);;
-
-let rec takedropWhile_queue
-  f q = (match safe_hd q with (None, qa) -> (qa, [])
-          | (Some a, qa) ->
-            (if f a
-              then (let (qb, asa) = takedropWhile_queue f (tl_queue qa) in
-                     (qb, a :: asa))
-              else (qa, [])));;
-
 let rec mapping_delete_set_cfi (_A1, _A2)
   = Abs_comp_fun_idem (delete (_A1, _A2));;
 
@@ -7414,6 +7414,14 @@ let rec mapping_delete_set (_A1, _A2, _A3, _A4)
           then set_fold_cfi (_A2, _A3) (mapping_delete_set_cfi (_A3, _A4)) m a
           else failwith "mapping_delete_set: infinite"
                  (fun _ -> mapping_delete_set (_A1, _A2, _A3, _A4) m a));;
+
+let rec takedropWhile_queue
+  f q = (match safe_hd q with (None, qa) -> (qa, [])
+          | (Some a, qa) ->
+            (if f a
+              then (let (qb, asa) = takedropWhile_queue f (tl_queue qa) in
+                     (qb, a :: asa))
+              else (qa, [])));;
 
 let rec ts_tp_lt
   i ts tp tstp =
@@ -7755,8 +7763,6 @@ let rec prepend_queue_t a x1 = match a, x1 with a, ([], []) -> ([], [a])
 
 let rec prepend_queue xb xc = Abs_queue (prepend_queue_t xb (rep_queue xc));;
 
-let empty_queue : 'a queue = Abs_queue ([], []);;
-
 let rec takeWhile_queue
   f q = (match safe_hd q with (None, qa) -> (qa, qa)
           | (Some a, qa) ->
@@ -7764,8 +7770,6 @@ let rec takeWhile_queue
               then (let (qaa, _) = takeWhile_queue f (tl_queue qa) in
                      (prepend_queue a qaa, qa))
               else (empty_queue, qa)));;
-
-let rec linearize xa = (let (fs, ls) = rep_queue xa in fs @ rev ls);;
 
 let rec shift_mmauaux
   args nt
@@ -7834,9 +7838,6 @@ let rec shift_mmuaux
                            (result,
                              (a1_map, (a2_map, (donea, done_length)))))))))
           (linearize tss_queue));;
-
-let rec append_queue
-  xb xc = Abs_queue (let (fs, ls) = rep_queue xc in (fs, xb :: ls));;
 
 let rec upd_cfi (_A1, _A2)
   xa = Abs_comp_fun_idem (fun a -> updateb (_A1, _A2) a (xa a));;
@@ -7960,6 +7961,9 @@ let rec productc (_A1, _A2, _A3) (_B1, _B2, _B3)
     | a, b ->
         Collect_set
           (fun (x, y) -> member (_A1, _A2) x a && member (_B1, _B2) y b);;
+
+let rec append_queue
+  xb xc = Abs_queue (let (fs, ls) = rep_queue xc in (fs, xb :: ls));;
 
 let rec add_new_mmuaux
   args rel1 rel2 nt aux =
@@ -8480,30 +8484,6 @@ let rec eval_mmauaux
               auxs))))
         b);;
 
-let rec rep_mbuf_t (MBuf2_t x) = linearize x;;
-
-let rec mbuf_t_append (MBuf2_t xs) ys = MBuf2_t (fold append_queue ys xs);;
-
-let mbuf_t_empty : 'a mbuf_t = MBuf2_t empty_queue;;
-
-let rec letpast_meeval0 (_B1, _B2) _D
-  eval j i ys xs p ts db phi =
-    (let (ysa, phia) = eval ts (updateb (_B1, _B2) p xs db) phi in
-      (if not (equal_nata (size _D phia) (size _D phi))
-        then (mbuf_t_empty, (zero_nata, (None, phi)))
-        else (match ysa
-               with [] ->
-                 (mbuf_t_append ys ysa,
-                   (plus_nata i (size_lista xs), (None, phia)))
-               | y :: _ ->
-                 (if less_eq_nat j (suc (plus_nata i (size_lista xs)))
-                   then (mbuf_t_append ys ysa,
-                          (plus_nata i (size_lista xs), (Some y, phia)))
-                   else letpast_meeval0 (_B1, _B2) _D eval j
-                          (plus_nata i (size_lista xs)) (mbuf_t_append ys ysa)
-                          ysa p [] (map_values _B1 (fun _ _ -> []) db)
-                          phia))));;
-
 let rec proj_tuple_in_join_optim (_A1, _A2)
   pos r maskR l maskL =
     (if equal_lista equal_bool maskL maskR
@@ -8698,96 +8678,92 @@ let rec update_mmtauxa (_A1, _A2, _A3)
                 (tuple_in_once_keysa,
                   (tuple_since_histb, (hist_satb, since_satb)))))))));;
 
-let rec is_emptyc
-  xa = (match rep_queue xa with ([], []) -> true | ([], _ :: _) -> false
-         | (_ :: _, _) -> false);;
-
 let rec update_mmtaux (_A1, _A2, _A3)
-  args nt l r
-    (cur, (idx_next,
-            (idx_mid,
-              (idx_oldest,
-                (maskL,
-                  (maskR,
-                    (data_prev,
-                      (data_in,
-                        (tuple_in_once,
-                          (tuple_in_once_keys,
-                            (tuple_since_hist, (hist_sat, since_sat))))))))))))
-    = (let (idx_mida,
-             (idx_oldesta,
-               (data_preva,
-                 (data_ina,
-                   (tuple_in_oncea,
-                     (tuple_in_once_keysa,
-                       (tuple_since_hista, (hist_sata, since_sata))))))))
-         = update_mmtauxa (_A1, _A2, _A3) args nt idx_mid idx_oldest maskL maskR
-             data_prev data_in tuple_in_once tuple_in_once_keys tuple_since_hist
-             hist_sat since_sat
-         in
-        (if memL (args_ivl args) zero_nata && memR (args_ivl args) zero_nata
-          then (let tuple_since_histb =
-                  filterc (ccompare_list (ccompare_option _A2))
-                    (fun asa _ ->
-                      member
-                        ((ceq_list (ceq_option _A1)),
-                          (ccompare_list (ccompare_option _A2)))
-                        asa r)
-                    tuple_since_hista
-                  in
-                 (nt, (plus_nata idx_next one_nata,
-                        (plus_nata idx_mida one_nata,
-                          (idx_oldesta,
-                            (maskL,
-                              (maskR,
-                                (data_preva,
-                                  (append_queue (nt, r) data_ina,
-                                    (tuple_in_oncea,
-                                      (tuple_in_once_keysa,
-(upd_set
-   (finite_UNIV_list, (ceq_list (ceq_option _A1)),
-     (ccompare_list (ccompare_option _A2)), (equal_list (equal_option _A3)))
-   tuple_since_histb (fun _ -> idx_mida)
-   (filter ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
-     (fun k ->
-       is_none
-         (lookupa
-           ((ccompare_list (ccompare_option _A2)),
-             (equal_list (equal_option _A3)))
-           tuple_since_histb k))
-     r),
-  ((if is_emptyc data_ina then r
-     else inf_seta
-            ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
-            hist_sata r),
-    sup_seta
-      ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
-      (inf_seta
-        ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
-        since_sata r)
+  args nt l r =
+    (fun (_, (idx_next,
+               (idx_mid,
+                 (idx_oldest,
+                   (maskL,
+                     (maskR,
+                       (data_prev,
+                         (data_in,
+                           (tuple_in_once,
+                             (tuple_in_once_keys,
+                               (tuple_since_hist,
+                                 (hist_sat, since_sat))))))))))))
+      -> (let (idx_mida,
+                (idx_oldesta,
+                  (data_preva,
+                    (data_ina,
+                      (tuple_in_oncea,
+                        (tuple_in_once_keysa,
+                          (tuple_since_hista, (hist_sata, since_sata))))))))
+            = update_mmtauxa (_A1, _A2, _A3) args nt idx_mid idx_oldest maskL
+                maskR data_prev data_in tuple_in_once tuple_in_once_keys
+                tuple_since_hist hist_sat since_sat
+            in
+           (if memL (args_ivl args) zero_nata && memR (args_ivl args) zero_nata
+             then (let tuple_since_histb =
+                     filterc (ccompare_list (ccompare_option _A2))
+                       (fun asa _ ->
+                         member
+                           ((ceq_list (ceq_option _A1)),
+                             (ccompare_list (ccompare_option _A2)))
+                           asa r)
+                       tuple_since_hista
+                     in
+                    (nt, (plus_nata idx_next one_nata,
+                           (plus_nata idx_mida one_nata,
+                             (idx_oldesta,
+                               (maskL,
+                                 (maskR,
+                                   (data_preva,
+                                     (append_queue (nt, r) data_ina,
+                                       (tuple_in_oncea,
+ (tuple_in_once_keysa,
+   (upd_set
+      (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+        (ccompare_list (ccompare_option _A2)), (equal_list (equal_option _A3)))
+      tuple_since_histb (fun _ -> idx_mida)
       (filter
         ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
-        (fun asa -> proj_tuple_in_join (_A1, _A2) (args_pos args) maskL asa l)
-        r))))))))))))))
-          else (nt, (plus_nata idx_next one_nata,
-                      (idx_mida,
-                        (idx_oldesta,
-                          (maskL,
-                            (maskR,
-                              (append_queue (nt, (l, r)) data_preva,
-                                (data_ina,
-                                  (upd_set
-                                     (finite_UNIV_list,
-                                       (ceq_list (ceq_option _A1)),
-                                       (ccompare_list (ccompare_option _A2)),
-                                       (equal_list (equal_option _A3)))
-                                     tuple_in_oncea (fun _ -> nt) l,
-                                    (sup_seta
-                                       ((ceq_list (ceq_option _A1)),
- (ccompare_list (ccompare_option _A2)))
-                                       tuple_in_once_keysa l,
-                                      (tuple_since_hista,
-(hist_sata, since_sata))))))))))))));;
+        (fun k ->
+          is_none
+            (lookupa
+              ((ccompare_list (ccompare_option _A2)),
+                (equal_list (equal_option _A3)))
+              tuple_since_histb k))
+        r),
+     ((if is_emptya data_ina then r
+        else inf_seta
+               ((ceq_list (ceq_option _A1)),
+                 (ccompare_list (ccompare_option _A2)))
+               hist_sata r),
+       sup_seta
+         ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
+         (inf_seta
+           ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
+           since_sata r)
+         (filter
+           ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
+           (fun asa ->
+             proj_tuple_in_join (_A1, _A2) (args_pos args) maskL asa l)
+           r))))))))))))))
+             else (nt, (plus_nata idx_next one_nata,
+                         (idx_mida,
+                           (idx_oldesta,
+                             (maskL,
+                               (maskR,
+                                 (append_queue (nt, (l, r)) data_preva,
+                                   (data_ina,
+                                     (upd_set
+(finite_UNIV_list, (ceq_list (ceq_option _A1)),
+  (ccompare_list (ccompare_option _A2)), (equal_list (equal_option _A3)))
+tuple_in_oncea (fun _ -> nt) l,
+                                       (sup_seta
+  ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
+  tuple_in_once_keysa l,
+ (tuple_since_hista, (hist_sata, since_sata)))))))))))))));;
 
 let rec result_mmtaux
   args (mt, (idx_next,
@@ -8801,7 +8777,7 @@ let rec result_mmtaux
                             (tuple_in_once_keys,
                               (tuple_since_hist,
                                 (hist_sat, since_sat))))))))))))
-    = (if is_emptyc data_in
+    = (if is_emptya data_in
         then (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata),
                insert
                  ((ceq_list (ceq_option ceq_event_data)),
@@ -8820,6 +8796,30 @@ let rec result_mmtaux
                      (ccompare_list (ccompare_option ccompare_event_data)))
                    tuple_in_once_keys hist_sat)
                  since_sat));;
+
+let rec rep_mbuf_t (MBuf2_t x) = linearize x;;
+
+let rec mbuf_t_append (MBuf2_t xs) ys = MBuf2_t (fold append_queue ys xs);;
+
+let mbuf_t_empty : 'a mbuf_t = MBuf2_t empty_queue;;
+
+let rec letpast_meeval0 (_B1, _B2) _D
+  eval j i ys xs p ts db phi =
+    (let (ysa, phia) = eval ts (updateb (_B1, _B2) p xs db) phi in
+      (if not (equal_nata (size _D phia) (size _D phi))
+        then (mbuf_t_empty, (zero_nata, (None, phi)))
+        else (match ysa
+               with [] ->
+                 (mbuf_t_append ys ysa,
+                   (plus_nata i (size_lista xs), (None, phia)))
+               | y :: _ ->
+                 (if less_eq_nat j (suc (plus_nata i (size_lista xs)))
+                   then (mbuf_t_append ys ysa,
+                          (plus_nata i (size_lista xs), (Some y, phia)))
+                   else letpast_meeval0 (_B1, _B2) _D eval j
+                          (plus_nata i (size_lista xs)) (mbuf_t_append ys ysa)
+                          ysa p [] (map_values _B1 (fun _ _ -> []) db)
+                          phia))));;
 
 let rec find_sub_in (_A1, _A2, _A3)
   x xa1 b = match x, xa1, b with x, [], b -> None
@@ -10072,6 +10072,25 @@ let rec add_new_ts_mmasauxa
                   add)
                 aggaux)));;
 
+let rec filter_cfi _B (_A1, _A2, _A3, _A4)
+  xa = Abs_comp_fun_idem
+         (fun a (m, y) ->
+           (match lookupa (_A2, _A3) m a with None -> (m, y)
+             | Some u ->
+               (if eq _B xa u
+                 then (delete (_A2, _A3) a m,
+                        sup_seta (_A1, _A2) y
+                          (insert (_A1, _A2) a (bot_set (_A1, _A2, _A4))))
+                 else (m, y))));;
+
+let rec filter_set _A (_B1, _B2, _B3, _B4, _B5)
+  (t, a) (m, y) =
+    (if finite (_B1, _B2, _B3) a
+      then set_fold_cfi (_B2, _B3) (filter_cfi _A (_B2, _B3, _B4, _B5) t) (m, y)
+             a
+      else failwith "upd_set: infinite"
+             (fun _ -> filter_set _A (_B1, _B2, _B3, _B4, _B5) (t, a) (m, y)));;
+
 let rec wf_set_antijoin (_A1, _A2, _A3)
   xb xc =
     Abs_wf_set
@@ -10140,25 +10159,6 @@ let rec wf_table_antijoin (_A1, _A2, _A3)
             (wf_idx_of_wf_set (_A1, _A2) (wf_idx_cols i) t))
     | Wf_table_of_idx ia, Wf_table_of_idx i ->
         Wf_table_of_idx (wf_idx_antijoin (_A1, _A2, _A3) ia i);;
-
-let rec filter_cfi _B (_A1, _A2, _A3, _A4)
-  xa = Abs_comp_fun_idem
-         (fun a (m, y) ->
-           (match lookupa (_A2, _A3) m a with None -> (m, y)
-             | Some u ->
-               (if eq _B xa u
-                 then (delete (_A2, _A3) a m,
-                        sup_seta (_A1, _A2) y
-                          (insert (_A1, _A2) a (bot_set (_A1, _A2, _A4))))
-                 else (m, y))));;
-
-let rec filter_set _A (_B1, _B2, _B3, _B4, _B5)
-  (t, a) (m, y) =
-    (if finite (_B1, _B2, _B3) a
-      then set_fold_cfi (_B2, _B3) (filter_cfi _A (_B2, _B3, _B4, _B5) t) (m, y)
-             a
-      else failwith "upd_set: infinite"
-             (fun _ -> filter_set _A (_B1, _B2, _B3, _B4, _B5) (t, a) (m, y)));;
 
 let rec shift_end (_A1, _A2, _A3)
   args nt
@@ -10795,7 +10795,7 @@ let rec meeval_since
                          meeval_since args (result_mmasaux args auxa :: rs)
                            (xsa, (ysa, (tsa, false))) auxa)))));;
 
-let rec mbuf_t_is_empty (MBuf2_t xs) = is_emptyc xs;;
+let rec mbuf_t_is_empty (MBuf2_t xs) = is_emptya xs;;
 
 let rec mebufnt_take
   f z buf t0 ts =

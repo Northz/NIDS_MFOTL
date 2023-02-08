@@ -46,16 +46,12 @@ If the dependency graph changed, update pairs below. You can see the graph by co
     "Monitor_Impl" -> "Monitor_Code"
 
 ## 2. Update ROOT file
-Add any new theories to the `ROOT` file. All leafs of the dependency graph should appear in the `ROOT` file.
+Add any new theories to the `ROOT` file. All theory-files should appear in the `ROOT` file in the order of the dependency graph.
 
 ## 3. Build the Isabelle sessions
-Check that all Isabelle sessions can be built without error:
+Check that all Isabelle sessions can be built without error with the latest Isabelle version:
 
     isabelle build -D path_to_dir_where_MFODL_Monitor_Devel_ROOT_file_is
-
-You might need to add Isabelle to your path:
-
-    export PATH=$PATH:/path_to_where_your_Isabelle_app_is/working_Isabelle_version_application/bin
 
 ## 4. Export `verified.ml`
 Export the code-generated file `verified.ml` and copy to the `src` directory.
