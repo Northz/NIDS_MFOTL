@@ -391,6 +391,7 @@ lemma TT_no_pred [simp]:
   "\<not> contains_pred p Formula.TT"
   by (simp add: Formula.TT_def)
 
+
 subsubsection \<open>Semantics\<close>
 
 definition "ecard A = (if finite A then card A else \<infinity>)"
@@ -752,6 +753,9 @@ lemma once_fvi[simp] : "fvi b (once I \<phi>) = fvi b \<phi>"
 definition historically :: "\<I> \<Rightarrow> 't formula \<Rightarrow> 't formula" where
   "historically I \<phi> = (Neg (once I (Neg \<phi>)))"
 
+lemma fv_historically[simp]: "fv (historically I \<phi>) = fv \<phi>"
+  by (simp add: historically_def)
+
 lemma sat_historically[simp]: "sat \<sigma> V v i (historically I \<phi>) = (\<forall>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<longrightarrow> sat \<sigma> V v j \<phi>)"
   unfolding historically_def
   by auto
@@ -788,6 +792,9 @@ lemma contains_pred_once [simp]:
 
 definition always :: "\<I> \<Rightarrow> 't formula \<Rightarrow> 't formula" where
   "always I \<phi> = (Neg (eventually I (Neg \<phi>)))"
+
+lemma fv_always[simp]: "fv (always I \<phi>) = fv \<phi>"
+  by (simp add: always_def)
 
 lemma sat_always[simp]: "sat \<sigma> V v i (always I \<phi>) = (\<forall>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<longrightarrow> sat \<sigma> V v j \<phi>)"
   unfolding always_def

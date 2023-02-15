@@ -54,7 +54,7 @@ Check that all Isabelle sessions can be built without error with the latest Isab
     isabelle build -D path_to_dir_where_MFODL_Monitor_Devel_ROOT_file_is
 
 ## 4. Export `verified.ml`
-Export the code-generated file `verified.ml` and copy to the `src` directory.
+Export the code-generated file `verified.ml` and copy it to the `src` directory.
 
 ## 5. Run `dune test`
 Run `dune test` from the repository root. If the new `verified.ml` is different from the previous version, you should also check whether each change in the generated code is actually expected.
