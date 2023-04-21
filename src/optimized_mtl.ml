@@ -74,6 +74,7 @@ type msaux = {
   ms_in_idx: idx_table;
   mutable ms_in: Relation.relation;
   ms_since: (tuple, timestamp) Hashtbl.t;
+  ms_since_idx: idx_table;
 }
 
 let init_msaux opt_fm pos intv attr1 attr2 =
@@ -87,6 +88,7 @@ let init_msaux opt_fm pos intv attr1 attr2 =
     ms_in_idx = Hashtbl.create 1;
     ms_in = Relation.empty;
     ms_since = Hashtbl.create 1;
+    ms_since_idx = Hashtbl.create 1;
   }
 
 let rec drop_while (p: 'a -> bool) (q: 'a Queue.t) =
@@ -156,17 +158,20 @@ let join_msaux rel aux =
     end
   else
     begin
-      let discard = idx_table_inv_semijoin aux.ms_args aux.ms_in_idx rel in
+      let discard_in = idx_table_inv_semijoin aux.ms_args aux.ms_in_idx rel in
       Relation.iter (fun tup ->
           let key = Misc.get_positions aux.ms_args.a_key2 tup in
           if aux.ms_args.a_bounded then
             Hashtbl.remove aux.ms_in_map tup;
-          Hashtbl.remove aux.ms_in_idx key;
-          if aux.ms_args.a_gap then
-            Hashtbl.remove aux.ms_since tup
+          Hashtbl.remove aux.ms_in_idx key
         )
-        discard;
-      aux.ms_in <- Relation.diff aux.ms_in (apply_opt_fm aux discard)
+        discard_in;
+      aux.ms_in <- Relation.diff aux.ms_in (apply_opt_fm aux discard_in);
+      if aux.ms_args.a_gap then begin
+        let discard_since = idx_table_inv_semijoin aux.ms_args
+          aux.ms_since_idx rel in
+        Relation.iter (Hashtbl.remove aux.ms_since) discard_since
+      end
     end;
   if aux.ms_args.a_gap &&
     not (in_left_ext (ts_minus aux.ms_t aux.ms_gc) aux.ms_args.a_intv) then
@@ -178,6 +183,10 @@ let join_msaux rel aux =
       Queue.iter collect aux.ms_inq;
       Hashtbl.filter_map_inplace (fun tup t ->
         if Relation.mem tup !keep then Some t else None) aux.ms_since;
+      if not aux.ms_args.a_prop1 then begin
+        Hashtbl.clear aux.ms_since_idx;
+        idx_table_insert aux.ms_args aux.ms_since_idx !keep
+      end;
       aux.ms_gc <- aux.ms_t
     end
 
@@ -189,6 +198,8 @@ let add_new_table_msaux rel aux =
         if not (Hashtbl.mem aux.ms_since tup) then
           Hashtbl.add aux.ms_since tup t
         ) rel;
+      if not aux.ms_args.a_prop1 then
+        idx_table_insert aux.ms_args aux.ms_since_idx rel;
       Queue.add (t, rel) aux.ms_prevq
     end
   else
