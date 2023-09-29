@@ -17,7 +17,7 @@ let examples =
   ; "recursive let", ("letpast",false)
   ]
 
-let verified = ref true
+let _ = Misc.verified := true
 let negate = ref false
 
 let http_get url =
@@ -37,7 +37,7 @@ let onload _ =
 
   let title = Html.createH1 d in
 
-  let set_title () = if !verified then
+  let set_title () = if !Misc.verified then
     title##.innerHTML := Js.string "VeriMon <font size=3>Monitoring Metric First-Order Temporal Properties</font>"
   else
     title##.innerHTML := Js.string "MonPoly <font size=3>Monitoring Metric First-Order Temporal Properties</font>" in
@@ -86,7 +86,7 @@ let onload _ =
   tdl6##.vAlign := Js.string "top";
 
   let verifiedbox = Html.createInput ~_type:(Js.string "checkbox") d  in
-  verifiedbox##.checked := Js.bool !verified;
+  verifiedbox##.checked := Js.bool !Misc.verified;
   let verifiedlab = Dom_html.createLabel d in
   verifiedlab##.style##.cssFloat := Js.string "right";
   Dom.appendChild verifiedlab verifiedbox;
@@ -221,7 +221,7 @@ let onload _ =
         reset_errs [logframe];
         Sys_js.set_channel_flusher stderr (append_err logframe);
         logframe##.style##.backgroundImage := Js.string "none";
-        let monitor = if !verified then Algorithm_verified.monitor_string else Algorithm.monitor_string in
+        let monitor = if !Misc.verified then Algorithm_verified.monitor_string else Algorithm.monitor_string in
         monitor !sign (Js.to_string (logframe##.value) ^ "\n") vs f;
         if Js.to_string (resframe##.value) = ""
         then
@@ -282,7 +282,7 @@ let onload _ =
 
   verifiedbox##.onclick :=
     Dom_html.handler (fun _ ->
-      verified := (Js.to_bool verifiedbox##.checked);
+      Misc.verified := (Js.to_bool verifiedbox##.checked);
       set_title ();
       check_sig();
       Js._true);
