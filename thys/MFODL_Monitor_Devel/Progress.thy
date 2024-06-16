@@ -566,11 +566,11 @@ lemma max_mapping_cobounded2: "dom P2 \<subseteq> dom P1 \<Longrightarrow> rel_m
   unfolding max_mapping_def rel_mapping_alt by (auto simp: dom_def split: option.splits)
 
 lemma max_mapping_fun_upd2[simp]:
-  "max_mapping P1 (P2(p := y))(p \<mapsto> x) = (max_mapping P1 P2)(p \<mapsto> x)"
+  "(max_mapping P1 (P2(p := y)))(p \<mapsto> x) = (max_mapping P1 P2)(p \<mapsto> x)"
   by (auto simp: max_mapping_def)
 
 lemma rel_mapping_max_mapping_fun_upd: "dom P2 \<subseteq> dom P1 \<Longrightarrow> p \<in> dom P2 \<Longrightarrow> the (P2 p) \<le> y 
-  \<Longrightarrow> rel_mapping (\<le>) P2 (max_mapping P1 P2(p \<mapsto> y))"
+  \<Longrightarrow> rel_mapping (\<le>) P2 ((max_mapping P1 P2)(p \<mapsto> y))"
   by (auto simp: rel_mapping_alt max_mapping_def split: option.splits)
 
 lemma not_contains_letpast_progress[simp]: 
@@ -1159,7 +1159,7 @@ next
     also have "... \<le> progress \<sigma> (?P12(?pn \<mapsto> progress \<sigma> P1 \<phi> j1)) \<psi> (max j1 j2)"
       using le2 by blast
     also have "... \<le> progress \<sigma> 
-      (?P12(?pn := P1 ?pn)(?pn\<mapsto>progress \<sigma> (?P12(?pn := P1 ?pn)) \<phi> (max j1 j2))) \<psi> (max j1 j2)"
+      ((?P12(?pn := P1 ?pn))(?pn\<mapsto>progress \<sigma> (?P12(?pn := P1 ?pn)) \<phi> (max j1 j2))) \<psi> (max j1 j2)"
       using P12_bound P1 apply (auto intro!: progress_mono_gen pred_mapping_map_upd
         pred_mapping_fun_upd max.coboundedI1 progress_le_gen
       elim: pred_mapping_mono simp: le1 rel_mapping_alt split: option.splits)

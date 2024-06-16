@@ -961,7 +961,7 @@ lemma done_empty_valid_mmauaux'_intro:
   shows "valid_mmauaux' args cur dt'
     ((tp, tss, tables, len, maskL, maskR, result, a1_map, a2_map, tstp_map, []), auxs)
     (drop (length done) auxlist)"
-  using assms sorted_drop by (auto simp add: drop_map[symmetric] split:option.splits)
+  using assms sorted_wrt_drop by (auto simp add: drop_map[symmetric] split:option.splits)
 
 lemma valid_eval_mmauaux:
   assumes "valid_mmauaux args cur (mmaux, auxs) auxlist" "nt \<ge> cur"

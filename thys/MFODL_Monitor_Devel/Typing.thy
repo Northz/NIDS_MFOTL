@@ -3138,7 +3138,7 @@ proof -
   then show ?thesis using assms wf_f_comp unfolding half_wty_trm_def by auto
 qed
 
-lemma wf_new_type_symbol:
+lemma wf_new_type_symbol[simp]:
   "wf_f new_type_symbol" 
   by (simp add: new_type_symbol_def wf_f_def)
 
@@ -3175,7 +3175,7 @@ proof -
   have correct_type': "E \<turnstile> trm t1 t2 :: t  \<Longrightarrow> E \<turnstile> t1 :: t \<and> E \<turnstile> t2 :: t" for E t 
     using assms(4) by (auto elim: wty_trm.cases) 
   have "wf_f (f' \<circ> final_f)" using assms(4) wf_f'
-    by (auto simp add: wf_f_comp wf_new_type_symbol)
+    by (auto simp add: wf_f_comp)
   moreover {
     fix fa
     assume asm: "wf_f (TCst \<circ> fa)" "fa \<circ> E \<turnstile> trm t1 t2 :: fa type"
@@ -3402,34 +3402,22 @@ lemma map_regex_fv:  assumes "\<And>x . x \<in> regex.atms x2 \<Longrightarrow> 
 lemma map_regex_pred:  assumes "\<And>x . x \<in> regex.atms x2 \<Longrightarrow>  g (formula.map_formula f x) = g' x"
   shows "regex.pred_regex g (regex.map_regex (formula.map_formula f) x2) = regex.pred_regex g' x2" using assms by (induction x2) auto
 
-lemma[simp]:  shows "Formula.fvi b (formula.map_formula f \<psi>) = Formula.fvi b \<psi>" 
+lemma fvi_map_formula[simp]:  shows "Formula.fvi b (formula.map_formula f \<psi>) = Formula.fvi b \<psi>" 
 proof (induction \<psi> arbitrary: b)
   case (MatchF x1 x2)
   show ?case using map_regex_fv[where ?g="Formula.fvi b" and ?f=f] MatchF by auto
   case (MatchP x1 x2)
   show ?case using map_regex_fv[where ?g="Formula.fvi b" and ?f=f] MatchP by auto
 qed auto
- 
-lemma [simp]: "wf_f new_type_symbol" 
-  unfolding wf_f_def new_type_symbol_def by auto
 
 lemma nfv_map[simp]: "Formula.nfv (formula.map_formula f \<psi>) = Formula.nfv \<psi>" 
   unfolding Formula.nfv_def by auto
 
-lemma[simp]: "wf_formula (formula.map_formula f \<psi>) = wf_formula \<psi>" 
+lemma wf_formula_map_iff[simp]: "wf_formula (formula.map_formula f \<psi>) = wf_formula \<psi>" 
   by (induction \<psi>) (auto simp add: list_all_def map_regex_pred)
 
-lemma wf_formula_map: "wf_formula \<phi> \<Longrightarrow> wf_formula ((formula.map_formula f) \<phi>)" 
-proof(induction \<phi>)
-  case (Ands x)
-  then show ?case by(auto simp:list_all_iff)
-next
-  case (MatchF x1 x2)
-  then show ?case by auto (metis MatchF.IH map_regex_pred regex.pred_set)
-next
-  case (MatchP x1 x2)
-  then show ?case by auto (metis MatchP.IH map_regex_pred regex.pred_set)
-qed auto
+lemma wf_formula_map: "wf_formula \<phi> \<Longrightarrow> wf_formula (formula.map_formula f \<phi>)"
+  by simp
 
 lemma used_tys_map[simp]: "used_tys (f \<circ> E) (formula.map_formula f \<psi>) = f ` used_tys E \<psi>"
   by (auto simp: used_tys_def formula.set_map)
@@ -3756,7 +3744,7 @@ fun check :: "tyssig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula \<
 | "check S E (Formula.MatchP I r) = check_regex check S E r"
 | "check S E (Formula.LetPast p \<phi> \<psi>) = 
   (let f0 = new_type_symbol ^^ Formula.nfv \<phi> in
-  check (map_sig f0 S((p, Formula.nfv \<phi>) \<mapsto> tabulate TAny 0 (Formula.nfv \<phi>))) TAny (formula.map_formula f0 \<phi>) \<bind>
+  check ((map_sig f0 S)((p, Formula.nfv \<phi>) \<mapsto> tabulate TAny 0 (Formula.nfv \<phi>))) TAny (formula.map_formula f0 \<phi>) \<bind>
     (\<lambda>f1. check (map_sig f1 ((map_sig f0 S)((p, Formula.nfv \<phi>) \<mapsto> map TAny [0..<Formula.nfv \<phi>]))) (f1 \<circ> f0 \<circ> E) (formula.map_formula (f1 \<circ> f0) \<psi>) \<bind>
       (\<lambda>f2. return (f2 \<circ> f1 \<circ> f0))))"
 | "check S E (Formula.TP t) = check_trm E (TCst TInt) t"
@@ -3767,7 +3755,7 @@ lemma safe_formula_map:
   by (metis (full_types) formula.rel_eq formula.rel_map(1) rel_formula_safe)
 
 lemma map_sig_subst:
-  "map_sig f (S(a \<mapsto> b)) = map_sig f S(a \<mapsto> map f b)"
+  "map_sig f (S(a \<mapsto> b)) = (map_sig f S)(a \<mapsto> map f b)"
   by (simp add: map_sig_def)
 
 lemma check_binary_sound: 
@@ -4280,7 +4268,7 @@ next
       using wty1 wf_fa' unfolding wty_result_fX_def by blast
     have list_eq: "map (fa' \<circ> TAny) [0..<Formula.nfv \<phi>] = map E' [0..<Formula.nfv \<phi>]"
       unfolding fa'_def by simp
-    have "map_sig g1 (map_sig f1 (map_sig f0 S((p, Formula.nfv \<phi>) \<mapsto> map TAny [0..<Formula.nfv \<phi>]))),
+    have "map_sig g1 (map_sig f1 ((map_sig f0 S)((p, Formula.nfv \<phi>) \<mapsto> map TAny [0..<Formula.nfv \<phi>]))),
           g1 \<circ> (f1 \<circ> f0 \<circ> E) \<turnstile> formula.map_formula g1 (formula.map_formula (f1 \<circ> f0) \<psi>)"
       using wty_sub(2)
       by (simp add: tabulate_alt formula.map_comp fa'_f0 map_sig_subst list_eq
@@ -4309,7 +4297,7 @@ next
       using wty1 wf_g_f2 unfolding wty_result_fX_def by blast
     hence 1: "map_sig fa S, (g \<circ> f2 \<circ> f1) \<circ> TAny \<turnstile> formula.map_formula fa \<phi>"
       by (simp add: fa_alt comp_assoc formula.map_comp)
-    have "map_sig (g \<circ> f2) (map_sig f1 (map_sig f0 S((p, Formula.nfv \<phi>) \<mapsto> map TAny [0..<Formula.nfv \<phi>]))),
+    have "map_sig (g \<circ> f2) (map_sig f1 ((map_sig f0 S)((p, Formula.nfv \<phi>) \<mapsto> map TAny [0..<Formula.nfv \<phi>]))),
         (g \<circ> f2) \<circ> (f1 \<circ> f0 \<circ> E)
         \<turnstile> formula.map_formula (g \<circ> f2) (formula.map_formula (f1 \<circ> f0) \<psi>)"
       using wty2 wf_g wf_g_f2 unfolding wty_result_fX_def by blast
@@ -4511,7 +4499,7 @@ next
   case (20 S E p \<phi> \<psi>)
   define f0 where "f0 = new_type_symbol ^^ Formula.nfv \<phi>"
   obtain f1 f2 where 
-    f1_def: "check (map_sig f0 S((p, Formula.nfv \<phi>) \<mapsto> tabulate TAny 0 (Formula.nfv \<phi>))) TAny (formula.map_formula f0 \<phi>) = return f1" and
+    f1_def: "check ((map_sig f0 S)((p, Formula.nfv \<phi>) \<mapsto> tabulate TAny 0 (Formula.nfv \<phi>))) TAny (formula.map_formula f0 \<phi>) = return f1" and
     f2_def: "check (map_sig f1 ((map_sig f0 S)((p, Formula.nfv \<phi>) \<mapsto> map TAny [0..<Formula.nfv \<phi>]))) (f1 \<circ> f0 \<circ> E) (formula.map_formula (f1 \<circ> f0) \<psi>) = return f2" and
     f_def: "f = f2 \<circ> f1 \<circ> f0"
     unfolding f0_def using 20(3) by(auto simp:Let_def split:bind_splits)
@@ -4547,14 +4535,14 @@ next
     have fa'_f0: "fa' \<circ> f0 = fa"
       unfolding fa'_def f0_def
       by (simp add: fun_eq_iff new_type_symbol_pow split: tysym.splits)
-    have wty1': "map_sig fa' (map_sig f0 S((p, Formula.nfv \<phi>) \<mapsto> tabulate TAny 0 (Formula.nfv \<phi>))), fa' \<circ> TAny \<turnstile> formula.map_formula fa' (formula.map_formula f0 \<phi>)"
+    have wty1': "map_sig fa' ((map_sig f0 S)((p, Formula.nfv \<phi>) \<mapsto> tabulate TAny 0 (Formula.nfv \<phi>))), fa' \<circ> TAny \<turnstile> formula.map_formula fa' (formula.map_formula f0 \<phi>)"
       using wty_sub(1) 
       apply (simp add: tabulate_alt formula.map_comp fa'_f0 map_sig_subst list_eq
           flip: comp_assoc) 
       using fv_eq fv_map wf_formula_map wf_sub(1) wty_formula_fv_cong by blast
     then obtain g1 where wf_g1: "wf_f (TCst \<circ> g1)" and fa'_alt: "fa' = g1 \<circ> f1"
       using wty1 wf_fa' unfolding wty_result_fX_def by auto
-    have "map_sig g1 (map_sig f1 (map_sig f0 S((p, Formula.nfv \<phi>) \<mapsto> map TAny [0..<Formula.nfv \<phi>]))),
+    have "map_sig g1 (map_sig f1 ((map_sig f0 S)((p, Formula.nfv \<phi>) \<mapsto> map TAny [0..<Formula.nfv \<phi>]))),
           g1 \<circ> (f1 \<circ> f0 \<circ> E) \<turnstile> formula.map_formula g1 (formula.map_formula (f1 \<circ> f0) \<psi>)"
       using wty_sub(2)
       by (simp add: tabulate_alt formula.map_comp fa'_f0 map_sig_subst list_eq
@@ -4579,13 +4567,13 @@ next
     have "wf_f (TCst \<circ> (g \<circ> f2 \<circ> f1))"
       by (metis comp_assoc wf_f_comp wf_g wty1 wty2 wty_result_fX_def)
     hence "(map_sig (g \<circ> f2 \<circ> f1)
-             (map_sig f0 S((p, Formula.nfv (formula.map_formula f0 \<phi>)) \<mapsto>
+             ((map_sig f0 S)((p, Formula.nfv (formula.map_formula f0 \<phi>)) \<mapsto>
               tabulate TAny 0 (Formula.nfv \<phi>))),
             (g \<circ> f2 \<circ> f1) \<circ> TAny \<turnstile> formula.map_formula (g \<circ> f2 \<circ> f1) (formula.map_formula f0 \<phi>))"
       using wty1 wf_g_f2 unfolding wty_result_fX_def by auto
     hence 1: "(map_sig fa S)((p, Formula.nfv \<phi>) \<mapsto> tabulate ((g \<circ> f2 \<circ> f1) \<circ> TAny) 0 (Formula.nfv \<phi>)), (g \<circ> f2 \<circ> f1) \<circ> TAny \<turnstile> formula.map_formula fa \<phi>"
       unfolding fa_alt map_sig_comp[symmetric] map_sig_subst tabulate_alt map_map formula.map_comp comp_assoc by auto
-    have "map_sig (g \<circ> f2) (map_sig f1 (map_sig f0 S((p, Formula.nfv \<phi>) \<mapsto> map TAny [0..<Formula.nfv \<phi>]))),
+    have "map_sig (g \<circ> f2) (map_sig f1 ((map_sig f0 S)((p, Formula.nfv \<phi>) \<mapsto> map TAny [0..<Formula.nfv \<phi>]))),
         (g \<circ> f2) \<circ> (f1 \<circ> f0 \<circ> E)
         \<turnstile> formula.map_formula (g \<circ> f2) (formula.map_formula (f1 \<circ> f0) \<psi>)"
       using wty2 wf_g wf_g_f2 unfolding wty_result_fX_def by blast
@@ -4810,7 +4798,7 @@ next
   have wfs: "wf_formula \<phi>" "wf_formula \<psi>" using 2(6) by auto
   obtain E' where wtys:
     "map_sig f S, E' \<turnstile> formula.map_formula f \<phi>"
-    "map_sig f S((p, Formula.nfv \<phi>) \<mapsto> tabulate E' 0 (Formula.nfv (formula.map_formula f \<phi>))), (f \<circ> E) \<turnstile> formula.map_formula f \<psi>"
+    "(map_sig f S)((p, Formula.nfv \<phi>) \<mapsto> tabulate E' 0 (Formula.nfv (formula.map_formula f \<phi>))), (f \<circ> E) \<turnstile> formula.map_formula f \<psi>"
     using 2(4) by(auto simp del:comp_apply elim:wty_formula.cases)
   define fa' where fa'_def: "fa' = (\<lambda>t. (case t of TAny n \<Rightarrow> if n < Formula.nfv \<phi> then E' n else f (TAny (n - Formula.nfv \<phi>)) |
                                                      TNum n \<Rightarrow> f (TNum (n - Formula.nfv \<phi>)) |
@@ -4832,7 +4820,7 @@ next
       using wty1' wf_fa' unfolding wty_result_fX_def by blast
   have list_eq: "map (fa' \<circ> TAny) [0..<Formula.nfv \<phi>] = map E' [0..<Formula.nfv \<phi>]"
     unfolding fa'_def by simp
-  have wty2': "map_sig g1 (map_sig f' (map_sig f0 S((p, Formula.nfv \<phi>) \<mapsto> map TAny [0..<Formula.nfv \<phi>]))),
+  have wty2': "map_sig g1 (map_sig f' ((map_sig f0 S)((p, Formula.nfv \<phi>) \<mapsto> map TAny [0..<Formula.nfv \<phi>]))),
           g1 \<circ> (f' \<circ> f0 \<circ> E) \<turnstile> formula.map_formula g1 (formula.map_formula (f' \<circ> f0) \<psi>)"
     using wtys(2)
     by (simp add: tabulate_alt formula.map_comp fa'_f0 map_sig_subst list_eq
@@ -4869,7 +4857,7 @@ next
   have "map_sig f S, case_nat (f t) (f \<circ> E) \<turnstile> formula.map_formula f \<phi>"
     using 10(3) by(auto simp del: comp_apply elim:wty_formula.cases)
   hence wty: "map_sig f S, f \<circ> (\<lambda>a. case a of 0 \<Rightarrow> t | Suc x \<Rightarrow> E x) \<turnstile> formula.map_formula f \<phi>"
-    unfolding comp_apply Nitpick.case_nat_unfold by (smt (verit, best) local.wf wf_formula_map wty_formula_fv_cong)
+    unfolding comp_apply by (simp add: nat.case_distrib)
   show ?case  using 10(1)[OF _ wty 10(4) wf] 10(2) by auto
 next
   case (11 S E y agg_type d tys trm \<phi>)
@@ -4942,8 +4930,8 @@ next
   define f0 where f0_def: "f0 = new_type_symbol ^^ Formula.nfv \<phi>"
   have wfs: "wf_formula \<phi>" "wf_formula \<psi>" using 20(6) by auto
   obtain E' where wtys:
-    "map_sig f S((p, Formula.nfv \<phi>) \<mapsto> tabulate E' 0 (Formula.nfv (formula.map_formula f \<phi>))), E' \<turnstile> formula.map_formula f \<phi>"
-    "map_sig f S((p, Formula.nfv \<phi>) \<mapsto> tabulate E' 0 (Formula.nfv (formula.map_formula f \<phi>))), (f \<circ> E) \<turnstile> formula.map_formula f \<psi>"
+    "(map_sig f S)((p, Formula.nfv \<phi>) \<mapsto> tabulate E' 0 (Formula.nfv (formula.map_formula f \<phi>))), E' \<turnstile> formula.map_formula f \<phi>"
+    "(map_sig f S)((p, Formula.nfv \<phi>) \<mapsto> tabulate E' 0 (Formula.nfv (formula.map_formula f \<phi>))), (f \<circ> E) \<turnstile> formula.map_formula f \<psi>"
     using 20(4) by(auto simp del:comp_apply elim:wty_formula.cases)
   define fa' where fa'_def: "fa' = (\<lambda>t. (case t of TAny n \<Rightarrow> if n < Formula.nfv \<phi> then E' n else f (TAny (n - Formula.nfv \<phi>)) |
                                                      TNum n \<Rightarrow> f (TNum (n - Formula.nfv \<phi>)) |
@@ -4958,14 +4946,14 @@ next
   have list_eq: "map (fa' \<circ> TAny) [0..<Formula.nfv \<phi>] = map E' [0..<Formula.nfv \<phi>]"
     unfolding fa'_def by simp
   have wty1': "map_sig fa'
- (map_sig f0 S((p, Formula.nfv (formula.map_formula f0 \<phi>)) \<mapsto> tabulate TAny 0 (Formula.nfv \<phi>))),
+ ((map_sig f0 S)((p, Formula.nfv (formula.map_formula f0 \<phi>)) \<mapsto> tabulate TAny 0 (Formula.nfv \<phi>))),
 fa' \<circ> TAny \<turnstile> formula.map_formula fa' (formula.map_formula f0 \<phi>)"
     using wtys(1) 
       apply (simp add: tabulate_alt formula.map_comp fa'_f0 map_sig_subst list_eq
           flip: comp_assoc) 
     using fv_map wf_formula_map wfs(1) wty_formula_fv_cong fa'_TAny by blast
   obtain f1 
-    where f1_def: "check (map_sig f0 S((p, Formula.nfv \<phi>) \<mapsto> tabulate TAny 0 (Formula.nfv \<phi>))) TAny (formula.map_formula f0 \<phi>) = return f1"
+    where f1_def: "check ((map_sig f0 S)((p, Formula.nfv \<phi>) \<mapsto> tabulate TAny 0 (Formula.nfv \<phi>))) TAny (formula.map_formula f0 \<phi>) = return f1"
     using 20(1)[OF f0_def _ wty1'[unfolded nfv_map] wf_fa' 
         wf_formula_map[OF wfs(1)]] sum.exhaust_sel by blast
   note wty1 = check_sound_proven[OF f1_def wf_formula_map[OF wfs(1)]] 
@@ -4976,7 +4964,7 @@ fa' \<circ> TAny \<turnstile> formula.map_formula fa' (formula.map_formula f0 \<
     unfolding wty_result_fX_def by blast
   have list_eq: "map (fa' \<circ> TAny) [0..<Formula.nfv \<phi>] = map E' [0..<Formula.nfv \<phi>]"
     unfolding fa'_def by simp
-  have wty2': "map_sig g1 (map_sig f1 (map_sig f0 S((p, Formula.nfv \<phi>) \<mapsto> map TAny [0..<Formula.nfv \<phi>]))),
+  have wty2': "map_sig g1 (map_sig f1 ((map_sig f0 S)((p, Formula.nfv \<phi>) \<mapsto> map TAny [0..<Formula.nfv \<phi>]))),
           g1 \<circ> (f1 \<circ> f0 \<circ> E) \<turnstile> formula.map_formula g1 (formula.map_formula (f1 \<circ> f0) \<psi>)"
     using wtys(2)
     by (simp add: tabulate_alt formula.map_comp fa'_f0 map_sig_subst list_eq

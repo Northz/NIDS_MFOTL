@@ -512,7 +512,7 @@ next
       apply (drule meta_spec2[of _ \<phi> k])
       apply (drule (1) meta_mp)
       apply (drule meta_mp)
-       apply (metis atLeastLessThan_iff discrete less_le_trans not_less)
+       apply fastforce
       apply (erule meta_mp)
       by simp
     done
