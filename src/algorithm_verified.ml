@@ -51,6 +51,9 @@ module Monitor = struct
     prerr_endline "ERROR while parsing log:";
     prerr_endline (Log_parser.string_of_position pos ^ ": " ^ msg);
     if not !Misc.ignore_parse_errors then exit 1
+
+  let stats _ = Log_parser.Stats.init ()
+  
 end
 
 module P = Log_parser.Make (Monitor)

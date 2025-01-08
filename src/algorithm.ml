@@ -740,6 +740,7 @@ type 'a state = {
   mutable s_db: (string, relation) Hashtbl.t; (** db being parsed *)
   mutable s_in_tp: int; (** most recent time-point after filtering *)
   mutable s_last: Neval.cell; (** most recently evaluated time-point *)
+  s_stats: Log_parser.Stats.t;
 }
 
 let map_state f s = {
@@ -752,6 +753,7 @@ let map_state f s = {
   s_db = s.s_db;
   s_in_tp = s.s_in_tp;
   s_last = s.s_last;
+  s_stats = Log_parser.Stats.init ();
 }
 
 (*
@@ -965,6 +967,12 @@ module Monitor = struct
       eval_tp ctxt;
     Perf.profile_exit ~tp:ctxt.s_log_tp ~loc:Perf.loc_read_tp
 
+  let print_stats comment ctxt =
+    Printf.printf "> LATENCY %s %s %d <\n" comment (Log_parser.Stats.to_string ctxt.s_stats)
+      (int_of_float (1000. *. Unix.gettimeofday ()));
+    Stdlib.flush_all ();
+    Log_parser.Stats.reset ctxt.s_stats
+
   let command ctxt name params =
     match name with
     | "print" ->
@@ -984,7 +992,7 @@ module Monitor = struct
         Printf.printf "Current timepoint: %d\n%!" ctxt.s_log_tp;
     | "save_state" ->
         (match params with
-        | Some (Argument filename) ->
+        | Some (Arguments [filename]) ->
             marshal filename ctxt;
             Printf.printf "%s\n%!" saved_state_msg
         | _ ->
@@ -992,7 +1000,7 @@ module Monitor = struct
             if not !Misc.ignore_parse_errors then exit 1)
     | "save_and_exit" ->
         (match params with
-        | Some (Argument filename) ->
+        | Some (Arguments [filename]) ->
             marshal filename ctxt;
             Printf.printf "%s\n%!" saved_state_msg;
             raise Log_parser.Stop_parser
@@ -1007,10 +1015,17 @@ module Monitor = struct
             if not !Misc.ignore_parse_errors then exit 1)
     | "split_save" ->
         (match params with
-        | Some (Argument filename) -> split_save filename ctxt
+        | Some (Arguments [filename]) -> split_save filename ctxt
         | _ ->
             prerr_endline "ERROR: Bad arguments for split_save command";
             if not !Misc.ignore_parse_errors then exit 1)
+      | "LATENCY" ->
+       (match params with
+        | Some (Arguments []) -> print_stats "" ctxt
+        | Some (Arguments (h::t)) -> print_stats (List.fold_right (fun a b -> a ^ " " ^ b) t h) ctxt
+        | _ ->
+           prerr_endline "ERROR: Bad arguments for LATENCY command";
+           if not !Misc.ignore_parse_errors then exit 1)
     | _ ->
         Printf.eprintf "ERROR: Unrecognized command: %s\n" name;
         if not !Misc.ignore_parse_errors then exit 1
@@ -1028,6 +1043,8 @@ module Monitor = struct
     prerr_endline "ERROR while parsing log:";
     prerr_endline (Log_parser.string_of_position pos ^ ": " ^ msg);
     if not !Misc.ignore_parse_errors then exit 1
+
+  let stats ctxt = ctxt.s_stats
 
 end
 
@@ -1048,7 +1065,8 @@ let init_monitor_state dbschema fv f =
     s_skip = false;
     s_db = Hashtbl.create (List.length dbschema);
     s_in_tp = -1;
-    s_last = last; }
+    s_last = last;
+    s_stats = Log_parser.Stats.init (); }
 
 let monitor_string dbschema log fv f =
   let lexbuf = Lexing.from_string log in

@@ -37,6 +37,22 @@ val parse_signature_file: string -> Db.schema
 
 exception Stop_parser
 
+module Stats : sig
+
+  type t = { mutable ev_done: int
+           ; mutable tp_done: int
+           ; mutable ev_cau: int
+           ; mutable ev_sup: int
+           }
+
+  val reset: t -> unit
+  val init: unit -> t
+  val add_cau : int -> t -> unit
+  val add_sup : int -> t -> unit
+  val to_string: t -> string
+
+end
+
 module type Consumer = sig
   type t
   val begin_tp: t -> MFOTL.timestamp -> unit
@@ -45,6 +61,7 @@ module type Consumer = sig
   val command: t -> string -> Helper.commandParameter option -> unit
   val end_log: t -> unit
   val parse_error: t -> Lexing.position -> string -> unit
+  val stats: t -> Stats.t
 end
 
 (*TODO(JS): move to Misc*)

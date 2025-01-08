@@ -34,6 +34,44 @@
 
 exception Stop_parser
 
+module Stats = struct
+
+  type t = { mutable ev_done: int
+           ; mutable tp_done: int
+           ; mutable ev_cau: int
+           ; mutable ev_sup: int
+           }
+
+  let init () = { ev_done = 0
+                ; tp_done = 0
+                ; ev_cau = 0
+                ; ev_sup = 0
+                }
+
+  let reset stats =
+    stats.ev_done <- 0;
+    stats.tp_done <- 0;
+    stats.ev_cau <- 0;
+    stats.ev_sup <- 0
+
+  let inc_ev stats =
+    stats.ev_done <- stats.ev_done + 1
+
+  let inc_tp stats =
+    stats.tp_done <- stats.tp_done + 1
+
+  let add_cau i stats =
+    stats.ev_cau <- stats.ev_cau + i
+  
+  let add_sup i stats =
+    stats.ev_sup <- stats.ev_sup + i
+
+  let to_string stats =
+    Printf.sprintf "%d %d %d %d 0"
+      stats.ev_done stats.tp_done stats.ev_cau stats.ev_sup
+
+end
+
 module type Consumer = sig
   type t
   val begin_tp: t -> MFOTL.timestamp -> unit
@@ -42,6 +80,7 @@ module type Consumer = sig
   val command: t -> string -> Helper.commandParameter option -> unit
   val end_log: t -> unit
   val parse_error: t -> Lexing.position -> string -> unit
+  val stats: t -> Stats.t
 end
 
 let string_of_position p = Lexing.(
@@ -82,7 +121,12 @@ exception Local_error of string
 
 let expect pb t = if pb.pb_token = t then next pb
   else raise (Local_error ("Expected " ^ string_of_token t ^ " but saw "
-    ^ string_of_token pb.pb_token))
+                           ^ string_of_token pb.pb_token))
+
+let expect_no_next pb t =
+  if pb.pb_token != t then
+    raise (Local_error ("Expected " ^ string_of_token t ^ " but saw "
+                        ^ string_of_token pb.pb_token))
 
 let parse_string pb =
   match pb.pb_token with
@@ -215,13 +259,20 @@ let parse_command_params pb =
   match pb.pb_token with
   | LCB ->
       let p = parse_slicing_params pb in
-      expect pb EOC;
+      expect_no_next pb EOC;
       Some (Helper.SplitSave p)
   | STR s ->
-      next pb;
-      expect pb EOC;
-      Some (Helper.Argument s)
-  | EOC -> next pb; None
+     let aux acc pb =
+       next pb;
+       match pb.pb_token with
+       | EOC -> List.rev acc
+       | STR s -> s::acc
+       | t -> raise (Local_error ("Expected a string or '>' but saw "
+                                  ^ string_of_token t))
+     in
+     let args = aux [s] pb in
+     Some (Helper.Arguments args)
+  | EOC -> None
   | t -> raise (Local_error ("Expected a string, '{' or '<' but saw "
       ^ string_of_token t))
 
@@ -251,6 +302,7 @@ module Make(C: Consumer) = struct
             try Some (MFOTL.ts_of_string s)
             with Failure _ -> None
           in
+          Stats.inc_tp (C.stats ctxt);
           (match ts with
           | Some ts ->
               C.begin_tp ctxt ts;
@@ -263,7 +315,8 @@ module Make(C: Consumer) = struct
       match pb.pb_token with
       | STR s ->
           (match List.assoc_opt s db_schema with
-          | Some tl ->
+           | Some tl ->
+              Stats.inc_ev (C.stats ctxt);
               pb.pb_schema <- (s, tl);
               next pb;
               (match pb.pb_token with
@@ -308,8 +361,8 @@ module Make(C: Consumer) = struct
           next pb;
           (match pb.pb_token with
           | STR s ->
-              next pb;
-              parse_tuple_cont (s::l)
+             next pb;
+             parse_tuple_cont (s::l)
           | t -> fail ("Expected a tuple field but saw " ^ string_of_token t))
       | t -> fail ("Expected ',' or ')' but saw " ^ string_of_token t)
     and parse_command () =
@@ -322,7 +375,7 @@ module Make(C: Consumer) = struct
             with Local_error msg -> Some msg, None
           in
           (match err with
-          | None -> C.command ctxt name params; parse_init ()
+          | None -> C.command ctxt name params; next pb; next pb; parse_init ()
           | Some msg -> fail msg)
       | t -> fail ("Expected a command name but saw " ^ string_of_token t)
     and fail msg =
