@@ -548,7 +548,7 @@ proof -
     by (meson min.absorb2 not_le_imp_less)
 qed
 
-unbundle no_lattice_syntax \<comment> \<open> disable notation \<close>
+unbundle no lattice_syntax \<comment> \<open> disable notation \<close>
 
 (*<*)
 end

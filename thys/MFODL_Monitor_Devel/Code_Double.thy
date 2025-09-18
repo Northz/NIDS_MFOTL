@@ -491,7 +491,7 @@ end = struct
   let compare x y = Z.of_int (Stdlib.compare x y);;
 end;;\<close>
 
-code_reserved OCaml Stdlib FloatUtil
+code_reserved (OCaml) Stdlib FloatUtil
 
 code_printing
   type_constructor double \<rightharpoonup> (OCaml) "float"
