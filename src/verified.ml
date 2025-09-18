@@ -1,7 +1,6 @@
 module Uint32 : sig
   val less : int32 -> int32 -> bool
   val less_eq : int32 -> int32 -> bool
-  val set_bit : int32 -> Z.t -> bool -> int32
   val shiftl : int32 -> Z.t -> int32
   val shiftr : int32 -> Z.t -> int32
   val shiftr_signed : int32 -> Z.t -> int32
@@ -19,11 +18,6 @@ let less_eq x y =
   if Int32.compare x Int32.zero < 0 then
     Int32.compare y Int32.zero < 0 && Int32.compare x y <= 0
   else Int32.compare y Int32.zero < 0 || Int32.compare x y <= 0;;
-
-let set_bit x n b =
-  let mask = Int32.shift_left Int32.one (Z.to_int n)
-  in if b then Int32.logor x mask
-     else Int32.logand x (Int32.lognot mask);;
 
 let shiftl x n = Int32.shift_left x (Z.to_int n);;
 
@@ -52,23 +46,6 @@ end = struct
   let copysign x y = if isnan y then Stdlib.nan else Stdlib.copysign x y;;
   let compare x y = Z.of_int (Stdlib.compare x y);;
 end;;
-
-module Integer_Bit : sig
-  val test_bit : Z.t -> Z.t -> bool
-  val shiftl : Z.t -> Z.t -> Z.t
-  val shiftr : Z.t -> Z.t -> Z.t
-end = struct
-
-(* We do not need an explicit range checks here,
-   because Big_int.int_of_big_int raises Failure
-   if the argument does not fit into an int. *)
-let test_bit x n =  Z.testbit x (Z.to_int n);;
-
-let shiftl x n = Z.shift_left x (Z.to_int n);;
-
-let shiftr x n = Z.shift_right x (Z.to_int n);;
-
-end;; (*struct Integer_Bit*)
 
 module Monitor : sig
   type ('a, 'b) phantom
@@ -806,12 +783,22 @@ type 'a linorder = {order_linorder : 'a order};;
 
 let linorder_nat = ({order_linorder = order_nat} : nat linorder);;
 
+type 'a divide_trivial =
+  {one_divide_trivial : 'a one; zero_divide_trivial : 'a zero;
+    divide_divide_trivial : 'a divide};;
+
+let divide_trivial_nat =
+  ({one_divide_trivial = one_nat; zero_divide_trivial = zero_nat;
+     divide_divide_trivial = divide_nat}
+    : nat divide_trivial);;
+
 type 'a semiring_no_zero_divisors_cancel =
   {semiring_no_zero_divisors_semiring_no_zero_divisors_cancel :
      'a semiring_no_zero_divisors};;
 
 type 'a semidom_divide =
-  {divide_semidom_divide : 'a divide; semidom_semidom_divide : 'a semidom;
+  {divide_trivial_semidom_divide : 'a divide_trivial;
+    semidom_semidom_divide : 'a semidom;
     semiring_no_zero_divisors_cancel_semidom_divide :
       'a semiring_no_zero_divisors_cancel};;
 
@@ -821,34 +808,44 @@ let semiring_no_zero_divisors_cancel_nat =
     : nat semiring_no_zero_divisors_cancel);;
 
 let semidom_divide_nat =
-  ({divide_semidom_divide = divide_nat; semidom_semidom_divide = semidom_nat;
+  ({divide_trivial_semidom_divide = divide_trivial_nat;
+     semidom_semidom_divide = semidom_nat;
      semiring_no_zero_divisors_cancel_semidom_divide =
        semiring_no_zero_divisors_cancel_nat}
     : nat semidom_divide);;
-
-type 'a algebraic_semidom =
-  {semidom_divide_algebraic_semidom : 'a semidom_divide};;
 
 type 'a semiring_modulo =
   {comm_semiring_1_cancel_semiring_modulo : 'a comm_semiring_1_cancel;
     modulo_semiring_modulo : 'a modulo};;
 
+type 'a semiring_modulo_trivial =
+  {divide_trivial_semiring_modulo_trivial : 'a divide_trivial;
+    semiring_modulo_semiring_modulo_trivial : 'a semiring_modulo};;
+
+type 'a algebraic_semidom =
+  {semidom_divide_algebraic_semidom : 'a semidom_divide};;
+
 type 'a semidom_modulo =
   {algebraic_semidom_semidom_modulo : 'a algebraic_semidom;
-    semiring_modulo_semidom_modulo : 'a semiring_modulo};;
-
-let algebraic_semidom_nat =
-  ({semidom_divide_algebraic_semidom = semidom_divide_nat} :
-    nat algebraic_semidom);;
+    semiring_modulo_trivial_semidom_modulo : 'a semiring_modulo_trivial};;
 
 let semiring_modulo_nat =
   ({comm_semiring_1_cancel_semiring_modulo = comm_semiring_1_cancel_nat;
      modulo_semiring_modulo = modulo_nat}
     : nat semiring_modulo);;
 
+let semiring_modulo_trivial_nat =
+  ({divide_trivial_semiring_modulo_trivial = divide_trivial_nat;
+     semiring_modulo_semiring_modulo_trivial = semiring_modulo_nat}
+    : nat semiring_modulo_trivial);;
+
+let algebraic_semidom_nat =
+  ({semidom_divide_algebraic_semidom = semidom_divide_nat} :
+    nat algebraic_semidom);;
+
 let semidom_modulo_nat =
   ({algebraic_semidom_semidom_modulo = algebraic_semidom_nat;
-     semiring_modulo_semidom_modulo = semiring_modulo_nat}
+     semiring_modulo_trivial_semidom_modulo = semiring_modulo_trivial_nat}
     : nat semidom_modulo);;
 
 let finite_UNIV_nata : (nat, bool) phantom = Phantom false;;
@@ -5185,7 +5182,9 @@ let rec finite_multiset
 
 let rec dvd (_A1, _A2)
   a b = eq _A1
-          (modulo _A2.semiring_modulo_semidom_modulo.modulo_semiring_modulo b a)
+          (modulo
+            _A2.semiring_modulo_trivial_semidom_modulo.semiring_modulo_semiring_modulo_trivial.modulo_semiring_modulo
+            b a)
           (zero _A2.algebraic_semidom_semidom_modulo.semidom_divide_algebraic_semidom.semidom_semidom_divide.comm_semiring_1_cancel_semidom.comm_semiring_1_comm_semiring_1_cancel.semiring_1_comm_semiring_1.semiring_0_semiring_1.mult_zero_semiring_0.zero_mult_zero);;
 
 let rec eval_agg_op

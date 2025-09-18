@@ -11,7 +11,7 @@ homepage: "https://infsec.ethz.ch/research/software/monpoly.html"
 bug-reports: "https://bitbucket.org/jshs/monpoly/issues"
 depends: [
   "dune" {>= "3.0"}
-  "libmonpoly" {= "version"}
+  "libmonpoly" {= version}
   "dune-build-info"
   "odoc" {with-doc}
 ]
