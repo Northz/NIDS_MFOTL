@@ -1,3 +1,5 @@
+**Forked from the [development repository fork](https://bitbucket.org/jshs/monpoly/src/master/).**
+
 MonPoly
 =======
 
