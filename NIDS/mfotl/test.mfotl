@@ -1,0 +1,7 @@
+LET viol(id) =
+  ( EXISTS a, b, label. ( P(id,a,b,label) AND 3 < a ) )
+  OR
+  ( EXISTS a, b, label. ( P(id,a,b,label) AND 3 < b ) )
+IN
+  viol(id)
+  AND ONCE[1,*] ( viol(id) AND ONCE[1,*] viol(id) )
