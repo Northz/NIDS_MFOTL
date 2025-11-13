@@ -1,5 +1,5 @@
 LET viol(id) =
-  ( EXISTS a, b, label. ( P(id,"es",a,b,label) AND 0 <= a AND a <= 2))
+  ( EXISTS a, b, label. ( P(id,"es",a,b,label) AND a >= 0 AND a <= 2))
   OR
   ( EXISTS a, b, label. ( P(id,"es",a,b,label) AND 3 < b ) )
 IN

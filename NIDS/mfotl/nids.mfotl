@@ -1,10 +1,101 @@
-flow(
-  _, _, _, _, _, _, _,
-  _, _, _, _, _, _, _,
-  _, _, _, _, _, _, _,
-  _, _, _, _, _, _, _,
-  _, _, _, _, _, _, _,
-  _, _, _, _, _, _, _,
-  _, _, _, _, _, _, label,
+LET violation(srcip) = 
+  ( EXISTS 
+      dbytes, dloss, service, sload, dload,
+      spkts, dpkts, swin, dwin, smeansz, dmeanz, trans_depth,
+      res_bdy_len, sjit, tcprtt, synack, ackdat, is_sm_ips_ports,
+      ct_state_ttl, ct_flw_http_mthd, is_ftp_login, ct_ftp_cmd,
+      ct_srv_src, ct_srv_dst, ct_dst_ltm, ct_src_ltm,
+      ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm, label.
+      
+    flow(
+      srcip, _, _, _, "tcp", "CON", _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, smeansz, dmeanz, trans_depth, res_bdy_len, sjit, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, label
+    )
+    AND dbytes > 95 AND dbytes < 717505
+    AND dloss >= 0 AND dloss < 80
+    AND sload > 1833.0 AND sload < 6306455.0
+    AND dload > 621.0 AND dload < 1012407.0
+    AND spkts > 1 AND spkts < 10200
+    AND dpkts > 1 AND dpkts < 7091
+    AND NOT swin = 0
+    AND NOT dwin = 0
+    AND smeansz > 45 AND smeansz < 1342
+    AND dmeanz > 42 AND dmeanz < 1349
+    AND (trans_depth = 0 OR trans_depth = 1)
+    AND (res_bdy_len = 0 OR res_bdy_len = 161)
+    AND sjit > 704.0 AND sjit < 3800780.0
+    AND tcprtt < 0.23
+    AND synack < 0.14
+    AND ackdat < 0.17
+    AND is_sm_ips_ports = 0
+    AND (ct_state_ttl = 3 OR ct_state_ttl = 4)
+    AND (ct_flw_http_mthd = 0 OR ct_flw_http_mthd = 1)
+    AND is_ftp_login = 0
+    AND ct_ftp_cmd = 0
+    AND ct_srv_src > 0 AND ct_srv_src < 11
+    AND ct_srv_dst > 0 AND ct_srv_dst < 9
+    AND ct_dst_ltm > 0 AND ct_dst_ltm < 6
+    AND ct_src_ltm > 0 AND ct_src_ltm < 7
+    AND ct_src_dport_ltm > 0 AND ct_src_dport_ltm < 3
+    AND ct_dst_sport_ltm = 1
+    AND ct_dst_src_ltm > 0 AND ct_dst_src_ltm < 6
+  )
+  OR
+  ( EXISTS 
+    dbytes, dloss, service, sload, dload,
+    spkts, dpkts, swin, dwin, smeansz, dmeanz, trans_depth,
+    res_bdy_len, sjit, tcprtt, synack, ackdat, is_sm_ips_ports,
+    ct_state_ttl, ct_flw_http_mthd, is_ftp_login, ct_ftp_cmd,
+    ct_srv_src, ct_srv_dst, ct_dst_ltm, ct_src_ltm,
+    ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm, label.
+    
+  flow(
+    srcip, _, _, _, "tcp", "FIN", _,
+    _, dbytes, _, _, _, dloss, service, 
+    sload, dload, spkts, dpkts, swin, dwin, _,
+    _, smeansz, dmeanz, trans_depth, res_bdy_len, sjit, _,
+    _, _, _, _, tcprtt, synack, ackdat,
+    is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+    is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+    ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+    ct_dst_sport_ltm, ct_dst_src_ltm, _, label
+  )
+  AND dbytes > 85 AND dbytes < 14655418
+  AND dloss >= 0 AND dloss < 5483
+  AND sload >= 0.0 AND sload < 1824849.0
+  AND dload >= 0.0 AND dload < 2317180.0
+  AND spkts > 1 AND spkts < 8670
+  AND dpkts > 1 AND dpkts < 10971
+  AND NOT swin = 0
+  AND NOT dwin = 0
+  AND smeansz > 41 AND smeansz < 1343
+  AND dmeanz > 42 AND dmeanz < 1391
+  AND trans_depth >= 0 AND trans_depth < 5
+  AND res_bdy_len >= 0 AND res_bdy_len < 443365
+  AND sjit > 0.0 AND sjit < 1079727.0
+  AND tcprtt < 0.74
+  AND synack < 0.36
+  AND ackdat < 0.34
+  AND is_sm_ips_ports = 0
+  AND ct_state_ttl = 1
+  AND (ct_flw_http_mthd = 0 OR ct_flw_http_mthd = 1)
+  AND (is_ftp_login = 0 OR is_ftp_login = 1)
+  AND (ct_ftp_cmd = 0 OR ct_ftp_cmd = 1)
+  AND ct_srv_src > 0 AND ct_srv_src < 21
+  AND ct_srv_dst > 0 AND ct_srv_dst < 16
+  AND ct_dst_ltm > 0 AND ct_dst_ltm < 12
+  AND ct_src_ltm > 0 AND ct_src_ltm < 16
+  AND ct_src_dport_ltm > 0 AND ct_src_dport_ltm < 6
+  AND ct_dst_sport_ltm > 0 AND ct_dst_sport_ltm < 5
+  AND ct_dst_src_ltm > 0 AND ct_dst_src_ltm < 9
 )
-AND label = 1
+IN
+  violation(id)
+  AND ONCE[1,600] ( violation(id) AND ONCE[1,600] violation(id) )
