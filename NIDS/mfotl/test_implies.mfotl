@@ -1,0 +1,4 @@
+#comment
+FORALL name. ( P(name,_,_,_,_) IMPLIES EVENTUALLY[1,3] A(name,_,_) )
+AND
+( A(name,_,_) IMPLIES ONCE[1,3] P(name,_,_,_,_) )

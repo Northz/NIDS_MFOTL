@@ -1,3 +1,2 @@
-P(
-  string, string, int, int, int
-)
+P(string, string, int, int, int)
+A(string, int, int)
