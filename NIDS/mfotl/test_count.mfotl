@@ -2,19 +2,4 @@ LET resA(name,id) = EXISTS a,b,c. A(name,id,a,b,c)
 IN
 LET resB(name,id) = EXISTS d,e,f. B(name,id,d,e,f)
 IN
-(
-  resB(name,id)
-  AND
-  B_cnt <- CNT i 
-  (
-    (
-      ONCE[0,2] resB(name,id)
-      AND tp(i)
-    )
-  OR
-    (
-      EVENTUALLY[0,2] resB(name,id)
-      AND tp(i)
-    )
-  )
-)
+  (cnt <- CNT i (ONCE resA(_,_) AND tp(i)))

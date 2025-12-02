@@ -96,6 +96,6 @@ LET udp_shellcode_violation(srcip,dstip,attack_cat) =
     AND (ct_dst_src_ltm = 1 OR ct_dst_src_ltm = 2 OR ct_dst_src_ltm = 5)
   )
 IN
-tp(400000) AND
-(s <- CNT i; srcip, dstip ONCE[0,30d] udp_shellcode_violation(srcip,dstip,i))
-
+src_dst_cnt <- CNT i ; srcip, dstip (
+    udp_shellcode_violation(srcip, dstip, _) AND tp(i)
+)
