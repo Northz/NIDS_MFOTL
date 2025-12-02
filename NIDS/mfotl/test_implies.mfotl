@@ -1,4 +1,25 @@
-#comment
-FORALL name. ( P(name,_,_,_,_) IMPLIES EVENTUALLY[1,3] A(name,_,_) )
-AND
-( A(name,_,_) IMPLIES ONCE[1,3] P(name,_,_,_,_) )
+# P implies A within 3 min eventually, A implies P within 3 min in the past
+# we count total events found, and the number of events that contain id = "es"
+
+LET resA(name,id) = EXISTS a,b,c. A(name,id,a,b,c) IN
+LET resB(name,id) = EXISTS d,e,f. B(name,id,d,e,f) IN
+FORALL name, id.
+  (
+    (resA(name,id))
+      IMPLIES
+    (
+      (TRUE SINCE[0,180] resB(name,id))
+      OR
+      (EVENTUALLY[0,180] resB(name,id))
+    )
+  )
+  AND
+  (
+    (resB(name,id))
+      IMPLIES
+    (
+      (TRUE SINCE[0,180] resA(name,id))
+      OR
+      (EVENTUALLY[0,180] resA(name,id))
+    )
+  )

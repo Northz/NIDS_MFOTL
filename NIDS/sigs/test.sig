@@ -1,2 +1,2 @@
-P(string, string, int, int, int)
-A(string, int, int)
+A(string, string, int, int, int)
+B(string, string, int, int, int)

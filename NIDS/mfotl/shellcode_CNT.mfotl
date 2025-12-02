@@ -1,0 +1,101 @@
+# unique ip pairs cotains a mix of tcp and udp records or only udp records. 
+# Some outliers contain only tcp but with too few entries 
+# to be considered a fully simuulated attack.
+
+LET tcp_shellcode_violation(srcip,dstip,attack_cat) = 
+  ( EXISTS 
+      dbytes, dloss, service, sload, dload,
+      spkts, dpkts, swin, dwin, dmeanz, 
+      tcprtt, synack, ackdat, is_sm_ips_ports,
+      ct_state_ttl, ct_flw_http_mthd, is_ftp_login, ct_ftp_cmd,
+      ct_srv_src, ct_srv_dst, ct_dst_ltm, ct_src_ltm,
+      ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm, label.
+      
+    flow(
+      srcip, _, dstip, _, "tcp", "FIN", _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeanz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, attack_cat, label
+    )
+    AND dbytes > 181 AND dbytes < 355
+    AND dloss = 1
+    AND service = "-"
+    AND sload > 274.0 AND sload < 46099.0
+    AND dload > 188.0 AND dload < 10515.0
+    AND (spkts = 7 OR spkts = 8 OR spkts = 10)
+    AND (dpkts = 4 OR dpkts = 6 OR dpkts = 8)
+    AND NOT swin = 0
+    AND NOT dwin = 0
+    AND dmeanz > 43 AND dmeanz < 49
+    AND tcprtt < 0.39
+    AND synack < 0.24
+    AND ackdat < 0.22
+    AND is_sm_ips_ports = 0
+    AND ct_state_ttl = 1
+    AND ct_flw_http_mthd = 0
+    AND is_ftp_login = 0
+    AND ct_ftp_cmd = 0
+    AND ct_srv_src > 0 AND ct_srv_src < 21
+    AND ct_srv_dst > 0 AND ct_srv_dst < 11
+    AND ct_dst_ltm > 0 AND ct_dst_ltm < 4
+    AND ct_src_ltm > 0 AND ct_src_ltm < 6
+    AND ct_src_dport_ltm = 1
+    AND ct_dst_sport_ltm = 1
+    AND ct_dst_src_ltm > 0 AND ct_dst_src_ltm < 6
+  )
+IN 
+LET udp_shellcode_violation(srcip,dstip,attack_cat) = 
+  ( EXISTS 
+      dbytes, dloss, service, sload, dload,
+      spkts, dpkts, swin, dwin, dmeanz, 
+      tcprtt, synack, ackdat, is_sm_ips_ports,
+      ct_state_ttl, ct_flw_http_mthd, is_ftp_login, ct_ftp_cmd,
+      ct_srv_src, ct_srv_dst, ct_dst_ltm, ct_src_ltm,
+      ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm, label.
+      
+    flow(
+      srcip, _, dstip, _, "udp", "INT", _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeanz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, attack_cat, label
+    )
+    AND dbytes = 0
+    AND dloss = 0
+    AND service = "-"
+    AND sload > 0.0
+    AND dload = 0.0
+    AND spkts = 2
+    AND dpkts = 0
+    AND swin = 0
+    AND dwin = 0
+    AND dmeanz = 0
+    AND tcprtt = 0.0
+    AND synack = 0.0
+    AND ackdat = 0.0
+    AND is_sm_ips_ports = 0
+    AND ct_state_ttl = 2
+    AND ct_flw_http_mthd = 0
+    AND is_ftp_login = 0
+    AND ct_ftp_cmd = 0
+    AND ct_srv_src > 0 AND ct_srv_src < 11
+    AND ct_srv_dst > 0 AND ct_srv_dst < 7
+    AND ct_dst_ltm > 0 AND ct_dst_ltm < 6
+    AND ct_src_ltm > 0 AND ct_src_ltm < 9
+    AND ct_src_dport_ltm = 1
+    AND ct_dst_sport_ltm = 1
+    AND (ct_dst_src_ltm = 1 OR ct_dst_src_ltm = 2 OR ct_dst_src_ltm = 5)
+  )
+IN
+tp(400000) AND
+(s <- CNT i; srcip, dstip ONCE[0,30d] udp_shellcode_violation(srcip,dstip,i))
+

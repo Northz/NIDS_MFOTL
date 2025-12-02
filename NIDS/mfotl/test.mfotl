@@ -1,7 +1,5 @@
 LET viol(id) =
-  ( EXISTS a, b, label. ( P(id,"es",a,b,label) AND a >= 0 AND a <= 2))
-  OR
-  ( EXISTS a, b, label. ( P(id,"es",a,b,label) AND 3 < b ) )
+  ( EXISTS x. ( B(id,_,_,x,_) AND x = 20))
 IN
-  viol(id)
-  AND ONCE[1,*] ( viol(id) AND ONCE[1,*] viol(id) )
+  (viol(id) AND EVENTUALLY[1,30] viol(id)) OR 
+  (viol(id) AND ONCE[1,30] viol(id))

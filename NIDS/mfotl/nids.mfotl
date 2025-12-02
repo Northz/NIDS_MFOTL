@@ -24,7 +24,6 @@ LET violation(srcip) =
     AND dload > 621.0 AND dload < 1012407.0
     AND spkts > 1 AND spkts < 10200
     AND dpkts > 1 AND dpkts < 7091
-
     AND smeansz > 45 AND smeansz < 1342
     AND dmeanz > 42 AND dmeanz < 1349
     AND (trans_depth = 0 OR trans_depth = 1)

@@ -1,0 +1,22 @@
+LET resA(name,id) = A(name,id,_,_,_) IN
+LET resB(name,id) = B(name,id,_,_,_) IN
+FORALL name,id.
+  (
+    resA(name,id)
+      IMPLIES
+    (
+      (TRUE SINCE[0,180] resB(name,id))
+      OR
+      (EVENTUALLY[0,180] resB(name,id))
+    )
+  )
+  AND
+  (
+    resB(name,id)
+      IMPLIES
+    (
+      (TRUE SINCE[0,180] resA(name,id))
+      OR
+      (EVENTUALLY[0,180] resA(name,id))
+    )
+  )
