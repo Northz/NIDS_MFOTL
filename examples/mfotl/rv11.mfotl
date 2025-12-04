@@ -1,1 +1,6 @@
-   publish(r) IMPLIES EVENTUALLY[1d,7d] approve(r)
+# publish(r) IMPLIES EVENTUALLY[1d,7d] approve(r)
+
+publish(r) AND NOT EVENTUALLY[1d,7d] approve(r)
+# @1307955600 (time point 1): (160)
+# @1308477599 (time point 2): (152) (163)
+# @1308477609 (time point 3): (150)
