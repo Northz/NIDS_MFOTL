@@ -2,8 +2,12 @@
 
 LET resA(name,id) = EXISTS a,b,c. A(name,id,a,b,c) 
 IN
-LET resB(name,id) = EXISTS d,e,f. B(name,id,d,e,f) 
+LET resB(name,id) = EXISTS a,b,c. B(name,id,a,b,c) 
 IN
-resA(name,id) AND (EVENTUALLY[1,6] resB(name,id) OR ONCE[1,6] resB(name,id))
-OR 
-resA(name,id) AND (EVENTUALLY[1,6] resA(name,id) OR ONCE[1,6] resA(name,id))
+resA(name,id) AND NOT EVENTUALLY[1,6] resB(name,id)
+
+# NOT resA(name,id) OR EVENTUALLY[1,6] resB(name,id)
+
+# resA(name,id) AND (EVENTUALLY[1,6] resB(name,id) OR ONCE[1,6] resB(name,id))
+# OR 
+# resA(name,id) AND (EVENTUALLY[1,6] resA(name,id) OR ONCE[1,6] resA(name,id))
