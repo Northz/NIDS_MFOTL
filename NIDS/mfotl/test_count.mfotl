@@ -5,11 +5,23 @@ IN
 #(
 #  vio_cnt <- CNT i; name, id 
 #  (
-#    ONCE resA(name,id) AND tp(i) OR resB(name,id) AND tp(i) 
+#    (ONCE ((resA(name,id) OR resB(name,id)) AND tp(i)))
 #    OR 
-#    EVENTUALLY[0,30m] (resA(name,id) AND tp(i) OR resB(name,id) AND tp(i)) 
+#    EVENTUALLY[0,30m] ((resA(name,id) OR resB(name,id)) AND tp(i)) 
 #  )
 #)
+
+(
+  EXISTS vio_cnt_past, vio_cnt_future.
+  (((vio_cnt_past <- CNT i; name, id (ONCE ((resA(name,id) OR resB(name,id)) AND tp(i)))) AND 
+  (vio_cnt_future <- CNT i; name, id (EVENTUALLY[0,30m] ((resA(name,id) OR resB(name,id)) AND tp(i))))) AND
+  vio_cnt = vio_cnt_past + vio_cnt_future)
+)
+
+# LET pat1(ID) = ... IN
+# LET pat2(ID) = ... IN
+# pat1(ID) OR
+# (pat2(ID) AND NOT pat1(ID))
 
 # (
 #   vio_cnt <- CNT i; name, id (ONCE resA(name,id) AND tp(i) OR resB(name,id) AND tp(i))
@@ -21,5 +33,5 @@ IN
 
 # vio_cnt <- CNT id; name, id (ONCE resA(name,id) OR resB(name,id) )
 
-tp(i)
+# tp(i)
 
