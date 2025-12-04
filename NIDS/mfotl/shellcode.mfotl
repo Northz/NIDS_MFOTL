@@ -1,6 +1,6 @@
-# unique ip pairs cotains a mix of tcp and udp records or only udp records. 
-# Some outliers contain only tcp but with too few entries 
-# to be considered a fully simuulated attack.
+# unique src/dst ip pairs cotains either a mix of tcp and udp violations 
+# or only udp violations. Some outliers contain only tcp violations
+# but with too few entries to be considered a fully simulated attack.
 
 LET tcp_shellcode_violation(srcip,dstip,attack_cat) = 
   ( EXISTS 
