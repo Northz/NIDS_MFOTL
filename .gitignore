@@ -18,4 +18,5 @@ trigger-performance-evaluation/asymptotic-experiments-constant-interval/
 trigger-performance-evaluation/asymptotic-experiments-fraction-interval/
 
 release-performance-evaluation/experiments*/
-NIDS/logs/*.log
+NIDS/logs/day_1.log
+NIDS/logs/day_2.log
