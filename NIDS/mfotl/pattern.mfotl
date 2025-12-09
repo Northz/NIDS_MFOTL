@@ -1,0 +1,38 @@
+LET resA(name,id) = EXISTS a,b,lab. A(name,id,a,b,lab) 
+IN
+LET resB(name,id) = EXISTS a,b,lab. B(name,id,a,b,lab)
+IN
+LET neighborA(vioA_cnt,name,id) =
+(
+  vioA_cnt <- CNT i; name, id
+  (
+    ( 
+      ( ONCE[0,5] resA(name,id) AND tp(i) )
+      OR 
+      ( EVENTUALLY[0,3] resA(name,id) AND tp(i) )
+    )
+  )
+  AND 
+  (
+    ( resA(name,id)
+      AND EVENTUALLY[0,5] resB(name,id)
+    )
+    OR
+    resB(name,id)
+  )
+)
+IN
+EXISTS x, name, id.
+(t_cnt <- CNT i; name, id
+(ONCE neighborA(x,name,id) 
+AND tp(i)
+AND (A(_,_,_,_,1) OR B(_,_,_,_,1))
+AND x > 4)
+)
+# OR
+# EXISTS x, name, id.
+# (f_cnt <- CNT i; name, id
+# (ONCE neighborA(x,name,id) 
+# AND tp(i)
+# AND (A(_,_,_,_,0) OR B(_,_,_,_,0)))
+# )
