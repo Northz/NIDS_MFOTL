@@ -2,37 +2,29 @@ LET resA(name,id) = EXISTS a,b,c. A(name,id,a,b,c)
 IN
 LET resB(name,id) = EXISTS d,e,f. B(name,id,d,e,f)
 IN
+# total_vio <- SUM vio_cnt
+# (
+#   vio_cnt <- CNT i; name, id 
+#   (
+#     ( ONCE (resA(name,id) OR resB(name,id)) AND tp(i) )
+#     OR 
+#     ( EVENTUALLY[0,30m] (resA(name,id) OR resB(name,id)) AND tp(i) ) 
+#   )
+# )
+
 (
-  vio_cnt <- CNT i; name, id 
+  EXISTS vio_cnt_past, vio_cnt_future.
   (
-    (ONCE ((resA(name,id) OR resB(name,id)) AND tp(i)))
-    OR 
-    EVENTUALLY[0,30m] ((resA(name,id) OR resB(name,id)) AND tp(i)) 
+    ( vio_cnt_past <- CNT i; name, id 
+      ( ONCE[1,1h] (resA(name,id) OR resB(name,id)) AND tp(i) )
+    )
+    AND
+    ( vio_cnt_future <- CNT i; name, id 
+      ( EVENTUALLY[0,1h] (resA(name,id) OR resB(name,id)) AND tp(i) )
+    )
+    AND vio_cnt = vio_cnt_past + vio_cnt_future
   )
 )
-
-#(
-#  EXISTS vio_cnt_past, vio_cnt_future.
-#  (
-#    ( vio_cnt_past <- CNT i; name, id 
-#      ( ONCE 
-#        ( ( resA(name,id) OR resB(name,id) ) 
-#          AND tp(i) 
-#        )
-#      )
-#    )
-#    AND
-#    ( vio_cnt_future <- CNT i; name, id 
-#      ( EVENTUALLY[1,1h] 
-#        ( ( resA(name,id) OR resB(name,id) )
-#          AND tp(i) 
-#        )
-#      )
-#    )
-#    AND
-#    vio_cnt = vio_cnt_past + vio_cnt_future
-#  )
-#)
 
 
 # LET pat1(ID) = ... IN
