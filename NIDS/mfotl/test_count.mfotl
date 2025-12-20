@@ -2,6 +2,61 @@ LET resA(name,id) = EXISTS a,b,c. A(name,id,a,b,c)
 IN
 LET resB(name,id) = EXISTS d,e,f. B(name,id,d,e,f)
 IN
+# creates a stream of violations counts
+LET counts(name, cnt) =
+(
+  ( cnt <- CNT i; name 
+    ( 
+      (resA(name,_) OR resB(name,_))
+      AND
+      ONCE[1,2] (resA(name,_) OR resB(name,_)) 
+      AND tp(i) 
+    )
+  )
+  OR
+  ( cnt <- CNT i; name
+    ( 
+      (resA(name,_) OR resB(name,_))
+      AND
+      EVENTUALLY[0,2] ONCE[0,0] (resA(name,_) OR resB(name,_)) 
+      AND tp(i) 
+    )
+  )
+)
+IN
+counts(s,t)
+# take max over the stream
+#LET max_count(name,max_cnt) =
+#(
+#  max_cnt <- MAX cnt; name counts(name,cnt)
+#)
+#IN
+#max_count(n,m)
+
+
+# flatten multiple columns into a single stream
+# LET flat_counts(name,cnt) =
+# (
+#   counts(name,cnt,_)
+#   OR
+#   counts(name,_,cnt)
+# )
+# IN
+
+# (
+#   EXISTS vio_cnt_past, vio_cnt_future.
+#   (
+#     ( vio_cnt_past <- CNT i; name, id 
+#       ( ONCE[1,1h] (resA(name,id) OR resB(name,id)) AND tp(i) )
+#     )
+#     AND
+#     ( vio_cnt_future <- CNT i; name, id 
+#       ( EVENTUALLY[0,1h] ONCE[0,0] (resA(name,id) OR resB(name,id)) AND tp(i) )
+#     )
+#     AND vio_cnt = vio_cnt_past + vio_cnt_future
+#   )
+# )
+
 # total_vio <- SUM vio_cnt
 # (
 #   vio_cnt <- CNT i; name, id 
@@ -11,21 +66,6 @@ IN
 #     ( EVENTUALLY[0,30m] (resA(name,id) OR resB(name,id)) AND tp(i) ) 
 #   )
 # )
-
-(
-  EXISTS vio_cnt_past, vio_cnt_future.
-  (
-    ( vio_cnt_past <- CNT i; name, id 
-      ( ONCE[1,1h] (resA(name,id) OR resB(name,id)) AND tp(i) )
-    )
-    AND
-    ( vio_cnt_future <- CNT i; name, id 
-      ( EVENTUALLY[0,1h] (resA(name,id) OR resB(name,id)) AND tp(i) )
-    )
-    AND vio_cnt = vio_cnt_past + vio_cnt_future
-  )
-)
-
 
 # LET pat1(ID) = ... IN
 # LET pat2(ID) = ... IN
