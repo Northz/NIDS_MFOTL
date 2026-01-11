@@ -5,33 +5,52 @@ IN
 # creates a stream of violations counts
 LET counts(name, cnt) =
 (
-  ( cnt <- CNT i; name 
-    ( 
-      (resA(name,_) OR resB(name,_))
-      AND
-      ONCE[1,2] (resA(name,_) OR resB(name,_)) 
-      AND tp(i) 
+  (resA(name,_) OR resB(name,_))
+  AND
+  (
+    # example of using parenthesis to limit the scope
+    # of free variables, such that the left side arity
+    # matches the LET declaration
+    (
+      EXISTS fst_cnt.
+      ( 
+        (
+          fst_cnt <- CNT i; name 
+          ( ONCE[1,3] (resA(name,_) OR resB(name,_)) 
+            AND tp(i) 
+          )
+        )
+        AND cnt = fst_cnt
+      )
     )
-  )
-  OR
-  ( cnt <- CNT i; name
-    ( 
-      (resA(name,_) OR resB(name,_))
-      AND
-      EVENTUALLY[0,2] ONCE[0,0] (resA(name,_) OR resB(name,_)) 
-      AND tp(i) 
+    OR
+    ( cnt <- CNT i; name
+      ( EVENTUALLY[0,3] ONCE[0,0] (resA(name,_) OR resB(name,_)) 
+        AND tp(i) 
+      ) 
     )
   )
 )
 IN
-counts(s,t)
 # take max over the stream
-#LET max_count(name,max_cnt) =
-#(
-#  max_cnt <- MAX cnt; name counts(name,cnt)
-#)
-#IN
-#max_count(n,m)
+LET max_count(name,max_cnt) =
+(
+  max_cnt <- MAX cnt; name counts(name,cnt)
+)
+IN
+(
+  EXISTS max_cnt.
+  cnt <- CNT i; name
+  (
+    max_count(_,t) AND (t > 1)
+    AND 
+    (
+      ONCE max_count(name, max_cnt)
+      AND tp(i)
+      AND (max_cnt > 1)
+    )
+  )
+)
 
 
 # flatten multiple columns into a single stream

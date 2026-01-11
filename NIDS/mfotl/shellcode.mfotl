@@ -1,15 +1,17 @@
-# unique src/dst ip pairs cotains either a mix of tcp and udp violations 
-# or only udp violations. Some outliers contain only tcp violations
-# but with too few entries to be considered a fully simulated attack.
+# unique src/dst ip pairs contains either a mix of 
+#    tcp and udp violations 
+#    or only udp violations. 
+# Some outliers contain only tcp violations but with 
+# too few entries to be considered a fully simulated attack.
 
-LET tcp_shellcode_violation(srcip,dstip,attack_cat) = 
+LET tcp_shellcode_violation(srcip,dstip) = 
   ( EXISTS 
       dbytes, dloss, service, sload, dload,
       spkts, dpkts, swin, dwin, dmeanz, 
       tcprtt, synack, ackdat, is_sm_ips_ports,
       ct_state_ttl, ct_flw_http_mthd, is_ftp_login, ct_ftp_cmd,
       ct_srv_src, ct_srv_dst, ct_dst_ltm, ct_src_ltm,
-      ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm, label.
+      ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm.
       
     flow(
       srcip, _, dstip, _, "tcp", "FIN", _,
@@ -20,7 +22,7 @@ LET tcp_shellcode_violation(srcip,dstip,attack_cat) =
       is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
       is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
       ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
-      ct_dst_sport_ltm, ct_dst_src_ltm, attack_cat, label
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
     )
     AND dbytes > 181 AND dbytes < 355
     AND dloss = 1
@@ -49,14 +51,14 @@ LET tcp_shellcode_violation(srcip,dstip,attack_cat) =
     AND ct_dst_src_ltm > 0 AND ct_dst_src_ltm < 6
   )
 IN 
-LET udp_shellcode_violation(srcip,dstip,attack_cat) = 
+LET udp_shellcode_violation(srcip,dstip) = 
   ( EXISTS 
       dbytes, dloss, service, sload, dload,
       spkts, dpkts, swin, dwin, dmeanz, 
       tcprtt, synack, ackdat, is_sm_ips_ports,
       ct_state_ttl, ct_flw_http_mthd, is_ftp_login, ct_ftp_cmd,
       ct_srv_src, ct_srv_dst, ct_dst_ltm, ct_src_ltm,
-      ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm, label.
+      ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm.
       
     flow(
       srcip, _, dstip, _, "udp", "INT", _,
@@ -67,7 +69,7 @@ LET udp_shellcode_violation(srcip,dstip,attack_cat) =
       is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
       is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
       ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
-      ct_dst_sport_ltm, ct_dst_src_ltm, attack_cat, label
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
     )
     AND dbytes = 0
     AND dloss = 0

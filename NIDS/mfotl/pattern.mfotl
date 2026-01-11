@@ -7,9 +7,9 @@ LET neighborA(vioA_cnt,name,id) =
   vioA_cnt <- CNT i; name, id
   (
     ( 
-      ( ONCE[0,5] resA(name,id) AND tp(i) )
+      ( ONCE[0,2] resA(name,id) AND tp(i) )
       OR 
-      ( EVENTUALLY[0,3] resA(name,id) AND tp(i) )
+      ( EVENTUALLY[0,2] ONCE[0,0] resA(name,id) AND tp(i) )
     )
   )
   AND 
@@ -22,17 +22,17 @@ LET neighborA(vioA_cnt,name,id) =
   )
 )
 IN
-EXISTS x, name, id.
-(t_cnt <- CNT i; name, id
-(ONCE neighborA(x,name,id) 
-AND tp(i)
-AND (A(_,_,_,_,1) OR B(_,_,_,_,1))
-AND x > 4)
+(
+  EXISTS A_cnt.
+  ( 
+    cnt <- CNT i; name, id, st
+    (
+      ONCE neighborA(A_cnt,name,id) 
+      AND tp(i)
+      AND (A(_,_,_,_,st) OR B(_,_,_,_,st))
+      AND A_cnt > 2
+    )
+  ) 
 )
-# OR
-# EXISTS x, name, id.
-# (f_cnt <- CNT i; name, id
-# (ONCE neighborA(x,name,id) 
-# AND tp(i)
-# AND (A(_,_,_,_,0) OR B(_,_,_,_,0)))
-# )
+
+

@@ -1,5 +1,19 @@
-LET viol(id) =
-  ( EXISTS x. ( B(id,_,_,x,_) AND x = 20))
+LET resA(name,id) = EXISTS a,b,c. A(name,a,id,b,c) 
 IN
-  (viol(id) AND EVENTUALLY[1,30] viol(id)) OR 
-  (viol(id) AND ONCE[1,30] viol(id))
+LET resB(name,id) = EXISTS d,e,f. B(name,d,id,e,f)
+IN
+#EXISTS a. resA(_,a) AND ((a > 0 AND a < 4) OR (a > 7 AND a < 10))
+#EXISTS a. resA(_,a) AND a > 0 AND a < 4 OR a > 7 AND a < 10
+
+# only the these work
+#(EXISTS a. resA(_,a) AND a > 0 AND a < 4)  OR (EXISTS a. resA(_,a) AND a > 7 AND a < 10)
+#EXISTS a. resA(_,a) AND a > 0 AND a < 4
+#EXISTS a. resA(_,a) AND (a=1 OR a=2 OR a=3)
+
+#EXISTS a, b.
+#(
+#  # arithmetic comparisons must be guarded by a relational atom
+#  (A(_,_,_,a,b) AND a >= 0)
+#  OR
+#  (B(_,_,_,a,b) AND b >= 0)
+#)
