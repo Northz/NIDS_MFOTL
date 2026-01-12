@@ -171,24 +171,35 @@ EXISTS dstip.
   )
 )
 IN
-#MAX_cnt_viol_analysis_others(srcip, cnt_max)
-#AND cnt_max > 215
-#AND flow(srcip,_,_,_,_,_,_,
-#        _,_,_,_,_,_,_,
-#        _,_,_,_,_,_,_,
-#        _,_,_,_,_,_,_,
-#        _,_,_,_,_,_,_,
-#        _,_,_,_,_,_,_,
-#        _,_,_,_,_,"Analysis",label
-#    )
-#OR
-MAX_cnt_viol_analysis_TCP(srcip, cnt_max)
-AND cnt_max > 23
-AND flow(srcip,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,"Analysis",label
+cnt <- CNT i; srcip, label
+(
+  EXISTS cnt_max. ONCE
+  (
+    MAX_cnt_viol_analysis_others(srcip, cnt_max)
+    AND cnt_max > 215
+    AND tp(i)
+    AND flow(
+      srcip,_,_,_,_,_,_,
+      _,_,_,_,_,_,_,
+      _,_,_,_,_,_,_,
+      _,_,_,_,_,_,_,
+      _,_,_,_,_,_,_,
+      _,_,_,_,_,_,_,
+      _,_,_,_,_,"Analysis",label
     )
+    OR
+    MAX_cnt_viol_analysis_TCP(srcip, cnt_max)
+    AND cnt_max > 23
+    AND tp(i)
+    AND flow(
+      srcip,_,_,_,_,_,_,
+      _,_,_,_,_,_,_,
+      _,_,_,_,_,_,_,
+      _,_,_,_,_,_,_,
+      _,_,_,_,_,_,_,
+      _,_,_,_,_,_,_,
+      _,_,_,_,_,"Analysis",label
+    )
+  )
+)
+

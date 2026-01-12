@@ -85,11 +85,12 @@ EXISTS dstip.
 IN
 MAX_cnt_viol_backdoors_others(srcip, cnt_max)
 AND cnt_max > 215
-AND flow(srcip,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,"Backdoors",label
-    )
+AND flow(
+  srcip,_,_,_,_,_,_,
+  _,_,_,_,_,_,_,
+  _,_,_,_,_,_,_,
+  _,_,_,_,_,_,_,
+  _,_,_,_,_,_,_,
+  _,_,_,_,_,_,_,
+  _,_,_,_,_,"Backdoors",label
+)

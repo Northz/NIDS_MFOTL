@@ -1,4 +1,4 @@
-LET viol_low_freq(srcip, dstip) = 
+LET violation_lowfreq(srcip, dstip) = 
 EXISTS 
   proto, state, dbytes, dloss, service, sload, dload,
   spkts, dpkts, swin, dwin, dmeansz, 
@@ -318,23 +318,23 @@ EXISTS
   )
 )
 IN
-LET MAX_cnt_viol_low_freq(srcip, cnt_max) =
+LET MAX_cnt_violation_lowfreq(srcip, cnt_max) =
 (
   cnt_max <- MAX cnt; srcip
   (
-    viol_low_freq(srcip, _) 
+    violation_lowfreq(srcip, _) 
     AND
     (
       ( # density count with window centered on current time point
         EXISTS centered_forward, centered_backwards.
         ( centered_backwards <- CNT i; srcip
-          ( ONCE[1,40] viol_low_freq(srcip, _)
+          ( ONCE[1,40] violation_lowfreq(srcip, _)
             AND tp(i)
           )
         )
         AND
         ( centered_forward <- CNT i; srcip
-          ( EVENTUALLY[0,40] ONCE[0,0] viol_low_freq(srcip, _)
+          ( EVENTUALLY[0,40] ONCE[0,0] violation_lowfreq(srcip, _)
             AND tp(i) 
           )
         )
@@ -342,13 +342,13 @@ LET MAX_cnt_viol_low_freq(srcip, cnt_max) =
       )
       OR # density count with backwards window
       ( cnt <- CNT i; srcip
-        ( EVENTUALLY[0,80] ONCE[0,0] viol_low_freq(srcip, _) 
+        ( EVENTUALLY[0,80] ONCE[0,0] violation_lowfreq(srcip, _) 
           AND tp(i)
         )
       )
       OR # density count with forward window
       ( cnt <- CNT i; srcip
-        ( ONCE[0,80] EVENTUALLY[0,0] viol_low_freq(srcip, _) 
+        ( ONCE[0,80] EVENTUALLY[0,0] violation_lowfreq(srcip, _) 
           AND tp(i)
         )
       )
@@ -356,8 +356,8 @@ LET MAX_cnt_viol_low_freq(srcip, cnt_max) =
   )
 )
 IN
-# viol_low_freq(srcip, dstip)
-# AND MAX_cnt_viol_low_freq(srcip, cnt_max)
+# violation_lowfreq(srcip, dstip)
+# AND MAX_cnt_violation_lowfreq(srcip, cnt_max)
 # AND cnt_max > 4
 # AND flow(srcip,_,dstip,_,_,_,_,
 #          _,_,_,_,_,_,_,
@@ -375,7 +375,7 @@ EXISTS dstip, cnt_max.
     tp(1087202)
     AND
     (
-      ONCE MAX_cnt_viol_low_freq(srcip,cnt_max) 
+      ONCE MAX_cnt_violation_lowfreq(srcip,cnt_max) 
       AND flow(srcip,_,_,_,_,_,_,
               _,_,_,_,_,_,_,
               _,_,_,_,_,_,_,
@@ -390,7 +390,7 @@ EXISTS dstip, cnt_max.
   )
 ) 
 
-#viol_low_freq(srcip, _)
+#violation_lowfreq(srcip, _)
 #AND flow(srcip,_,_,_,_,_,_,
 #        _,_,_,_,_,_,_,
 #        _,_,_,_,_,_,_,

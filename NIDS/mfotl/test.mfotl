@@ -2,7 +2,30 @@ LET resA(name,id) = EXISTS a,b,c. A(name,a,id,b,c)
 IN
 LET resB(name,id) = EXISTS d,e,f. B(name,d,id,e,f)
 IN
-resA(a,b) AND tp(i) OR resA(a,b) AND tp(i)
+LET trycnt(name, cnt_both,cnt_past,cnt_future) =
+(
+    (
+        cnt_past <- CNT i; name
+        ONCE[1,20] resB(name, _) AND tp(i)
+    )
+    AND
+    (
+        cnt_future <- CNT i; name
+        EVENTUALLY[0,20] ONCE[0,0] resB(name, _) AND tp(i) 
+    )
+    AND (cnt_both = cnt_past + cnt_future)
+)
+IN
+trycnt(n,b,p,f)
+
+
+
+
+
+
+
+
+
 
 #EXISTS a. resA(_,a) AND ((a > 0 AND a < 4) OR (a > 7 AND a < 10))
 #EXISTS a. resA(_,a) AND a > 0 AND a < 4 OR a > 7 AND a < 10
