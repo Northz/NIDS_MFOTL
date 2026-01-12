@@ -1,0 +1,196 @@
+LET viol_generic_UDP1(srcip, dstip) = 
+EXISTS 
+  proto, state, dbytes, dloss, service, sload, dload,
+  spkts, dpkts, swin, dwin, dmeansz, 
+  tcprtt, synack, ackdat, is_sm_ips_ports,
+  ct_state_ttl, ct_flw_http_mthd, is_ftp_login, ct_ftp_cmd,
+  ct_srv_src, ct_srv_dst, ct_dst_ltm, ct_src_ltm,
+  ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm.
+( 
+  flow(
+      srcip, _, dstip, _, proto, state, _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeansz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
+  )
+  AND proto = "udp"
+  AND state = "INT"
+  AND dbytes = 0
+  AND dloss = 0
+  AND service = "dns"
+  #AND sload > 767.0 AND sload < 1825537.0
+  AND dload = 0.0
+  AND spkts = 2
+  AND dpkts = 0
+  AND swin = 0
+  AND dwin = 0
+  AND dmeansz = 0
+  AND is_sm_ips_ports = 0
+  AND ct_state_ttl = 2
+  AND ct_flw_http_mthd = 0
+  AND is_ftp_login = 0
+  AND ct_ftp_cmd = 0
+  AND ct_srv_src > 0 AND ct_srv_src < 27
+  AND ct_srv_dst > 0 AND ct_srv_dst < 27
+  AND ct_dst_ltm > 0 AND ct_dst_ltm < 15
+  AND ct_src_ltm > 0 AND ct_src_ltm < 15
+  AND ct_src_dport_ltm > 0 AND ct_src_dport_ltm < 15
+  AND ct_dst_sport_ltm > 0 AND ct_dst_sport_ltm < 9
+  AND ct_dst_src_ltm > 0 AND ct_dst_src_ltm < 15
+)
+IN
+LET viol_generic_UDP2(srcip, dstip) = 
+EXISTS 
+  proto, state, dbytes, dloss, service, sload, dload,
+  spkts, dpkts, swin, dwin, dmeansz, 
+  tcprtt, synack, ackdat, is_sm_ips_ports,
+  ct_state_ttl, ct_flw_http_mthd, is_ftp_login, ct_ftp_cmd,
+  ct_srv_src, ct_srv_dst, ct_dst_ltm, ct_src_ltm,
+  ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm.
+( 
+  flow(
+      srcip, _, dstip, _, proto, state, _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeansz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
+  )
+  AND proto = "udp"
+  AND state = "INT"
+  AND dbytes = 0
+  AND dloss = 0
+  AND service = "dns"
+  #AND sload > 767.0 AND sload < 1825537.0
+  AND dload = 0.0
+  AND spkts = 2
+  AND dpkts = 0
+  AND swin = 0
+  AND dwin = 0
+  AND dmeansz = 0
+  AND is_sm_ips_ports = 0
+  AND ct_state_ttl = 2
+  AND ct_flw_http_mthd = 0
+  AND is_ftp_login = 0
+  AND ct_ftp_cmd = 0
+  AND ct_srv_src > 1 AND ct_srv_src < 15
+  AND ct_srv_dst > 1 AND ct_srv_dst < 15
+  AND ct_dst_ltm > 0 AND ct_dst_ltm < 8
+  AND ct_src_ltm > 0 AND ct_src_ltm < 10
+  AND ct_src_dport_ltm > 0 AND ct_src_dport_ltm < 8
+  AND ct_dst_sport_ltm > 0 AND ct_dst_sport_ltm < 5
+  AND ct_dst_src_ltm > 0 AND ct_dst_src_ltm < 8
+)
+IN
+LET MAX_cnt_viol_generic_UDP1(srcip, cnt_max) =
+EXISTS dstip.
+(
+  cnt_max <- MAX cnt; srcip, dstip
+  (
+    viol_generic_UDP1(srcip, dstip) 
+    AND
+    (
+      ( # density count with window centered on current time point
+        EXISTS centered_forward, centered_backwards.
+        ( centered_backwards <- CNT i; srcip, dstip
+          ( ONCE[1,50] viol_generic_UDP1(srcip, dstip)
+            AND tp(i)
+          )
+        )
+        AND
+        ( centered_forward <- CNT i; srcip, dstip
+          ( EVENTUALLY[0,50] ONCE[0,0] viol_generic_UDP1(srcip, dstip)
+            AND tp(i) 
+          )
+        )
+        AND (cnt = centered_forward + centered_backwards)
+      )
+      OR # density count with backwards window
+      ( cnt <- CNT i; srcip, dstip
+        ( EVENTUALLY[0,100] ONCE[0,0] viol_generic_UDP1(srcip, dstip) 
+          AND tp(i)
+        )
+      )
+      OR # density count with forward window
+      ( cnt <- CNT i; srcip, dstip
+        ( ONCE[0,100] EVENTUALLY[0,0] viol_generic_UDP1(srcip, dstip) 
+          AND tp(i)
+        )
+      )
+    )
+  )
+)
+IN
+LET MAX_cnt_viol_generic_UDP2(srcip, cnt_max) =
+EXISTS dstip.
+(
+  cnt_max <- MAX cnt; srcip, dstip
+  (
+    viol_generic_UDP2(srcip, dstip) 
+    AND
+    (
+      ( # density count with window centered on current time point
+        EXISTS centered_forward, centered_backwards.
+        ( centered_backwards <- CNT i; srcip, dstip
+          ( ONCE[1,50] viol_generic_UDP2(srcip, dstip)
+            AND tp(i)
+          )
+        )
+        AND
+        ( centered_forward <- CNT i; srcip, dstip
+          ( EVENTUALLY[0,50] ONCE[0,0] viol_generic_UDP2(srcip, dstip)
+            AND tp(i) 
+          )
+        )
+        AND (cnt = centered_forward + centered_backwards)
+      )
+      OR # density count with backwards window
+      ( cnt <- CNT i; srcip, dstip
+        ( EVENTUALLY[0,100] ONCE[0,0] viol_generic_UDP2(srcip, dstip) 
+          AND tp(i)
+        )
+      )
+      OR # density count with forward window
+      ( cnt <- CNT i; srcip, dstip
+        ( ONCE[0,100] EVENTUALLY[0,0] viol_generic_UDP2(srcip, dstip) 
+          AND tp(i)
+        )
+      )
+    )
+  )
+)
+IN
+#EXISTS cnt_max.
+(
+  MAX_cnt_viol_generic_UDP1(srcip, cnt_max)
+  AND NOT cnt_max > 150
+  AND flow(
+    srcip,_,_,_,_,_,_,
+    _,_,_,_,_,_,_,
+    _,_,_,_,_,_,_,
+    _,_,_,_,_,_,_,
+    _,_,_,_,_,_,_,
+    _,_,_,_,_,_,_,
+    _,_,_,_,_,"Generic",label
+  )
+  OR
+  MAX_cnt_viol_generic_UDP2(srcip, cnt_max)
+  AND NOT cnt_max > 118
+  AND flow(
+    srcip,_,_,_,_,_,_,
+    _,_,_,_,_,_,_,
+    _,_,_,_,_,_,_,
+    _,_,_,_,_,_,_,
+    _,_,_,_,_,_,_,
+    _,_,_,_,_,_,_,
+    _,_,_,_,_,"Generic",label
+  )
+)

@@ -1,4 +1,4 @@
-LET violation(srcip, dstip) = 
+LET viol_low_freq(srcip, dstip) = 
 EXISTS 
   proto, state, dbytes, dloss, service, sload, dload,
   spkts, dpkts, swin, dwin, dmeansz, 
@@ -296,7 +296,7 @@ EXISTS
     AND dbytes = 0
     AND dloss = 0
     AND service = "-"
-    AND sload > 718.0 AND sload < 4866,0
+    AND sload > 718.0 AND sload < 4866.0
     AND dload = 0.0
     AND spkts > 21 AND spkts < 111
     AND dpkts = 0
@@ -318,72 +318,84 @@ EXISTS
   )
 )
 IN
-LET violation_counts(srcip, cnt) =
+LET MAX_cnt_viol_low_freq(srcip, cnt_max) =
 (
-  violation(srcip,_) 
-  AND
+  cnt_max <- MAX cnt; srcip
   (
-    # density count with window centered on current time point
-    ( 
-      EXISTS centered_forward, centered_backwards.
-      ( centered_backwards <- CNT i; srcip 
-        ( ONCE[1,36] violation(srcip,_)
+    viol_low_freq(srcip, _) 
+    AND
+    (
+      ( # density count with window centered on current time point
+        EXISTS centered_forward, centered_backwards.
+        ( centered_backwards <- CNT i; srcip
+          ( ONCE[1,40] viol_low_freq(srcip, _)
+            AND tp(i)
+          )
+        )
+        AND
+        ( centered_forward <- CNT i; srcip
+          ( EVENTUALLY[0,40] ONCE[0,0] viol_low_freq(srcip, _)
+            AND tp(i) 
+          )
+        )
+        AND (cnt = centered_forward + centered_backwards)
+      )
+      OR # density count with backwards window
+      ( cnt <- CNT i; srcip
+        ( EVENTUALLY[0,80] ONCE[0,0] viol_low_freq(srcip, _) 
           AND tp(i)
         )
       )
-      AND
-      ( centered_forward <- CNT i; srcip 
-        ( EVENTUALLY[0,36] ONCE[0,0] violation(srcip,_)
-          AND tp(i) 
+      OR # density count with forward window
+      ( cnt <- CNT i; srcip
+        ( ONCE[0,80] EVENTUALLY[0,0] viol_low_freq(srcip, _) 
+          AND tp(i)
         )
       )
-      AND (cnt = centered_forward + centered_backwards)
-    )
-    OR
-    # density count with backwards window
-    ( cnt <- CNT i; srcip
-      ( EVENTUALLY[0,72] ONCE[0,0] violation(srcip,_) 
-        AND tp(i)
-      )
-    )
-    OR
-    # density count with forward window
-    ( cnt <- CNT i; srcip
-      ( ONCE[0,72] EVENTUALLY[0,0] violation(srcip,_) 
-        AND tp(i)
-      )
     )
   )
 )
 IN
-LET max_count(srcip, cnt_max) =
-(
-  cnt_max <- MAX cnt; srcip 
+# viol_low_freq(srcip, dstip)
+# AND MAX_cnt_viol_low_freq(srcip, cnt_max)
+# AND cnt_max > 4
+# AND flow(srcip,_,dstip,_,_,_,_,
+#          _,_,_,_,_,_,_,
+#          _,_,_,_,_,_,_,
+#          _,_,_,_,_,_,_,
+#          _,_,_,_,_,_,_,
+#          _,_,_,_,_,_,_,
+#          _,_,_,_,_,_,label
+#      )
+
+EXISTS dstip, cnt_max.
+( 
+  cnt <- CNT i; srcip, label
   (
-    violation_counts(srcip, cnt)
-  )
-)
-IN
-(
-  EXISTS cnt_max.
-  ( 
-    cnt <- CNT i; srcip, label
+    tp(1087202)
+    AND
     (
-      tp(1087202)
-      AND
-      (
-        ONCE max_count(srcip,cnt_max) 
-        AND flow(_,_,_,_,_,_,_,
-                _,_,_,_,_,_,_,
-                _,_,_,_,_,_,_,
-                _,_,_,_,_,_,_,
-                _,_,_,_,_,_,_,
-                _,_,_,_,_,_,_,
-                _,_,_,_,_,_,label
-            )
-        AND tp(i)
-        AND (cnt_max > 27)
-      )
+      ONCE MAX_cnt_viol_low_freq(srcip,cnt_max) 
+      AND flow(srcip,_,_,_,_,_,_,
+              _,_,_,_,_,_,_,
+              _,_,_,_,_,_,_,
+              _,_,_,_,_,_,_,
+              _,_,_,_,_,_,_,
+              _,_,_,_,_,_,_,
+              _,_,_,_,_,_,label
+          )
+      AND tp(i)
+      AND (cnt_max > 15)
     )
-  ) 
-)
+  )
+) 
+
+#viol_low_freq(srcip, _)
+#AND flow(srcip,_,_,_,_,_,_,
+#        _,_,_,_,_,_,_,
+#        _,_,_,_,_,_,_,
+#        _,_,_,_,_,_,_,
+#        _,_,_,_,_,_,_,
+#        _,_,_,_,_,_,_,
+#        _,_,_,_,_,_,1
+#    )
