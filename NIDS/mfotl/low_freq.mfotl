@@ -318,84 +318,70 @@ EXISTS
   )
 )
 IN
-LET MAX_cnt_violation_lowfreq(srcip, cnt_max) =
+LET getcount_lowfreq(srcip, cnt_both, cnt_past, cnt_future) =
 (
-  cnt_max <- MAX cnt; srcip
   (
     violation_lowfreq(srcip, _) 
     AND
     (
       ( # density count with window centered on current time point
-        EXISTS centered_forward, centered_backwards.
-        ( centered_backwards <- CNT i; srcip
+        ( cnt_past <- CNT i; srcip
           ( ONCE[1,40] violation_lowfreq(srcip, _)
             AND tp(i)
           )
         )
         AND
-        ( centered_forward <- CNT i; srcip
+        ( cnt_future <- CNT i; srcip
           ( EVENTUALLY[0,40] ONCE[0,0] violation_lowfreq(srcip, _)
             AND tp(i) 
           )
         )
-        AND (cnt = centered_forward + centered_backwards)
-      )
-      OR # density count with backwards window
-      ( cnt <- CNT i; srcip
-        ( EVENTUALLY[0,80] ONCE[0,0] violation_lowfreq(srcip, _) 
-          AND tp(i)
-        )
-      )
-      OR # density count with forward window
-      ( cnt <- CNT i; srcip
-        ( ONCE[0,80] EVENTUALLY[0,0] violation_lowfreq(srcip, _) 
-          AND tp(i)
-        )
+        AND (cnt_both = cnt_past + cnt_future)
       )
     )
   )
 )
 IN
-# violation_lowfreq(srcip, dstip)
-# AND MAX_cnt_violation_lowfreq(srcip, cnt_max)
-# AND cnt_max > 4
-# AND flow(srcip,_,dstip,_,_,_,_,
-#          _,_,_,_,_,_,_,
-#          _,_,_,_,_,_,_,
-#          _,_,_,_,_,_,_,
-#          _,_,_,_,_,_,_,
-#          _,_,_,_,_,_,_,
-#          _,_,_,_,_,_,label
-#      )
-
-EXISTS dstip, cnt_max.
+LET filter_count_lowfreq(srcip) =
+(
+  violation_lowfreq(srcip, _)
+  AND
+  (
+    EXISTS cnt_both.
+    getcount_lowfreq(srcip, cnt_both, _, _)
+    AND (cnt_both >= 15)
+  )
+  OR
+  (
+    EXISTS cnt_past.
+    getcount_lowfreq(srcip, _, cnt_past, _)
+    AND (cnt_past >= 7)
+  )
+  OR
+  (
+    EXISTS cnt_future.
+    getcount_lowfreq(srcip, _, _, cnt_future)
+    AND (cnt_future >= 7)
+  )
+)
+IN
 ( 
   cnt <- CNT i; srcip, label
   (
     tp(1087202)
     AND
     (
-      ONCE MAX_cnt_violation_lowfreq(srcip,cnt_max) 
-      AND flow(srcip,_,_,_,_,_,_,
-              _,_,_,_,_,_,_,
-              _,_,_,_,_,_,_,
-              _,_,_,_,_,_,_,
-              _,_,_,_,_,_,_,
-              _,_,_,_,_,_,_,
-              _,_,_,_,_,_,label
-          )
+      ONCE filter_count_lowfreq(srcip) 
+      AND flow(
+        srcip,_,_,_,_,_,_,
+        _,_,_,_,_,_,_,
+        _,_,_,_,_,_,_,
+        _,_,_,_,_,_,_,
+        _,_,_,_,_,_,_,
+        _,_,_,_,_,_,_,
+        _,_,_,_,_,_,label
+      )
       AND tp(i)
-      AND (cnt_max > 15)
     )
   )
 ) 
-
-#violation_lowfreq(srcip, _)
-#AND flow(srcip,_,_,_,_,_,_,
-#        _,_,_,_,_,_,_,
-#        _,_,_,_,_,_,_,
-#        _,_,_,_,_,_,_,
-#        _,_,_,_,_,_,_,
-#        _,_,_,_,_,_,_,
-#        _,_,_,_,_,_,1
-#    )
