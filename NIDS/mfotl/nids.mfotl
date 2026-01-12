@@ -1,4 +1,4 @@
-LET viol_low_freq(srcip, dstip) = 
+LET violation_lowfreq(srcip, dstip) = 
 EXISTS 
   proto, state, dbytes, dloss, service, sload, dload,
   spkts, dpkts, swin, dwin, dmeansz, 
@@ -318,7 +318,7 @@ EXISTS
   )
 )
 IN
-LET viol_analysis_others(srcip, dstip) = 
+LET violation_highfreq(srcip, dstip) = 
 EXISTS 
   proto, state, dbytes, dloss, service, sload, dload,
   spkts, dpkts, swin, dwin, dmeansz, 
@@ -326,8 +326,9 @@ EXISTS
   ct_state_ttl, ct_flw_http_mthd, is_ftp_login, ct_ftp_cmd,
   ct_srv_src, ct_srv_dst, ct_dst_ltm, ct_src_ltm,
   ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm.
-( 
-  flow(
+( # ANALYSIS OTHERS
+  ( 
+    flow(
       srcip, _, dstip, _, proto, state, _,
       _, dbytes, _, _, _, dloss, service, 
       sload, dload, spkts, dpkts, swin, dwin, _,
@@ -337,7 +338,8 @@ EXISTS
       is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
       ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
       ct_dst_sport_ltm, ct_dst_src_ltm, _, _
-  )
+    )
+
   AND NOT (proto = "tcp" OR proto = "udp")
   AND state = "INT"
   AND dbytes = 0
@@ -362,18 +364,11 @@ EXISTS
   AND ct_src_dport_ltm > 0 AND ct_src_dport_ltm < 9
   AND ct_dst_sport_ltm > 0 AND ct_dst_sport_ltm < 9
   AND ct_dst_src_ltm > 0 AND ct_dst_src_ltm < 9
-)
-IN
-LET viol_analysis_TCP(srcip, dstip) = 
-EXISTS 
-  proto, state, dbytes, dloss, service, sload, dload,
-  spkts, dpkts, swin, dwin, dmeansz, 
-  tcprtt, synack, ackdat, is_sm_ips_ports,
-  ct_state_ttl, ct_flw_http_mthd, is_ftp_login, ct_ftp_cmd,
-  ct_srv_src, ct_srv_dst, ct_dst_ltm, ct_src_ltm,
-  ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm.
-( 
-  flow(
+
+  )
+  OR # ANALYSIS TCP
+  ( 
+    flow(
       srcip, _, dstip, _, proto, state, _,
       _, dbytes, _, _, _, dloss, service, 
       sload, dload, spkts, dpkts, swin, dwin, _,
@@ -383,7 +378,8 @@ EXISTS
       is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
       ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
       ct_dst_sport_ltm, ct_dst_src_ltm, _, _
-  )
+    )
+
   AND proto = "tcp"
   AND state = "FIN"
   AND dbytes > 1065 AND dbytes < 1399
@@ -411,18 +407,11 @@ EXISTS
   AND ct_src_dport_ltm > 0 AND ct_src_dport_ltm < 5
   AND ct_dst_sport_ltm = 1
   AND ct_dst_src_ltm > 0 AND ct_dst_src_ltm < 3
-)
-IN
-LET viol_backdoors_others(srcip, dstip) = 
-EXISTS 
-  proto, state, dbytes, dloss, service, sload, dload,
-  spkts, dpkts, swin, dwin, dmeansz, 
-  tcprtt, synack, ackdat, is_sm_ips_ports,
-  ct_state_ttl, ct_flw_http_mthd, is_ftp_login, ct_ftp_cmd,
-  ct_srv_src, ct_srv_dst, ct_dst_ltm, ct_src_ltm,
-  ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm.
-( 
-  flow(
+    
+  )
+  OR # BACKDOORS OTHERS
+  ( 
+    flow(
       srcip, _, dstip, _, proto, state, _,
       _, dbytes, _, _, _, dloss, service, 
       sload, dload, spkts, dpkts, swin, dwin, _,
@@ -432,7 +421,8 @@ EXISTS
       is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
       ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
       ct_dst_sport_ltm, ct_dst_src_ltm, _, _
-  )
+    )
+
   AND NOT (proto = "tcp" OR proto = "udp")
   AND state = "INT"
   AND dbytes = 0
@@ -457,18 +447,11 @@ EXISTS
   AND ct_src_dport_ltm > 0 AND ct_src_dport_ltm < 9
   AND ct_dst_sport_ltm > 0 AND ct_dst_sport_ltm < 9
   AND ct_dst_src_ltm > 0 AND ct_dst_src_ltm < 9
-)
-IN
-LET viol_DoS_others(srcip, dstip) = 
-EXISTS 
-  proto, state, dbytes, dloss, service, sload, dload,
-  spkts, dpkts, swin, dwin, dmeansz, 
-  tcprtt, synack, ackdat, is_sm_ips_ports,
-  ct_state_ttl, ct_flw_http_mthd, is_ftp_login, ct_ftp_cmd,
-  ct_srv_src, ct_srv_dst, ct_dst_ltm, ct_src_ltm,
-  ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm.
-( 
-  flow(
+
+  )
+  OR # DOS OTHERS
+  ( 
+    flow(
       srcip, _, dstip, _, proto, state, _,
       _, dbytes, _, _, _, dloss, service, 
       sload, dload, spkts, dpkts, swin, dwin, _,
@@ -478,7 +461,8 @@ EXISTS
       is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
       ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
       ct_dst_sport_ltm, ct_dst_src_ltm, _, _
-  )
+    )
+
   AND NOT (proto = "tcp" OR proto = "udp")
   AND state = "INT"
   AND dbytes = 0
@@ -503,18 +487,11 @@ EXISTS
   AND ct_src_dport_ltm > 0 AND ct_src_dport_ltm < 9
   AND ct_dst_sport_ltm > 0 AND ct_dst_sport_ltm < 9
   AND ct_dst_src_ltm > 0 AND ct_dst_src_ltm < 9
-)
-IN
-LET viol_exploits_others(srcip, dstip) = 
-EXISTS 
-  proto, state, dbytes, dloss, service, sload, dload,
-  spkts, dpkts, swin, dwin, dmeansz, 
-  tcprtt, synack, ackdat, is_sm_ips_ports,
-  ct_state_ttl, ct_flw_http_mthd, is_ftp_login, ct_ftp_cmd,
-  ct_srv_src, ct_srv_dst, ct_dst_ltm, ct_src_ltm,
-  ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm.
-( 
-  flow(
+
+  )
+  OR # EXPLOITS PTHERS
+  ( 
+    flow(
       srcip, _, dstip, _, proto, state, _,
       _, dbytes, _, _, _, dloss, service, 
       sload, dload, spkts, dpkts, swin, dwin, _,
@@ -524,7 +501,8 @@ EXISTS
       is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
       ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
       ct_dst_sport_ltm, ct_dst_src_ltm, _, _
-  )
+    )
+
   AND NOT (proto = "tcp" OR proto = "udp")
   AND state = "INT"
   AND dbytes = 0
@@ -549,18 +527,11 @@ EXISTS
   AND ct_src_dport_ltm > 0 AND ct_src_dport_ltm < 9
   AND ct_dst_sport_ltm > 0 AND ct_dst_sport_ltm < 9
   AND ct_dst_src_ltm > 0 AND ct_dst_src_ltm < 9
-)
-IN
-LET viol_fuzzers_others(srcip, dstip) = 
-EXISTS 
-  proto, state, dbytes, dloss, service, sload, dload,
-  spkts, dpkts, swin, dwin, dmeansz, 
-  tcprtt, synack, ackdat, is_sm_ips_ports,
-  ct_state_ttl, ct_flw_http_mthd, is_ftp_login, ct_ftp_cmd,
-  ct_srv_src, ct_srv_dst, ct_dst_ltm, ct_src_ltm,
-  ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm.
-( 
-  flow(
+
+  )
+  OR # FUZZERS OTHERS
+  ( 
+    flow(
       srcip, _, dstip, _, proto, state, _,
       _, dbytes, _, _, _, dloss, service, 
       sload, dload, spkts, dpkts, swin, dwin, _,
@@ -570,7 +541,8 @@ EXISTS
       is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
       ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
       ct_dst_sport_ltm, ct_dst_src_ltm, _, _
-  )
+    )
+
   AND NOT (proto = "tcp" OR proto = "udp")
   AND state = "INT"
   AND dbytes = 0
@@ -595,18 +567,11 @@ EXISTS
   AND ct_src_dport_ltm > 0 AND ct_src_dport_ltm < 9
   AND ct_dst_sport_ltm > 0 AND ct_dst_sport_ltm < 9
   AND ct_dst_src_ltm > 0 AND ct_dst_src_ltm < 9
-)
-IN
-LET viol_generic_UDP1(srcip, dstip) = 
-EXISTS 
-  proto, state, dbytes, dloss, service, sload, dload,
-  spkts, dpkts, swin, dwin, dmeansz, 
-  tcprtt, synack, ackdat, is_sm_ips_ports,
-  ct_state_ttl, ct_flw_http_mthd, is_ftp_login, ct_ftp_cmd,
-  ct_srv_src, ct_srv_dst, ct_dst_ltm, ct_src_ltm,
-  ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm.
-( 
-  flow(
+
+  )
+  OR # UDP1
+  ( 
+    flow(
       srcip, _, dstip, _, proto, state, _,
       _, dbytes, _, _, _, dloss, service, 
       sload, dload, spkts, dpkts, swin, dwin, _,
@@ -616,7 +581,8 @@ EXISTS
       is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
       ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
       ct_dst_sport_ltm, ct_dst_src_ltm, _, _
-  )
+    )
+
   AND proto = "udp"
   AND state = "INT"
   AND dbytes = 0
@@ -641,18 +607,11 @@ EXISTS
   AND ct_src_dport_ltm > 0 AND ct_src_dport_ltm < 15
   AND ct_dst_sport_ltm > 0 AND ct_dst_sport_ltm < 9
   AND ct_dst_src_ltm > 0 AND ct_dst_src_ltm < 15
-)
-IN
-LET viol_generic_UDP2(srcip, dstip) = 
-EXISTS 
-  proto, state, dbytes, dloss, service, sload, dload,
-  spkts, dpkts, swin, dwin, dmeansz, 
-  tcprtt, synack, ackdat, is_sm_ips_ports,
-  ct_state_ttl, ct_flw_http_mthd, is_ftp_login, ct_ftp_cmd,
-  ct_srv_src, ct_srv_dst, ct_dst_ltm, ct_src_ltm,
-  ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm.
-( 
-  flow(
+
+  )
+  OR # UDP2
+  ( 
+    flow(
       srcip, _, dstip, _, proto, state, _,
       _, dbytes, _, _, _, dloss, service, 
       sload, dload, spkts, dpkts, swin, dwin, _,
@@ -662,7 +621,8 @@ EXISTS
       is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
       ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
       ct_dst_sport_ltm, ct_dst_src_ltm, _, _
-  )
+    )
+
   AND proto = "udp"
   AND state = "INT"
   AND dbytes = 0
@@ -687,441 +647,134 @@ EXISTS
   AND ct_src_dport_ltm > 0 AND ct_src_dport_ltm < 8
   AND ct_dst_sport_ltm > 0 AND ct_dst_sport_ltm < 5
   AND ct_dst_src_ltm > 0 AND ct_dst_src_ltm < 8
+
+  )
 )
 IN
-LET MAX_cnt_viol_low_freq(srcip, cnt_max) =
+LET getcount_lowfreq(srcip, cnt_both, cnt_past, cnt_future) =
 (
-  cnt_max <- MAX cnt; srcip
   (
-    viol_low_freq(srcip, _) 
+    violation_lowfreq(srcip, _) 
     AND
     (
       ( # density count with window centered on current time point
-        EXISTS centered_forward, centered_backwards.
-        ( centered_backwards <- CNT i; srcip
-          ( ONCE[1,40] viol_low_freq(srcip, _)
+        ( cnt_past <- CNT i; srcip
+          ( ONCE[1,40] violation_lowfreq(srcip, _)
             AND tp(i)
           )
         )
         AND
-        ( centered_forward <- CNT i; srcip
-          ( EVENTUALLY[0,40] ONCE[0,0] viol_low_freq(srcip, _)
+        ( cnt_future <- CNT i; srcip
+          ( EVENTUALLY[0,40] ONCE[0,0] violation_lowfreq(srcip, _)
             AND tp(i) 
           )
         )
-        AND (cnt = centered_forward + centered_backwards)
-      )
-      OR # density count with backwards window
-      ( cnt <- CNT i; srcip
-        ( EVENTUALLY[0,80] ONCE[0,0] viol_low_freq(srcip, _) 
-          AND tp(i)
-        )
-      )
-      OR # density count with forward window
-      ( cnt <- CNT i; srcip
-        ( ONCE[0,80] EVENTUALLY[0,0] viol_low_freq(srcip, _) 
-          AND tp(i)
-        )
+        AND (cnt_both = cnt_past + cnt_future)
       )
     )
   )
 )
 IN
-LET MAX_cnt_viol_analysis_others(srcip, cnt_max) =
-EXISTS dstip.
+LET filter_count_lowfreq(srcip) =
 (
-  cnt_max <- MAX cnt; srcip, dstip
+  violation_lowfreq(srcip, _)
+  AND
   (
-    viol_analysis_others(srcip, dstip) 
+    EXISTS cnt_both.
+    getcount_lowfreq(srcip, cnt_both, _, _)
+    AND (cnt_both >= 15)
+  )
+  OR
+  (
+    EXISTS cnt_past.
+    getcount_lowfreq(srcip, _, cnt_past, _)
+    AND (cnt_past >= 7)
+  )
+  OR
+  (
+    EXISTS cnt_future.
+    getcount_lowfreq(srcip, _, _, cnt_future)
+    AND (cnt_future >= 7)
+  )
+)
+IN
+LET getcount_highfreq(srcip, cnt_both, cnt_past, cnt_future) =
+(
+  (
+    violation_highfreq(srcip, _) 
     AND
     (
       ( # density count with window centered on current time point
-        EXISTS centered_forward, centered_backwards.
-        ( centered_backwards <- CNT i; srcip, dstip
-          ( ONCE[1,35] viol_analysis_others(srcip, dstip)
+        ( cnt_past <- CNT i; srcip
+          ( ONCE[1,40] violation_highfreq(srcip, _)
             AND tp(i)
           )
         )
         AND
-        ( centered_forward <- CNT i; srcip, dstip
-          ( EVENTUALLY[0,35] ONCE[0,0] viol_analysis_others(srcip, dstip)
+        ( cnt_future <- CNT i; srcip
+          ( EVENTUALLY[0,40] ONCE[0,0] violation_highfreq(srcip, _)
             AND tp(i) 
           )
         )
-        AND (cnt = centered_forward + centered_backwards)
-      )
-      OR # density count with backwards window
-      ( cnt <- CNT i; srcip, dstip
-        ( EVENTUALLY[0,70] ONCE[0,0] viol_analysis_others(srcip, dstip) 
-          AND tp(i)
-        )
-      )
-      OR # density count with forward window
-      ( cnt <- CNT i; srcip, dstip
-        ( ONCE[0,70] EVENTUALLY[0,0] viol_analysis_others(srcip, dstip) 
-          AND tp(i)
-        )
+        AND (cnt_both = cnt_past + cnt_future)
       )
     )
   )
 )
 IN
-LET MAX_cnt_viol_analysis_TCP(srcip, cnt_max) =
-EXISTS dstip.
+LET filter_count_highfreq(srcip) =
 (
-  cnt_max <- MAX cnt; srcip, dstip
+  violation_highfreq(srcip, _)
+  AND
   (
-    viol_analysis_TCP(srcip, dstip) 
-    AND
-    (
-      ( # density count with window centered on current time point
-        EXISTS centered_forward, centered_backwards.
-        ( centered_backwards <- CNT i; srcip, dstip
-          ( ONCE[1,35] viol_analysis_TCP(srcip, dstip)
-            AND tp(i)
-          )
-        )
-        AND
-        ( centered_forward <- CNT i; srcip, dstip
-          ( EVENTUALLY[0,35] ONCE[0,0] viol_analysis_TCP(srcip, dstip)
-            AND tp(i) 
-          )
-        )
-        AND (cnt = centered_forward + centered_backwards)
-      )
-      OR # density count with backwards window
-      ( cnt <- CNT i; srcip, dstip
-        ( EVENTUALLY[0,70] ONCE[0,0] viol_analysis_TCP(srcip, dstip) 
-          AND tp(i)
-        )
-      )
-      OR # density count with forward window
-      ( cnt <- CNT i; srcip, dstip
-        ( ONCE[0,70] EVENTUALLY[0,0] viol_analysis_TCP(srcip, dstip) 
-          AND tp(i)
-        )
-      )
-    )
+    EXISTS cnt_both.
+    getcount_highfreq(srcip, cnt_both, _, _)
+    AND (cnt_both >= 200)
+  )
+  OR
+  (
+    EXISTS cnt_past.
+    getcount_highfreq(srcip, _, cnt_past, _)
+    AND (cnt_past >= 100)
+  )
+  OR
+  (
+    EXISTS cnt_future.
+    getcount_highfreq(srcip, _, _, cnt_future)
+    AND (cnt_future >= 100)
   )
 )
 IN
-LET MAX_cnt_viol_backdoors_others(srcip, cnt_max) =
-EXISTS dstip.
-(
-  cnt_max <- MAX cnt; srcip, dstip
-  (
-    viol_backdoors_others(srcip, dstip) 
-    AND
-    (
-      ( # density count with window centered on current time point
-        EXISTS centered_forward, centered_backwards.
-        ( centered_backwards <- CNT i; srcip, dstip
-          ( ONCE[1,35] viol_backdoors_others(srcip, dstip)
-            AND tp(i)
-          )
-        )
-        AND
-        ( centered_forward <- CNT i; srcip, dstip
-          ( EVENTUALLY[0,35] ONCE[0,0] viol_backdoors_others(srcip, dstip)
-            AND tp(i) 
-          )
-        )
-        AND (cnt = centered_forward + centered_backwards)
-      )
-      OR # density count with backwards window
-      ( cnt <- CNT i; srcip, dstip
-        ( EVENTUALLY[0,70] ONCE[0,0] viol_backdoors_others(srcip, dstip) 
-          AND tp(i)
-        )
-      )
-      OR # density count with forward window
-      ( cnt <- CNT i; srcip, dstip
-        ( ONCE[0,70] EVENTUALLY[0,0] viol_backdoors_others(srcip, dstip) 
-          AND tp(i)
-        )
-      )
-    )
-  )
-)
-IN
-LET MAX_cnt_viol_DoS_others(srcip, cnt_max) =
-EXISTS dstip.
-(
-  cnt_max <- MAX cnt; srcip, dstip
-  (
-    viol_DoS_others(srcip, dstip) 
-    AND
-    (
-      ( # density count with window centered on current time point
-        EXISTS centered_forward, centered_backwards.
-        ( centered_backwards <- CNT i; srcip, dstip
-          ( ONCE[1,35] viol_DoS_others(srcip, dstip)
-            AND tp(i)
-          )
-        )
-        AND
-        ( centered_forward <- CNT i; srcip, dstip
-          ( EVENTUALLY[0,35] ONCE[0,0] viol_DoS_others(srcip, dstip)
-            AND tp(i) 
-          )
-        )
-        AND (cnt = centered_forward + centered_backwards)
-      )
-      OR # density count with backwards window
-      ( cnt <- CNT i; srcip, dstip
-        ( EVENTUALLY[0,70] ONCE[0,0] viol_DoS_others(srcip, dstip) 
-          AND tp(i)
-        )
-      )
-      OR # density count with forward window
-      ( cnt <- CNT i; srcip, dstip
-        ( ONCE[0,70] EVENTUALLY[0,0] viol_DoS_others(srcip, dstip) 
-          AND tp(i)
-        )
-      )
-    )
-  )
-)
-IN
-LET MAX_cnt_viol_exploits_others(srcip, cnt_max) =
-EXISTS dstip.
-(
-  cnt_max <- MAX cnt; srcip, dstip
-  (
-    viol_exploits_others(srcip, dstip) 
-    AND
-    (
-      ( # density count with window centered on current time point
-        EXISTS centered_forward, centered_backwards.
-        ( centered_backwards <- CNT i; srcip, dstip
-          ( ONCE[1,35] viol_exploits_others(srcip, dstip)
-            AND tp(i)
-          )
-        )
-        AND
-        ( centered_forward <- CNT i; srcip, dstip
-          ( EVENTUALLY[0,35] ONCE[0,0] viol_exploits_others(srcip, dstip)
-            AND tp(i) 
-          )
-        )
-        AND (cnt = centered_forward + centered_backwards)
-      )
-      OR # density count with backwards window
-      ( cnt <- CNT i; srcip, dstip
-        ( EVENTUALLY[0,70] ONCE[0,0] viol_exploits_others(srcip, dstip) 
-          AND tp(i)
-        )
-      )
-      OR # density count with forward window
-      ( cnt <- CNT i; srcip, dstip
-        ( ONCE[0,70] EVENTUALLY[0,0] viol_exploits_others(srcip, dstip) 
-          AND tp(i)
-        )
-      )
-    )
-  )
-)
-IN
-LET MAX_cnt_viol_fuzzers_others(srcip, cnt_max) =
-EXISTS dstip.
-(
-  cnt_max <- MAX cnt; srcip, dstip
-  (
-    viol_fuzzers_others(srcip, dstip) 
-    AND
-    (
-      ( # density count with window centered on current time point
-        EXISTS centered_forward, centered_backwards.
-        ( centered_backwards <- CNT i; srcip, dstip
-          ( ONCE[1,35] viol_fuzzers_others(srcip, dstip)
-            AND tp(i)
-          )
-        )
-        AND
-        ( centered_forward <- CNT i; srcip, dstip
-          ( EVENTUALLY[0,35] ONCE[0,0] viol_fuzzers_others(srcip, dstip)
-            AND tp(i) 
-          )
-        )
-        AND (cnt = centered_forward + centered_backwards)
-      )
-      OR # density count with backwards window
-      ( cnt <- CNT i; srcip, dstip
-        ( EVENTUALLY[0,70] ONCE[0,0] viol_fuzzers_others(srcip, dstip) 
-          AND tp(i)
-        )
-      )
-      OR # density count with forward window
-      ( cnt <- CNT i; srcip, dstip
-        ( ONCE[0,70] EVENTUALLY[0,0] viol_fuzzers_others(srcip, dstip) 
-          AND tp(i)
-        )
-      )
-    )
-  )
-)
-IN
-LET MAX_cnt_viol_generic_UDP1(srcip, cnt_max) =
-EXISTS dstip.
-(
-  cnt_max <- MAX cnt; srcip, dstip
-  (
-    viol_generic_UDP1(srcip, dstip) 
-    AND
-    (
-      ( # density count with window centered on current time point
-        EXISTS centered_forward, centered_backwards.
-        ( centered_backwards <- CNT i; srcip, dstip
-          ( ONCE[1,50] viol_generic_UDP1(srcip, dstip)
-            AND tp(i)
-          )
-        )
-        AND
-        ( centered_forward <- CNT i; srcip, dstip
-          ( EVENTUALLY[0,50] ONCE[0,0] viol_generic_UDP1(srcip, dstip)
-            AND tp(i) 
-          )
-        )
-        AND (cnt = centered_forward + centered_backwards)
-      )
-      OR # density count with backwards window
-      ( cnt <- CNT i; srcip, dstip
-        ( EVENTUALLY[0,100] ONCE[0,0] viol_generic_UDP1(srcip, dstip) 
-          AND tp(i)
-        )
-      )
-      OR # density count with forward window
-      ( cnt <- CNT i; srcip, dstip
-        ( ONCE[0,100] EVENTUALLY[0,0] viol_generic_UDP1(srcip, dstip) 
-          AND tp(i)
-        )
-      )
-    )
-  )
-)
-IN
-LET MAX_cnt_viol_generic_UDP2(srcip, cnt_max) =
-EXISTS dstip.
-(
-  cnt_max <- MAX cnt; srcip, dstip
-  (
-    viol_generic_UDP2(srcip, dstip) 
-    AND
-    (
-      ( # density count with window centered on current time point
-        EXISTS centered_forward, centered_backwards.
-        ( centered_backwards <- CNT i; srcip, dstip
-          ( ONCE[1,50] viol_generic_UDP2(srcip, dstip)
-            AND tp(i)
-          )
-        )
-        AND
-        ( centered_forward <- CNT i; srcip, dstip
-          ( EVENTUALLY[0,50] ONCE[0,0] viol_generic_UDP2(srcip, dstip)
-            AND tp(i) 
-          )
-        )
-        AND (cnt = centered_forward + centered_backwards)
-      )
-      OR # density count with backwards window
-      ( cnt <- CNT i; srcip, dstip
-        ( EVENTUALLY[0,100] ONCE[0,0] viol_generic_UDP2(srcip, dstip) 
-          AND tp(i)
-        )
-      )
-      OR # density count with forward window
-      ( cnt <- CNT i; srcip, dstip
-        ( ONCE[0,100] EVENTUALLY[0,0] viol_generic_UDP2(srcip, dstip) 
-          AND tp(i)
-        )
-      )
-    )
-  )
-)
-IN
-cnt <- CNT i; srcip, label
-(
-  (
-    tp(1087202)
-    AND
-    (
-      EXISTS cnt_max.
-      ONCE MAX_cnt_viol_low_freq(srcip, cnt_max)
-      AND flow(
-        srcip,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,label
-      )
-      AND cnt_max > 15
-      AND tp(i)
-    )
-    OR
-    (
-      EXISTS cnt_max.
-      ONCE MAX_cnt_viol_analysis_others(srcip, cnt_max)
-      AND flow(
-        srcip,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,label
-      )
-      AND cnt_max > 215
-      AND tp(i)
-    )
-    OR
-    (
-      EXISTS cnt_max.
-      ONCE MAX_cnt_viol_analysis_TCP(srcip, cnt_max)
-      AND flow(
-        srcip,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,label
-      )
-      AND cnt_max > 23
-      AND tp(i)
-    )
-    OR
-    (
-      EXISTS cnt_max.
-      ONCE MAX_cnt_viol_backdoors_others(srcip, cnt_max)
-      AND flow(
-        srcip,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,label
-      )
-      AND cnt_max > 215
-      AND tp(i)
-    )
-    OR
-    (
-      EXISTS cnt_max.
-      ONCE MAX_cnt_viol_DoS_others(srcip, cnt_max)
-      AND flow(
-        srcip,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,label
-      )
-      AND cnt_max > 215
-      AND tp(i)
-    )
-  )
-)
+( filter_count_lowfreq(srcip) OR filter_count_highfreq(srcip) )
+#AND flow(
+#  srcip,_,_,_,_,_,_,
+#  _,_,_,_,_,_,_,
+#  _,_,_,_,_,_,_,
+#  _,_,_,_,_,_,_,
+#  _,_,_,_,_,_,_,
+#  _,_,_,_,_,_,_,
+#  _,_,_,_,_,_,label
+#)
+#( 
+#  cnt <- CNT i; srcip, label
+#  (
+#    tp(1087202)
+#    #tp(1452843)
+#    AND
+#    (
+#      (
+#        ONCE ( filter_count_lowfreq(srcip) OR filter_count_highfreq(srcip) )
+#        AND flow(
+#          srcip,_,_,_,_,_,_,
+#          _,_,_,_,_,_,_,
+#          _,_,_,_,_,_,_,
+#          _,_,_,_,_,_,_,
+#          _,_,_,_,_,_,_,
+#          _,_,_,_,_,_,_,
+#          _,_,_,_,_,_,label
+#        )
+#        AND tp(i)
+#      )
+#    )
+#  )
+#)
