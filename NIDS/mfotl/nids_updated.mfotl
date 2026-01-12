@@ -1,0 +1,771 @@
+LET violation_lowfreq(srcip, dstip) = 
+EXISTS 
+  proto, state, dbytes, dloss, service, sload, dload,
+  spkts, dpkts, swin, dwin, dmeansz, 
+  tcprtt, synack, ackdat, is_sm_ips_ports,
+  ct_state_ttl, ct_flw_http_mthd, is_ftp_login, ct_ftp_cmd,
+  ct_srv_src, ct_srv_dst, ct_dst_ltm, ct_src_ltm,
+  ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm.
+(
+  ( 
+    flow(
+      srcip, _, dstip, _, proto, state, _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeansz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
+    )
+    AND proto = "tcp"
+    AND state = "CON"
+    AND dbytes > 85 AND dbytes < 9554163
+    AND dloss >= 0 AND dloss < 3546
+    AND (service = "-" OR service = "ftp" OR service = "http" OR service = "pop3" OR service = "smtp")
+    AND sload > 767.0 AND sload < 1825537.0
+    AND dload > 621.0 AND dload < 1347057.0
+    AND spkts > 1 AND spkts < 10201
+    AND dpkts > 1 AND dpkts < 7091
+    AND NOT swin = 0
+    AND NOT dwin = 0
+    AND dmeansz > 42 AND dmeansz < 1349
+    AND tcprtt < 0.30 # 0.51
+    AND synack < 0.14
+    AND ackdat < 0.17 # 0.44
+    AND is_sm_ips_ports = 0
+    AND ct_state_ttl >= 3
+    AND ct_flw_http_mthd >= 0
+    AND is_ftp_login = 0
+    AND ct_ftp_cmd >= 0
+    AND ct_srv_src > 0 
+    AND ct_srv_dst > 0 
+    AND ct_dst_ltm > 0 
+    AND ct_src_ltm > 0 
+    AND ct_src_dport_ltm >= 1
+    AND ct_dst_sport_ltm >= 1
+    AND ct_dst_src_ltm > 0
+  )
+  OR
+  ( 
+    flow(
+      srcip, _, dstip, _, proto, state, _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeansz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
+    )
+    AND proto = "tcp"
+    AND state = "FIN"
+    AND dbytes > 85 AND dbytes < 14655418
+    AND dloss >= 0 AND dloss < 5484
+    #AND service
+    AND sload > 90.0 AND sload < 2017036.0
+    AND dload > 51.0 AND dload < 2317181.0
+    AND spkts > 1 AND spkts < 8670
+    AND dpkts > 1 AND dpkts < 10971
+    AND NOT swin = 0
+    #AND NOT dwin = 0
+    AND dmeansz > 42 AND dmeansz < 1452
+    AND tcprtt < 0.75
+    AND synack < 0.60
+    AND ackdat < 0.40
+    AND is_sm_ips_ports = 0
+    AND ct_state_ttl >= 1
+    AND ct_flw_http_mthd >= 0
+    AND is_ftp_login >= 0 
+    AND ct_ftp_cmd >= 0 
+    AND ct_srv_src > 0
+    AND ct_srv_dst > 0
+    AND ct_dst_ltm > 0
+    AND ct_src_ltm > 0
+    AND ct_src_dport_ltm > 0
+    AND ct_dst_sport_ltm > 0
+    AND ct_dst_src_ltm > 0
+  )
+  OR
+  ( 
+    flow(
+      srcip, _, dstip, _, proto, state, _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeansz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
+    )
+    AND proto = "udp"
+    AND state = "CON"
+    AND dbytes > 77 AND dbytes < 121107
+    AND dloss = 0
+    AND (service = "-" OR service = "dns" OR service = "radius" OR service = "dhcp")
+    AND sload > 17.0 AND sload < 745517.0
+    AND dload > 1012.0 AND dload < 234879.0
+    AND spkts > 1 AND spkts < 203
+    AND dpkts > 1 AND dpkts < 797
+    AND swin = 0
+    AND dwin = 0
+    AND dmeansz > 38 AND dmeansz < 798
+    AND is_sm_ips_ports = 0
+    AND ct_state_ttl >= 3
+    AND ct_flw_http_mthd >= 0
+    AND is_ftp_login >= 0
+    AND ct_ftp_cmd >= 0
+    AND ct_srv_src > 0 
+    AND ct_srv_dst > 0 
+    AND ct_dst_ltm > 0 
+    AND ct_src_ltm > 0 
+    AND ct_src_dport_ltm > 0 
+    AND ct_dst_sport_ltm > 0 
+    AND ct_dst_src_ltm > 0 
+  )
+  OR
+  ( 
+    flow(
+      srcip, _, dstip, _, proto, state, _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeansz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
+    )
+    AND proto = "udp"
+    AND state = "INT"
+    AND dbytes = 0
+    AND dloss = 0
+    AND (service = "-" OR service = "dhcp" OR service = "dns" OR service = "snmp" OR service = "radius")
+    # AND sload < 5268000257.0
+    AND dload = 0.0
+    AND spkts > 0 AND spkts < 293
+    AND dpkts = 0
+    AND swin = 0
+    AND dwin = 0
+    AND dmeansz = 0
+    AND is_sm_ips_ports = 0
+    AND ct_state_ttl >= 0 
+    AND ct_flw_http_mthd >= 0
+    AND is_ftp_login = 0
+    AND ct_ftp_cmd >= 0
+    AND ct_srv_src > 0 
+    AND ct_srv_dst > 0 
+    AND ct_dst_ltm > 0 
+    AND ct_src_ltm > 0 
+    AND ct_src_dport_ltm > 0 
+    AND ct_dst_sport_ltm > 0 
+    AND ct_dst_src_ltm > 0 
+  )
+  OR
+  ( 
+    flow(
+      srcip, _, dstip, _, proto, state, _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeansz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
+    )
+    AND proto = "udp"
+    AND state = "REQ"
+    AND dbytes = 0
+    AND dloss = 0
+    AND (service = "-" OR service = "dns")
+    AND sload > 933.0 # AND sload < 1636000001.0
+    AND dload = 0.0
+    AND spkts > 1 AND spkts < 193
+    AND dpkts = 0
+    AND swin = 0
+    AND dwin = 0
+    AND dmeansz = 0
+    AND is_sm_ips_ports = 0
+    AND ct_state_ttl >= 6
+    AND ct_flw_http_mthd >= 0
+    AND is_ftp_login = 0
+    AND ct_ftp_cmd >= 0
+    AND ct_srv_src > 0 
+    AND ct_srv_dst > 0 
+    AND ct_dst_ltm > 0 
+    AND ct_src_ltm > 0 
+    AND ct_src_dport_ltm > 0 
+    AND ct_dst_sport_ltm > 0 
+    AND ct_dst_src_ltm > 0 
+  )
+  OR
+  ( 
+    flow(
+      srcip, _, dstip, _, proto, state, _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeansz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
+    )
+    AND NOT (proto = "tcp" OR proto = "udp")
+    AND state = "CON"
+    AND dbytes > 81 AND dbytes < 1653
+    AND dloss = 0
+    AND service = "-"
+    AND sload > 4653.0 AND sload < 90607.0
+    AND dload > 579.0 AND dload < 8229.0
+    AND (spkts = 2 OR spkts = 4 OR spkts = 250)
+    AND (dpkts = 2 OR dpkts = 24)
+    AND swin = 0
+    AND dwin = 0
+    AND dmeansz > 40 AND dmeansz < 249
+    AND is_sm_ips_ports = 0
+    AND ct_state_ttl >= 3
+    AND ct_flw_http_mthd >= 0
+    AND is_ftp_login = 0
+    AND ct_ftp_cmd >= 0
+    AND ct_srv_src >= 2 
+    AND ct_srv_dst >= 2 
+    AND ct_dst_ltm >= 2 
+    AND ct_src_ltm >= 2 
+    AND ct_src_dport_ltm >= 2
+    AND ct_dst_sport_ltm >= 2
+    AND ct_dst_src_ltm >= 2
+  )
+  OR
+  ( 
+    flow(
+      srcip, _, dstip, _, proto, state, _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeansz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
+    )
+    AND NOT (proto = "tcp" OR proto = "udp")
+    AND state = "INT"
+    AND dbytes = 0
+    AND dloss = 0
+    AND service = "-"
+    ##AND sload >= 0
+    AND dload = 0.0
+    AND spkts > 0 AND spkts < 125 
+    AND dpkts = 0
+    AND swin = 0
+    AND dwin = 0
+    AND dmeansz = 0
+    AND is_sm_ips_ports = 0
+    AND ct_state_ttl >= 2
+    AND ct_flw_http_mthd >= 0
+    AND is_ftp_login = 0
+    AND ct_ftp_cmd >= 0
+    AND ct_srv_src > 1 
+    AND ct_srv_dst > 1 
+    AND ct_dst_ltm > 0 
+    AND ct_src_ltm > 0 
+    AND ct_src_dport_ltm > 0 
+    AND ct_dst_sport_ltm > 0 
+    AND ct_dst_src_ltm > 0 
+  )
+  OR
+  ( 
+    flow(
+      srcip, _, dstip, _, proto, state, _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeansz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
+    )
+    AND NOT (proto = "tcp" OR proto = "udp")
+    AND state = "REQ"
+    AND dbytes = 0
+    AND dloss = 0
+    AND service = "-"
+    AND sload > 718.0 AND sload < 4866.0
+    AND dload = 0.0
+    AND spkts > 21 AND spkts < 111
+    AND dpkts = 0
+    AND swin = 0
+    AND dwin = 0
+    AND dmeansz = 0
+    AND is_sm_ips_ports = 0
+    AND ct_state_ttl >= 6
+    AND ct_flw_http_mthd >= 0
+    AND is_ftp_login = 0
+    AND ct_ftp_cmd >= 0
+    AND ct_srv_src > 4 
+    AND ct_srv_dst > 1 
+    AND ct_dst_ltm >= 2 
+    AND ct_src_ltm > 1 
+    AND ct_src_dport_ltm >= 2
+    AND ct_dst_sport_ltm >= 2
+    AND ct_dst_src_ltm >= 2
+  )
+)
+IN
+LET violation_highfreq(srcip, dstip) = 
+EXISTS 
+  proto, state, dbytes, dloss, service, sload, dload,
+  spkts, dpkts, swin, dwin, dmeansz, 
+  tcprtt, synack, ackdat, is_sm_ips_ports,
+  ct_state_ttl, ct_flw_http_mthd, is_ftp_login, ct_ftp_cmd,
+  ct_srv_src, ct_srv_dst, ct_dst_ltm, ct_src_ltm,
+  ct_src_dport_ltm, ct_dst_sport_ltm, ct_dst_src_ltm.
+( # ANALYSIS OTHERS
+  ( 
+    flow(
+      srcip, _, dstip, _, proto, state, _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeansz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
+    )
+
+  AND NOT (proto = "tcp" OR proto = "udp")
+  AND state = "INT"
+  AND dbytes = 0
+  AND dloss = 0
+  AND service = "-"
+  #AND sload > 767.0 AND sload < 1825537.0
+  AND dload = 0.0
+  AND (spkts = 2 OR spkts = 4)
+  AND dpkts = 0
+  AND swin = 0
+  AND dwin = 0
+  AND dmeansz = 0
+  AND is_sm_ips_ports = 0
+  AND ct_state_ttl >= 2
+  AND ct_flw_http_mthd >= 0
+  AND is_ftp_login = 0
+  AND ct_ftp_cmd >= 0
+  AND ct_srv_src > 1 
+  AND ct_srv_dst > 1 
+  AND ct_dst_ltm > 0 
+  AND ct_src_ltm > 0 
+  AND ct_src_dport_ltm > 0 
+  AND ct_dst_sport_ltm > 0 
+  AND ct_dst_src_ltm > 0 
+
+  )
+  OR # ANALYSIS TCP
+  ( 
+    flow(
+      srcip, _, dstip, _, proto, state, _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeansz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
+    )
+
+  AND proto = "tcp"
+  AND state = "FIN"
+  AND dbytes > 1065 AND dbytes < 1399
+  AND dloss = 2
+  AND service = "-"
+  AND sload > 4300.0 AND sload < 17480.0
+  AND dload > 5597.0 AND dload < 22241.0
+  AND (spkts = 10 OR spkts = 12)
+  AND (dpkts = 8 OR dpkts = 10)
+  AND NOT swin = 0
+  AND NOT dwin = 0
+  AND dmeansz > 115 AND dmeansz < 172
+  AND tcprtt < 0.27
+  AND synack < 0.15
+  AND ackdat < 0.14
+  AND is_sm_ips_ports = 0
+  AND ct_state_ttl >= 1
+  AND ct_flw_http_mthd >= 0
+  AND is_ftp_login = 0
+  AND ct_ftp_cmd >= 0
+  AND ct_srv_src > 2 
+  AND ct_srv_dst > 2 
+  AND ct_dst_ltm > 0 
+  AND ct_src_ltm > 0 
+  AND ct_src_dport_ltm > 0 
+  AND ct_dst_sport_ltm >= 1
+  AND ct_dst_src_ltm > 0
+    
+  )
+  OR # BACKDOORS OTHERS
+  ( 
+    flow(
+      srcip, _, dstip, _, proto, state, _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeansz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
+    )
+
+  AND NOT (proto = "tcp" OR proto = "udp")
+  AND state = "INT"
+  AND dbytes = 0
+  AND dloss = 0
+  AND service = "-"
+  #AND sload > 767.0 AND sload < 1825537.0
+  AND dload = 0.0
+  AND (spkts = 2 OR spkts = 4)
+  AND dpkts = 0
+  AND swin = 0
+  AND dwin = 0
+  AND dmeansz = 0
+  AND is_sm_ips_ports = 0
+  AND ct_state_ttl >= 2
+  AND ct_flw_http_mthd >= 0
+  AND is_ftp_login = 0
+  AND ct_ftp_cmd >= 0
+  AND ct_srv_src > 1 
+  AND ct_srv_dst > 1 
+  AND ct_dst_ltm > 0 
+  AND ct_src_ltm > 0 
+  AND ct_src_dport_ltm > 0 
+  AND ct_dst_sport_ltm > 0 
+  AND ct_dst_src_ltm > 0 
+
+  )
+  OR # DOS OTHERS
+  ( 
+    flow(
+      srcip, _, dstip, _, proto, state, _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeansz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
+    )
+
+  AND NOT (proto = "tcp" OR proto = "udp")
+  AND state = "INT"
+  AND dbytes = 0
+  AND dloss = 0
+  AND service = "-"
+  #AND sload > 767.0 AND sload < 1825537.0
+  AND dload = 0.0
+  AND (spkts = 2 OR spkts = 4)
+  AND dpkts = 0
+  AND swin = 0
+  AND dwin = 0
+  AND dmeansz = 0
+  AND is_sm_ips_ports = 0
+  AND ct_state_ttl >= 2
+  AND ct_flw_http_mthd >= 0
+  AND is_ftp_login = 0
+  AND ct_ftp_cmd >= 0
+  AND ct_srv_src > 1
+  AND ct_srv_dst > 1
+  AND ct_dst_ltm > 0 
+  AND ct_src_ltm > 0
+  AND ct_src_dport_ltm > 0 
+  AND ct_dst_sport_ltm > 0 
+  AND ct_dst_src_ltm > 0 
+
+  )
+  OR # EXPLOITS PTHERS
+  ( 
+    flow(
+      srcip, _, dstip, _, proto, state, _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeansz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
+    )
+
+  AND NOT (proto = "tcp" OR proto = "udp")
+  AND state = "INT"
+  AND dbytes = 0
+  AND dloss = 0
+  AND service = "-"
+  #AND sload > 767.0 AND sload < 1825537.0
+  AND dload = 0.0
+  AND (spkts = 2 OR spkts = 4)
+  AND dpkts = 0
+  AND swin = 0
+  AND dwin = 0
+  AND dmeansz = 0
+  AND is_sm_ips_ports = 0
+  AND ct_state_ttl >= 2
+  AND ct_flw_http_mthd >= 0
+  AND is_ftp_login = 0
+  AND ct_ftp_cmd >= 0
+  AND ct_srv_src > 1 
+  AND ct_srv_dst > 1 
+  AND ct_dst_ltm > 0 
+  AND ct_src_ltm > 0 
+  AND ct_src_dport_ltm > 0 
+  AND ct_dst_sport_ltm > 0 
+  AND ct_dst_src_ltm > 0 
+
+  )
+  OR # FUZZERS OTHERS
+  ( 
+    flow(
+      srcip, _, dstip, _, proto, state, _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeansz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
+    )
+
+  AND NOT (proto = "tcp" OR proto = "udp")
+  AND state = "INT"
+  AND dbytes = 0
+  AND dloss = 0
+  AND service = "-"
+  #AND sload > 767.0 AND sload < 1825537.0
+  AND dload = 0.0
+  AND (spkts = 2 OR spkts = 4)
+  AND dpkts = 0
+  AND swin = 0
+  AND dwin = 0
+  AND dmeansz = 0
+  AND is_sm_ips_ports = 0
+  AND ct_state_ttl >= 2
+  AND ct_flw_http_mthd >= 0
+  AND is_ftp_login = 0
+  AND ct_ftp_cmd >= 0
+  AND ct_srv_src > 1 
+  AND ct_srv_dst > 1 
+  AND ct_dst_ltm > 0 
+  AND ct_src_ltm > 0 
+  AND ct_src_dport_ltm > 0 
+  AND ct_dst_sport_ltm > 0 
+  AND ct_dst_src_ltm > 0 
+
+  )
+  OR # UDP1
+  ( 
+    flow(
+      srcip, _, dstip, _, proto, state, _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeansz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
+    )
+
+  AND proto = "udp"
+  AND state = "INT"
+  AND dbytes = 0
+  AND dloss = 0
+  AND service = "dns"
+  #AND sload > 767.0 AND sload < 1825537.0
+  AND dload = 0.0
+  AND spkts = 2
+  AND dpkts = 0
+  AND swin = 0
+  AND dwin = 0
+  AND dmeansz = 0
+  AND is_sm_ips_ports = 0
+  AND ct_state_ttl >= 2
+  AND ct_flw_http_mthd >= 0
+  AND is_ftp_login = 0
+  AND ct_ftp_cmd >= 0
+  AND ct_srv_src > 0 
+  AND ct_srv_dst > 0 
+  AND ct_dst_ltm > 0 
+  AND ct_src_ltm > 0 
+  AND ct_src_dport_ltm > 0 
+  AND ct_dst_sport_ltm > 0 
+  AND ct_dst_src_ltm > 0 
+
+  )
+  OR # UDP2
+  ( 
+    flow(
+      srcip, _, dstip, _, proto, state, _,
+      _, dbytes, _, _, _, dloss, service, 
+      sload, dload, spkts, dpkts, swin, dwin, _,
+      _, _, dmeansz, _, _, _, _,
+      _, _, _, _, tcprtt, synack, ackdat,
+      is_sm_ips_ports, ct_state_ttl, ct_flw_http_mthd, 
+      is_ftp_login, ct_ftp_cmd, ct_srv_src, ct_srv_dst,
+      ct_dst_ltm, ct_src_ltm, ct_src_dport_ltm, 
+      ct_dst_sport_ltm, ct_dst_src_ltm, _, _
+    )
+
+  AND proto = "udp"
+  AND state = "INT"
+  AND dbytes = 0
+  AND dloss = 0
+  AND service = "dns"
+  #AND sload > 767.0 AND sload < 1825537.0
+  AND dload = 0.0
+  AND spkts = 2
+  AND dpkts = 0
+  AND swin = 0
+  AND dwin = 0
+  AND dmeansz = 0
+  AND is_sm_ips_ports = 0
+  AND ct_state_ttl >= 2
+  AND ct_flw_http_mthd >= 0
+  AND is_ftp_login = 0
+  AND ct_ftp_cmd >= 0
+  AND ct_srv_src > 1 
+  AND ct_srv_dst > 1 
+  AND ct_dst_ltm > 0 
+  AND ct_src_ltm > 0 
+  AND ct_src_dport_ltm > 0 
+  AND ct_dst_sport_ltm > 0 
+  AND ct_dst_src_ltm > 0 
+
+  )
+)
+IN
+LET getcount_lowfreq(srcip, cnt_both, cnt_past, cnt_future) =
+(
+  (
+    violation_lowfreq(srcip, _) 
+    AND
+    (
+      ( # density count with window centered on current time point
+        ( cnt_past <- CNT i; srcip
+          ( ONCE[1,40] violation_lowfreq(srcip, _)
+            AND tp(i)
+          )
+        )
+        AND
+        ( cnt_future <- CNT i; srcip
+          ( EVENTUALLY[0,40] ONCE[0,0] violation_lowfreq(srcip, _)
+            AND tp(i) 
+          )
+        )
+        AND (cnt_both = cnt_past + cnt_future)
+      )
+    )
+  )
+)
+IN
+LET filter_count_lowfreq(srcip) =
+(
+  violation_lowfreq(srcip, _)
+  AND
+  (
+    EXISTS cnt_both.
+    getcount_lowfreq(srcip, cnt_both, _, _)
+    AND (cnt_both >= 15)
+  )
+  OR
+  (
+    EXISTS cnt_past.
+    getcount_lowfreq(srcip, _, cnt_past, _)
+    AND (cnt_past >= 7)
+  )
+  OR
+  (
+    EXISTS cnt_future.
+    getcount_lowfreq(srcip, _, _, cnt_future)
+    AND (cnt_future >= 7)
+  )
+)
+IN
+LET getcount_highfreq(srcip, cnt_both, cnt_past, cnt_future) =
+(
+  (
+    violation_highfreq(srcip, _) 
+    AND
+    (
+      ( # density count with window centered on current time point
+        ( cnt_past <- CNT i; srcip
+          ( ONCE[1,40] violation_highfreq(srcip, _)
+            AND tp(i)
+          )
+        )
+        AND
+        ( cnt_future <- CNT i; srcip
+          ( EVENTUALLY[0,40] ONCE[0,0] violation_highfreq(srcip, _)
+            AND tp(i) 
+          )
+        )
+        AND (cnt_both = cnt_past + cnt_future)
+      )
+    )
+  )
+)
+IN
+LET filter_count_highfreq(srcip) =
+(
+  violation_highfreq(srcip, _)
+  AND
+  (
+    EXISTS cnt_both.
+    getcount_highfreq(srcip, cnt_both, _, _)
+    AND (cnt_both >= 200)
+  )
+  OR
+  (
+    EXISTS cnt_past.
+    getcount_highfreq(srcip, _, cnt_past, _)
+    AND (cnt_past >= 100)
+  )
+  OR
+  (
+    EXISTS cnt_future.
+    getcount_highfreq(srcip, _, _, cnt_future)
+    AND (cnt_future >= 100)
+  )
+)
+IN
+( filter_count_lowfreq(srcip) OR filter_count_highfreq(srcip) )
+#( 
+#  cnt <- CNT i; srcip, label
+#  (
+#    #tp(1087202)
+#    tp(1452843)
+#    AND
+#    (
+#      (
+#        ONCE ( filter_count_lowfreq(srcip) OR filter_count_highfreq(srcip) )
+#        AND flow(
+#          srcip,_,_,_,_,_,_,
+#          _,_,_,_,_,_,_,
+#          _,_,_,_,_,_,_,
+#          _,_,_,_,_,_,_,
+#          _,_,_,_,_,_,_,
+#          _,_,_,_,_,_,_,
+#          _,_,_,_,_,_,label
+#        )
+#        AND tp(i)
+#      )
+#    )
+#  )
+#)
