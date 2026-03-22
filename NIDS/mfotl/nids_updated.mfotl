@@ -659,13 +659,13 @@ LET getcount_lowfreq(srcip, cnt_both, cnt_past, cnt_future) =
     (
       ( # density count with window centered on current time point
         ( cnt_past <- CNT i; srcip
-          ( ONCE[1,40] violation_lowfreq(srcip, _)
+          ( ONCE[1,20] violation_lowfreq(srcip, _)
             AND tp(i)
           )
         )
         AND
         ( cnt_future <- CNT i; srcip
-          ( EVENTUALLY[0,40] ONCE[0,0] violation_lowfreq(srcip, _)
+          ( EVENTUALLY[0,20] ONCE[0,0] violation_lowfreq(srcip, _)
             AND tp(i) 
           )
         )
@@ -682,19 +682,19 @@ LET filter_count_lowfreq(srcip) =
   (
     EXISTS cnt_both.
     getcount_lowfreq(srcip, cnt_both, _, _)
-    AND (cnt_both >= 15)
+    AND (cnt_both >= 30)
   )
   OR
   (
     EXISTS cnt_past.
     getcount_lowfreq(srcip, _, cnt_past, _)
-    AND (cnt_past >= 7)
+    AND (cnt_past >= 16)
   )
   OR
   (
     EXISTS cnt_future.
     getcount_lowfreq(srcip, _, _, cnt_future)
-    AND (cnt_future >= 7)
+    AND (cnt_future >= 16)
   )
 )
 IN
@@ -706,13 +706,13 @@ LET getcount_highfreq(srcip, cnt_both, cnt_past, cnt_future) =
     (
       ( # density count with window centered on current time point
         ( cnt_past <- CNT i; srcip
-          ( ONCE[1,40] violation_highfreq(srcip, _)
+          ( ONCE[1,20] violation_highfreq(srcip, _)
             AND tp(i)
           )
         )
         AND
         ( cnt_future <- CNT i; srcip
-          ( EVENTUALLY[0,40] ONCE[0,0] violation_highfreq(srcip, _)
+          ( EVENTUALLY[0,20] ONCE[0,0] violation_highfreq(srcip, _)
             AND tp(i) 
           )
         )
@@ -735,37 +735,37 @@ LET filter_count_highfreq(srcip) =
   (
     EXISTS cnt_past.
     getcount_highfreq(srcip, _, cnt_past, _)
-    AND (cnt_past >= 100)
+    AND (cnt_past >= 110)
   )
   OR
   (
     EXISTS cnt_future.
     getcount_highfreq(srcip, _, _, cnt_future)
-    AND (cnt_future >= 100)
+    AND (cnt_future >= 110)
   )
 )
 IN
-( filter_count_lowfreq(srcip) OR filter_count_highfreq(srcip) )
-#( 
-#  cnt <- CNT i; srcip, label
-#  (
-#    #tp(1087202)
-#    tp(1452843)
-#    AND
-#    (
-#      (
-#        ONCE ( filter_count_lowfreq(srcip) OR filter_count_highfreq(srcip) )
-#        AND flow(
-#          srcip,_,_,_,_,_,_,
-#          _,_,_,_,_,_,_,
-#          _,_,_,_,_,_,_,
-#          _,_,_,_,_,_,_,
-#          _,_,_,_,_,_,_,
-#          _,_,_,_,_,_,_,
-#          _,_,_,_,_,_,label
-#        )
-#        AND tp(i)
-#      )
-#    )
-#  )
-#)
+#( filter_count_lowfreq(srcip) OR filter_count_highfreq(srcip) )
+( 
+  cnt <- CNT i; srcip, label
+  (
+    #tp(1087202)
+    tp(1452843)
+    AND
+    (
+      (
+        ONCE ( filter_count_lowfreq(srcip) OR filter_count_highfreq(srcip) )
+        AND flow(
+          srcip,_,_,_,_,_,_,
+          _,_,_,_,_,_,_,
+          _,_,_,_,_,_,_,
+          _,_,_,_,_,_,_,
+          _,_,_,_,_,_,_,
+          _,_,_,_,_,_,_,
+          _,_,_,_,_,_,label
+        )
+        AND tp(i)
+      )
+    )
+  )
+)

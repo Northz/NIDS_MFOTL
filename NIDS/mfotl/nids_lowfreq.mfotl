@@ -318,70 +318,66 @@ EXISTS
   )
 )
 IN
-LET getcount_lowfreq(srcip, cnt_both, cnt_past, cnt_future) =
+LET cnt_violation_lowfreq(srcip, cnt_both, cnt_past, cnt_future) =
 (
   (
-    violation_lowfreq(srcip, _) 
+    violation_lowfreq(srcip, _)
     AND
     (
       ( # density count with window centered on current time point
         ( cnt_past <- CNT i; srcip
-          ( ONCE[1,40] violation_lowfreq(srcip, _)
+          ( ONCE[0,30] violation_lowfreq(srcip, _)
             AND tp(i)
           )
         )
         AND
         ( cnt_future <- CNT i; srcip
-          ( EVENTUALLY[0,40] ONCE[0,0] violation_lowfreq(srcip, _)
+          ( EVENTUALLY[0,30] ONCE[0,0] violation_lowfreq(srcip, _)
             AND tp(i) 
           )
         )
-        AND (cnt_both = cnt_past + cnt_future)
+        AND (cnt_both = cnt_future + cnt_past)
       )
     )
   )
 )
 IN
-LET filter_count_lowfreq(srcip) =
+LET verify_violation_lowfreq(srcip) =
 (
-  violation_lowfreq(srcip, _)
-  AND
   (
     EXISTS cnt_both.
-    getcount_lowfreq(srcip, cnt_both, _, _)
-    AND (cnt_both >= 15)
+    cnt_violation_lowfreq(srcip, cnt_both, _, _)
+    AND cnt_both >= 12
   )
   OR
   (
     EXISTS cnt_past.
-    getcount_lowfreq(srcip, _, cnt_past, _)
-    AND (cnt_past >= 7)
+    cnt_violation_lowfreq(srcip, _, cnt_past, _)
+    AND cnt_past >= 6
   )
   OR
   (
     EXISTS cnt_future.
-    getcount_lowfreq(srcip, _, _, cnt_future)
-    AND (cnt_future >= 7)
+    cnt_violation_lowfreq(srcip, _, _, cnt_future)
+    AND cnt_future >= 6
   )
 )
 IN
-( 
-  cnt <- CNT i; srcip, label
+cnt <- CNT i; srcip, label
+(
+  tp(1087202)
+  AND
   (
-    tp(1087202)
-    AND
-    (
-      ONCE filter_count_lowfreq(srcip) 
-      AND flow(
-        srcip,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,_,
-        _,_,_,_,_,_,label
-      )
-      AND tp(i)
+    ONCE verify_violation_lowfreq(srcip) 
+    AND flow(
+      srcip,_,_,_,_,_,_,
+      _,_,_,_,_,_,_,
+      _,_,_,_,_,_,_,
+      _,_,_,_,_,_,_,
+      _,_,_,_,_,_,_,
+      _,_,_,_,_,_,_,
+      _,_,_,_,_,_,label
     )
+    AND tp(i)
   )
-) 
+)
